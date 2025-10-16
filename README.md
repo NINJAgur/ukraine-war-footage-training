@@ -4,12 +4,12 @@ This repository provides a template for training YOLO models on any Kaggle datas
 
 ## Files
 
-- `scripts/main.py`: Command-line script for training YOLO on a Kaggle dataset.
-- `scripts/inference.py`: Command-line script for running inference with a trained model.
-- `notebooks/yolo_template.ipynb`: Notebook template to run train a YOLO model and test it.
-- `docs/CONTRIBUTING.md`: Contributing guidelines.
-- `example_datasets.md`: List of example Kaggle datasets for testing.
-- `requirements.txt`: Dependencies for the project.
+- [`scripts/main.py`](scripts/main.py): Command-line script for training YOLO on a Kaggle dataset.
+- [`scripts/inference.py`](scripts/inference.py): Command-line script for running inference with a trained model.
+- [`notebooks/yolo_template.ipynb`](notebooks/yolo_template.ipynb): Notebook template to run train a YOLO model and test it.
+- [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md): Contributing guidelines.
+- [`example_datasets.md`](example_datasets.md): List of example Kaggle datasets for testing.
+- [`requirements.txt`](requirements.txt): Dependencies for the project.
 
 ## Setup
 
