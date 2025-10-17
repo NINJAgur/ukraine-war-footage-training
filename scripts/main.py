@@ -102,9 +102,27 @@ def train_model(yaml_path, epochs, imgsz, batch, device, project, name, weights=
     """Train the YOLO model."""
     if resume:
         # Resume from last checkpoint
-        logging.info("Resuming training from last checkpoint...")
-        model = YOLO(f"{project}/{name}/weights/last.pt")
-        results = model.train(resume=True)
+        checkpoint_path = os.path.join(project, name, "weights", "last.pt")
+        if not os.path.exists(checkpoint_path):
+            raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}. Make sure training was run before resuming.")
+        logging.info(f"Resuming training from checkpoint: {checkpoint_path}")
+        model = YOLO(checkpoint_path)
+        try:
+            results = model.train(resume=True)
+        except AssertionError as e:
+            if "training to" in str(e) and "is finished" in str(e):
+                raise ValueError(
+                    f"\n{'='*70}\n"
+                    f"Training already completed for this run!\n"
+                    f"{'='*70}\n"
+                    f"The checkpoint at '{checkpoint_path}' has already finished training.\n\n"
+                    f"To train for MORE epochs, use --weights instead of --resume:\n\n"
+                    f"Note: --resume is only for recovering interrupted training.\n"
+                    f"      Use --weights to continue training with more epochs.\n"
+                    f"{'='*70}"
+                ) from None
+            else:
+                raise
     elif weights:
         # Load custom weights
         logging.info(f"Loading weights from: {weights}")
@@ -160,6 +178,36 @@ def main():
     try:
         # If resuming, we don't need to download dataset or create yaml
         if args.resume:
+            # Check if checkpoint exists and is complete before starting
+            checkpoint_path = os.path.join(args.project, args.name, "weights", "last.pt")
+            if not os.path.exists(checkpoint_path):
+                logging.error(f"Checkpoint not found: {checkpoint_path}")
+                logging.info("Run training first before trying to resume.")
+                return
+            
+            # Try to load checkpoint and check if training is complete
+            try:
+                from ultralytics import YOLO
+                test_model = YOLO(checkpoint_path)
+                # Check if this will fail on resume
+                ckpt = test_model.ckpt
+                if ckpt and 'epoch' in ckpt and 'train_args' in ckpt:
+                    current_epoch = ckpt['epoch']
+                    target_epochs = ckpt.get('train_args', {}).get('epochs', 0)
+                    if current_epoch >= target_epochs:
+                        print("\n" + "="*70)
+                        print("Training already completed for this run!")
+                        print("="*70)
+                        print(f"Checkpoint: {checkpoint_path}")
+                        print(f"Completed: {current_epoch}/{target_epochs} epochs\n")
+                        print("To train for MORE epochs, use --weights instead of --resume:\n")
+                        print("Note: --resume is only for recovering interrupted training.")
+                        print("      Use --weights to continue training with more epochs.")
+                        print("="*70 + "\n")
+                        return
+            except Exception:
+                pass  # If we can't check, let it proceed and fail naturally
+            
             logging.info("Resume mode: skipping dataset download and yaml creation")
             results = train_model(None, args.epochs, args.imgsz, args.batch, args.device, 
                                 args.project, args.name, weights=None, resume=True)
