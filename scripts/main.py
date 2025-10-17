@@ -98,19 +98,41 @@ def create_yaml(dataset_path, paths, nc, names):
     logging.info(f"Created YAML config at: {yaml_path}")
     return yaml_path
 
-def train_model(yaml_path, epochs, imgsz, batch, device, project, name):
+def train_model(yaml_path, epochs, imgsz, batch, device, project, name, weights=None, resume=False):
     """Train the YOLO model."""
-    model = YOLO("yolov8m.pt")
-    results = model.train(
-        data=yaml_path,
-        epochs=epochs,
-        imgsz=imgsz,
-        batch=batch,
-        device=device,
-        project=project,
-        name=name,
-        exist_ok=True,
-    )
+    if resume:
+        # Resume from last checkpoint
+        logging.info("Resuming training from last checkpoint...")
+        model = YOLO(f"{project}/{name}/weights/last.pt")
+        results = model.train(resume=True)
+    elif weights:
+        # Load custom weights
+        logging.info(f"Loading weights from: {weights}")
+        model = YOLO(weights)
+        results = model.train(
+            data=yaml_path,
+            epochs=epochs,
+            imgsz=imgsz,
+            batch=batch,
+            device=device,
+            project=project,
+            name=name,
+            exist_ok=True,
+        )
+    else:
+        # Start fresh with pretrained YOLOv8
+        logging.info("Starting training with YOLOv8m pretrained weights...")
+        model = YOLO("yolov8m.pt")
+        results = model.train(
+            data=yaml_path,
+            epochs=epochs,
+            imgsz=imgsz,
+            batch=batch,
+            device=device,
+            project=project,
+            name=name,
+            exist_ok=True,
+        )
     return results
 
 def main():
@@ -124,18 +146,32 @@ def main():
     parser.add_argument('--device', default='0', help='Device to use, e.g., 0 for GPU, cpu for CPU')
     parser.add_argument('--project', default='runs/train', help='Project directory for runs')
     parser.add_argument('--name', default='yolo_train', help='Experiment name')
+    parser.add_argument('--weights', type=str, default=None, help='Path to pretrained weights (e.g., runs/train/yolo_train/weights/best.pt)')
+    parser.add_argument('--resume', action='store_true', help='Resume training from last checkpoint')
 
     args = parser.parse_args()
     names = [n.strip() for n in args.names.split(',')]
 
+    # Check for conflicting arguments
+    if args.resume and args.weights:
+        logging.warning("Both --resume and --weights specified. Using --resume (ignoring --weights)")
+        args.weights = None
+
     try:
-        dataset_path = download_dataset(args.dataset)
-        logging.info(f"Dataset downloaded to: {dataset_path}")
-        paths, dataset_path = detect_dataset_structure(dataset_path)
-        if not paths:
-            raise ValueError("No standard train/val/test structure found in dataset")
-        yaml_path = create_yaml(dataset_path, paths, args.nc, names)
-        results = train_model(yaml_path, args.epochs, args.imgsz, args.batch, args.device, args.project, args.name)
+        # If resuming, we don't need to download dataset or create yaml
+        if args.resume:
+            logging.info("Resume mode: skipping dataset download and yaml creation")
+            results = train_model(None, args.epochs, args.imgsz, args.batch, args.device, 
+                                args.project, args.name, weights=None, resume=True)
+        else:
+            dataset_path = download_dataset(args.dataset)
+            logging.info(f"Dataset downloaded to: {dataset_path}")
+            paths, dataset_path = detect_dataset_structure(dataset_path)
+            if not paths:
+                raise ValueError("No standard train/val/test structure found in dataset")
+            yaml_path = create_yaml(dataset_path, paths, args.nc, names)
+            results = train_model(yaml_path, args.epochs, args.imgsz, args.batch, args.device, 
+                                args.project, args.name, weights=args.weights, resume=False)
         logging.info("Training completed successfully")
     except Exception as e:
         logging.error(f"Training failed: {e}")
