@@ -4,8 +4,8 @@ This file contains example Kaggle datasets suitable for training YOLO object det
 
 ## 1. Pothole Detection
 - **Handle**: `jocelyndumlao/multi-weather-pothole-detection-mwpd`
-- **Classes**: 2
-- **Names**: "Potholes,Cracks"
+- **Classes**: 1
+- **Names**: "Potholes"
 - **Description**: Images of potholes and cracks in roads under various weather conditions
 
 ## 2. Traffic Signs
