@@ -74,10 +74,3 @@ yolo_dataset/
 │   │   └── ...
 ├── data.yaml
 ```
-
-Example `data.yaml`
-path: /absolute/path/to/yolo_dataset
-train: train/images
-val: train/images
-nc: 5
-names: ['plastic bottle', 'can', 'wrapper', 'bag', 'trash']
