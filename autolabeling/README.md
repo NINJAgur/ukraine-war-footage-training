@@ -36,14 +36,19 @@ Place GroundingDINO_SwinT_OGC.py and groundingdino_swint_ogc.pth in the same dir
 The script takes three required command-line arguments:
 
 `--input_folder`: Path to the folder containing images to annotate.
+
 `--text_prompt`: Comma-separated list of object classes to detect (e.g., plastic bottle, can, wrapper, bag, trash).
+
 `--output_path`: Path where the YOLO dataset will be created.
 
 Optional arguments:
 
 `--config_path`: Path to GroundingDINO config file (default: GroundingDINO_SwinT_OGC.py).
+
 `--checkpoint_path`: Path to GroundingDINO checkpoint file (default: groundingdino_swint_ogc.pth).
+
 `--box_threshold`: Confidence threshold for bounding boxes (default: 0.35).
+
 `--text_threshold`: Confidence threshold for text phrases (default: 0.25).
 
 Example Command
