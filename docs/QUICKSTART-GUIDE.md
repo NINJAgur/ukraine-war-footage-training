@@ -8,7 +8,6 @@ This guide makes the following assumptions:
 2. You have a basic understanding of what "training" and "inference" mean for an ML model.
 3. You have a Gmail and Google Drive account that is already setup. 
 4. You'll use a Jupyter notebook in Google Colab (no prior knowledge needed).
-5. [#4](https://github.com/mfranzon/yolo-training-template/issues/4) has been solved.
 
 Follow the steps in the order listed.
 
