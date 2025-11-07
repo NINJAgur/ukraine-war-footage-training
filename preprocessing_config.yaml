@@ -1,0 +1,33 @@
+cleaning:
+  remove_corrupted_images: true
+  validate_annotations: true
+  check_bbox_validity: true
+  min_bbox_size: 1
+  max_bbox_size_ratio: 0.9
+
+augmentation:
+  enabled: true
+  augment_factor: 2
+  transforms:
+    horizontal_flip:
+      p: 0.5
+    vertical_flip:
+      p: 0.1
+    rotate:
+      limit: 15
+      p: 0.3
+    brightness_contrast:
+      brightness_limit: 0.2
+      contrast_limit: 0.2
+      p: 0.3
+    gaussian_blur:
+      blur_limit: 3
+      p: 0.1
+    gaussian_noise:
+      var_limit: [10, 50]
+      p: 0.1
+    hue_saturation_value:
+      hue_shift_limit: 20
+      sat_shift_limit: 30
+      val_shift_limit: 20
+      p: 0.2
