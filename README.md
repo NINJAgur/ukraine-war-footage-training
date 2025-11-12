@@ -19,9 +19,9 @@ This repository provides a template for training YOLO models on any Kaggle datas
 2. For training: Run `python scripts/main.py --dataset <kaggle-handle> --nc <num-classes> --names <class-names>`
 3. For training with preprocessing: Run `python scripts/main.py --dataset <kaggle-handle> --nc <num-classes> --names <class-names> --preprocess`
 4. For training with NCNN export: Run `python scripts/main.py --dataset <kaggle-handle> --nc <num-classes> --names <class-names> --export-ncnn`
-4. For inference: Run `python scripts/inference.py --model <model-path> --input <image/video/webcam>`
-5. For the Streamlit app: Run `streamlit run streamlit_app.py` (includes pages for training, inference, preprocessing, auto-labeling, and model export)
-6. For non-technical setup: Please see [docs/QUICKSTART-GUIDE.md](docs/QUICKSTART-GUIDE.md)
+5. For inference: Run `python scripts/inference.py --model <model-path> --input <image/video/webcam>`
+6. For the Streamlit app: Run `streamlit run streamlit_app.py`
+7. For non-technical setup: Please see [docs/QUICKSTART-GUIDE.md](docs/QUICKSTART-GUIDE.md)
 
 ## Data Preprocessing
 

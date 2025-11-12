@@ -94,49 +94,7 @@ def infer_video(model, video_path, conf_thresh=0.5, save_path=None, no_display=F
     logging.info(f"Annotated video saved to {save_path}")
 
 
-#
-# def infer_video(model, video_path, conf_thresh=0.5, save_path=None, no_display=False):
-#     """Perform inference on a video file."""
-#     if not os.path.exists(video_path):
-#         raise FileNotFoundError(f"Video not found: {video_path}")
-#     cap = cv2.VideoCapture(video_path)
-#     if not cap.isOpened():
-#         raise ValueError(f"Cannot open video: {video_path}")
-#     if save_path is None and no_display:
-#         save_path = "inference_result.mp4"
-#     out = None
-#     if save_path:
-#         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-#         fps = cap.get(cv2.CAP_PROP_FPS) or 30
-#         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-#         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-#         out = cv2.VideoWriter(save_path, fourcc, fps, (width, height))
-#         if not out.isOpened():
-#             raise ValueError("Failed to open video writer. Check codec support.")
-#     frame_count = 0
-#     while cap.isOpened():
-#         ret, frame = cap.read()
-#         if not ret:
-#             break
-#         results = model(frame, conf=conf_thresh)
-#         annotated = results[0].plot()
-#         if out:
-#             out.write(annotated)
-#         else:
-#             cv2.imshow("Inference", annotated)
-#             if cv2.waitKey(1) & 0xFF == ord("q"):
-#                 break
-#         frame_count += 1
-#         if frame_count % 100 == 0:
-#             logging.info(f"Processed {frame_count} frames")
-#     cap.release()
-#     if out:
-#         out.release()
-#         logging.info(f"Annotated video saved to {save_path}")
-#     if not no_display:
-#         cv2.destroyAllWindows()
-#
-#
+
 def infer_webcam(model, conf_thresh=0.5, no_display=False):
     """Perform real-time inference on webcam feed."""
     if no_display:
@@ -163,7 +121,8 @@ def main():
     parser.add_argument(
         "--model",
         required=True,
-        help="Path to trained model weights, e.g., runs/train/weights/best.pt",
+        help="Path to trained model weights, e.g., "
+             "runs/train/weights/best.pt",
     )
     parser.add_argument(
         "--input", required=True, help='Input: image/video path or "webcam"'

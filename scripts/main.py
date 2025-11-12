@@ -116,7 +116,8 @@ def train_model(yaml_path, epochs, imgsz, batch, device, project, name, weights=
                     f"\n{'='*70}\n"
                     f"Training already completed for this run!\n"
                     f"{'='*70}\n"
-                    f"The checkpoint at '{checkpoint_path}' has already finished training.\n\n"
+                    f"The checkpoint at '{checkpoint_path}' has already finished "
+                    f"training.\n\n"
                     f"To train for MORE epochs, use --weights instead of --resume:\n\n"
                     f"Note: --resume is only for recovering interrupted training.\n"
                     f"      Use --weights to continue training with more epochs.\n"
@@ -164,21 +165,40 @@ def export_to_ncnn(model_path, output_path='model_ncnn'):
 
 def main():
     parser = argparse.ArgumentParser(description="Train YOLO on any Kaggle dataset")
-    parser.add_argument('--dataset', required=True, help='Kaggle dataset handle, e.g., jocelyndumlao/multi-weather-pothole-detection-mwpd')
-    parser.add_argument('--nc', type=int, required=True, help='Number of classes')
-    parser.add_argument('--names', required=True, help='Class names, comma separated, e.g., "Potholes,Cracks"')
-    parser.add_argument('--epochs', type=int, default=60, help='Number of training epochs')
-    parser.add_argument('--imgsz', type=int, default=512, help='Image size')
-    parser.add_argument('--batch', type=int, default=32, help='Batch size')
-    parser.add_argument('--device', default='0', help='Device to use, e.g., 0 for GPU, cpu for CPU')
-    parser.add_argument('--project', default='runs/train', help='Project directory for runs')
-    parser.add_argument('--name', default='yolo_train', help='Experiment name')
-    parser.add_argument('--weights', type=str, default=None, help='Path to pretrained weights (e.g., runs/train/yolo_train/weights/best.pt)')
-    parser.add_argument('--resume', action='store_true', help='Resume training from last checkpoint')
-    parser.add_argument('--preprocess', action='store_true', help='Run data preprocessing (cleaning and augmentation) before training')
-    parser.add_argument('--preprocess-config', type=str, default='preprocessing_config.yaml', help='Path to preprocessing config file')
-    parser.add_argument('--augment-only', action='store_true', help='Only run augmentation, skip training')
-    parser.add_argument('--export-ncnn', action='store_true', help='Export trained model to NCNN format')
+    parser.add_argument('--dataset', required=True,
+                        help='Kaggle dataset handle, e.g., '
+                             'jocelyndumlao/multi-weather-pothole-detection-mwpd')
+    parser.add_argument('--nc', type=int, required=True,
+                        help='Number of classes')
+    parser.add_argument('--names', required=True,
+                        help='Class names, comma separated, e.g., "Potholes,Cracks"')
+    parser.add_argument('--epochs', type=int, default=60,
+                        help='Number of training epochs')
+    parser.add_argument('--imgsz', type=int, default=512,
+                        help='Image size')
+    parser.add_argument('--batch', type=int, default=32,
+                        help='Batch size')
+    parser.add_argument('--device', default='0',
+                        help='Device to use, e.g., 0 for GPU, cpu for CPU')
+    parser.add_argument('--project', default='runs/train',
+                        help='Project directory for runs')
+    parser.add_argument('--name', default='yolo_train',
+                        help='Experiment name')
+    parser.add_argument('--weights', type=str, default=None,
+                        help='Path to pretrained weights '
+                             '(e.g., runs/train/yolo_train/weights/best.pt)')
+    parser.add_argument('--resume', action='store_true',
+                        help='Resume training from last checkpoint')
+    parser.add_argument('--preprocess', action='store_true',
+                        help='Run data preprocessing (cleaning and augmentation) '
+                             'before training')
+    parser.add_argument('--preprocess-config', type=str,
+                        default='preprocessing_config.yaml',
+                        help='Path to preprocessing config file')
+    parser.add_argument('--augment-only', action='store_true',
+                        help='Only run augmentation, skip training')
+    parser.add_argument('--export-ncnn', action='store_true',
+                        help='Export trained model to NCNN format')
 
     args = parser.parse_args()
     names = [n.strip() for n in args.names.split(',')]
@@ -192,7 +212,8 @@ def main():
         # If resuming, we don't need to download dataset or create yaml
         if args.resume:
             # Check if checkpoint exists and is complete before starting
-            checkpoint_path = os.path.join(args.project, args.name, "weights", "last.pt")
+            checkpoint_path = os.path.join(args.project, args.name,
+                                         "weights", "last.pt")
             if not os.path.exists(checkpoint_path):
                 logging.error(f"Checkpoint not found: {checkpoint_path}")
                 logging.info("Run training first before trying to resume.")
@@ -223,8 +244,9 @@ def main():
 
             logging.info("Resume mode: skipping dataset download and yaml creation")
             if not args.augment_only:
-                results = train_model(None, args.epochs, args.imgsz, args.batch, args.device,
-                                    args.project, args.name, weights=None, resume=True)
+                results = train_model(None, args.epochs, args.imgsz, args.batch,
+                                    args.device, args.project, args.name, weights=None,
+                                    resume=True)
         else:
             dataset_path = download_dataset(args.dataset)
             logging.info(f"Dataset downloaded to: {dataset_path}")
@@ -244,10 +266,15 @@ def main():
 
                     if args.augment_only:
                         # Only augmentation - create augmented versions
-                        output_images_dir = os.path.join(os.path.dirname(train_images_dir), "train_augmented", "images")
-                        output_labels_dir = os.path.join(os.path.dirname(train_labels_dir), "train_augmented", "labels")
+                        output_images_dir = os.path.join(
+                            os.path.dirname(train_images_dir), "train_augmented", "images"
+                        )
+                        output_labels_dir = os.path.join(
+                            os.path.dirname(train_labels_dir), "train_augmented", "labels"
+                        )
                         stats = preprocessor.preprocess_dataset(
-                            train_images_dir, train_labels_dir, output_images_dir, output_labels_dir
+                            train_images_dir, train_labels_dir,
+                            output_images_dir, output_labels_dir
                         )
                         logging.info(f"Preprocessing stats: {stats}")
 
@@ -264,13 +291,15 @@ def main():
 
             if not args.augment_only:
                 yaml_path = create_yaml(dataset_path, paths, args.nc, names)
-                results = train_model(yaml_path, args.epochs, args.imgsz, args.batch, args.device,
-                                    args.project, args.name, weights=args.weights, resume=False)
+                results = train_model(yaml_path, args.epochs, args.imgsz, args.batch,
+                                    args.device, args.project, args.name, weights=args.weights,
+                                    resume=False)
 
         if not args.augment_only:
             logging.info("Training completed successfully")
             if args.export_ncnn:
-                best_model_path = os.path.join(args.project, args.name, "weights", "best.pt")
+                best_model_path = os.path.join(args.project, args.name,
+                                             "weights", "best.pt")
                 export_to_ncnn(best_model_path)
         else:
             logging.info("Augmentation completed successfully")

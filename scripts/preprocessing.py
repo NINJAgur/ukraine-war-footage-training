@@ -48,10 +48,13 @@ class YOLODataPreprocessor:
                     'horizontal_flip': {'p': 0.5},
                     'vertical_flip': {'p': 0.1},
                     'rotate': {'limit': 15, 'p': 0.3},
-                    'brightness_contrast': {'brightness_limit': 0.2, 'contrast_limit': 0.2, 'p': 0.3},
+                    'brightness_contrast': {'brightness_limit': 0.2,
+                                           'contrast_limit': 0.2, 'p': 0.3},
                     'gaussian_blur': {'blur_limit': 3, 'p': 0.1},
                     'gaussian_noise': {'var_limit': (10, 50), 'p': 0.1},
-                    'hue_saturation_value': {'hue_shift_limit': 20, 'sat_shift_limit': 30, 'val_shift_limit': 20, 'p': 0.2}
+                    'hue_saturation_value': {'hue_shift_limit': 20,
+                                             'sat_shift_limit': 30,
+                                             'val_shift_limit': 20, 'p': 0.2}
                 }
             }
         }
@@ -204,13 +207,17 @@ class YOLODataPreprocessor:
                             # Check bbox size constraints
                             if self.config['cleaning']['check_bbox_validity'] and img is not None:
                                 width, height = bbox[2], bbox[3]
-                                if width < self.config['cleaning']['min_bbox_size'] / img.shape[1] or \
-                                   height < self.config['cleaning']['min_bbox_size'] / img.shape[0]:
-                                    logging.warning(f"Bbox too small in {label_file} line {line_num + 1}")
+                                if (width < self.config['cleaning']['min_bbox_size'] /
+                                        img.shape[1] or
+                                    height < self.config['cleaning']['min_bbox_size'] /
+                                        img.shape[0]):
+                                    logging.warning(f"Bbox too small in {label_file} "
+                                                    f"line {line_num + 1}")
                                     continue
-                                if width > self.config['cleaning']['max_bbox_size_ratio'] or \
-                                   height > self.config['cleaning']['max_bbox_size_ratio']:
-                                    logging.warning(f"Bbox too large in {label_file} line {line_num + 1}")
+                                if (width > self.config['cleaning']['max_bbox_size_ratio'] or
+                                    height > self.config['cleaning']['max_bbox_size_ratio']):
+                                    logging.warning(f"Bbox too large in {label_file} "
+                                                    f"line {line_num + 1}")
                                     continue
 
                             valid_lines.append(line)
@@ -375,10 +382,13 @@ def create_default_config(output_path: str = "preprocessing_config.yaml") -> Non
                 'horizontal_flip': {'p': 0.5},
                 'vertical_flip': {'p': 0.1},
                 'rotate': {'limit': 15, 'p': 0.3},
-                'brightness_contrast': {'brightness_limit': 0.2, 'contrast_limit': 0.2, 'p': 0.3},
+                'brightness_contrast': {'brightness_limit': 0.2,
+                                       'contrast_limit': 0.2, 'p': 0.3},
                 'gaussian_blur': {'blur_limit': 3, 'p': 0.1},
                 'gaussian_noise': {'var_limit': [10, 50], 'p': 0.1},
-                'hue_saturation_value': {'hue_shift_limit': 20, 'sat_shift_limit': 30, 'val_shift_limit': 20, 'p': 0.2}
+                'hue_saturation_value': {'hue_shift_limit': 20,
+                                         'sat_shift_limit': 30,
+                                         'val_shift_limit': 20, 'p': 0.2}
             }
         }
     }
