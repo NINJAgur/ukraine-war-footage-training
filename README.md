@@ -3,7 +3,10 @@
 This repository provides a template for training YOLO models on any Kaggle dataset and performing inference. It includes scripts for command-line use and a notebook-style script for interactive environments.
 
 
-https://github.com/user-attachments/assets/197e1999-ef4b-4c15-9b82-9e74e0bc6a64
+
+
+https://github.com/user-attachments/assets/a953e6a4-c97b-4149-994d-188aeb5dd398
+
 
 
 
