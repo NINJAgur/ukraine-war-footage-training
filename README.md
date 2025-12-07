@@ -2,6 +2,15 @@
 
 This repository provides a template for training YOLO models on any Kaggle dataset and performing inference. It includes scripts for command-line use and a notebook-style script for interactive environments.
 
+
+
+
+https://github.com/user-attachments/assets/a953e6a4-c97b-4149-994d-188aeb5dd398
+
+
+
+
+
 ## Files
 
 - [`scripts/main.py`](scripts/main.py): Command-line script for training YOLO on a Kaggle dataset, with options for preprocessing and model export.
