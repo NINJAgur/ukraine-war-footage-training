@@ -5,9 +5,14 @@ import tempfile
 import zipfile
 import shutil
 import sys
+import numpy as np
+from PIL import Image
+from streamlit_drawable_canvas import st_canvas
+from scripts.dataset_explorer import load_dataset, compute_dataset_stats, get_sample_images, draw_annotations
 
 sys.path.append("scripts")
 from preprocessing import YOLODataPreprocessor
+from scripts.dataset_explorer import load_dataset, compute_dataset_stats, get_sample_images, draw_annotations
 
 # Page config
 st.set_page_config(page_title="YOLO Training Template", page_icon="🚀", layout="wide")
@@ -15,7 +20,7 @@ st.set_page_config(page_title="YOLO Training Template", page_icon="🚀", layout
 # Sidebar navigation
 st.sidebar.title("YOLO Training Template")
 page = st.sidebar.radio(
-    "Select Page", ["Training", "Inference", "Preprocessing", "Auto-labeling", "Export"]
+    "Select Page", ["Training", "Inference", "Preprocessing", "Dataset Explorer", "Auto-labeling", "Export"]
 )
 
 if page == "Training":
@@ -310,6 +315,286 @@ elif page == "Preprocessing":
 
         finally:
             shutil.rmtree(temp_dir)
+
+elif page == "Dataset Explorer":
+    st.title("📊 Dataset Explorer")
+
+    mode = st.radio("Mode", ["Explore Dataset", "Manual Annotation"], help="Choose exploration or manual annotation")
+
+    if mode == "Explore Dataset":
+        st.markdown("### Dataset Input")
+        input_method = st.radio(
+            "Input Method",
+            ["Upload ZIP", "Local Path"],
+            help="Choose how to provide the dataset"
+        )
+
+        dataset_path = None
+        class_names = None
+
+        if input_method == "Upload ZIP":
+            uploaded_file = st.file_uploader(
+                "Upload Dataset ZIP",
+                type=["zip"],
+                help="Upload a ZIP file containing images/ and labels/ directories"
+            )
+
+            if uploaded_file:
+                # Create a persistent temp directory for this session
+                if 'dataset_temp_dir' not in st.session_state:
+                    st.session_state.dataset_temp_dir = tempfile.mkdtemp(prefix="yolo_dataset_")
+
+                temp_dir = st.session_state.dataset_temp_dir
+                zip_path = os.path.join(temp_dir, uploaded_file.name)
+                with open(zip_path, "wb") as f:
+                    f.write(uploaded_file.getvalue())
+
+                extract_path = os.path.join(temp_dir, "extracted")
+                os.makedirs(extract_path, exist_ok=True)
+                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                    zip_ref.extractall(extract_path)
+
+                dataset_path = extract_path
+        else:
+            dataset_path_input = st.text_input(
+                "Dataset Path",
+                help="Path to local dataset directory"
+            )
+            if dataset_path_input and os.path.exists(dataset_path_input):
+                dataset_path = dataset_path_input
+
+        # Class names input
+        class_names_input = st.text_input(
+            "Class Names (optional)",
+            placeholder="class1, class2, class3",
+            help="Comma-separated list of class names for better visualization"
+        )
+        if class_names_input:
+            class_names = [name.strip() for name in class_names_input.split(',')]
+
+        if dataset_path:
+            try:
+                # Load dataset
+                with st.spinner("Loading dataset..."):
+                    dataset_splits = load_dataset(dataset_path)
+
+                # Debug info
+                st.markdown("### Debug Info")
+                subdirs = [d for d in os.listdir(dataset_path) if os.path.isdir(os.path.join(dataset_path, d))]
+                st.write(f"Detected subdirectories: {subdirs}")
+                st.write(f"Dataset splits found: {list(dataset_splits.keys())}")
+
+                if dataset_splits:
+                    st.success("Dataset loaded successfully!")
+
+                    # Dataset statistics
+                    st.markdown("### Dataset Statistics")
+                    labels_dir = None  # Assume labels are in same structure
+                    stats = compute_dataset_stats(dataset_splits, labels_dir, class_names)
+
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Total Images", stats['total_images'])
+                    with col2:
+                        st.metric("Total Annotations", stats['bbox_stats']['total_bboxes'])
+                    with col3:
+                        st.metric("Avg BBoxes/Image", ".2f")
+
+                    # Split information
+                    st.markdown("#### Split Distribution")
+                    for split, count in stats['split_counts'].items():
+                        st.write(f"**{split.title()}:** {count} images")
+
+                    # Class distribution
+                    if stats['class_counts']:
+                        st.markdown("#### Class Distribution")
+                        if class_names:
+                            for class_id, count in stats['class_counts'].items():
+                                class_name = class_names[class_id] if class_id < len(class_names) else f"Class {class_id}"
+                                st.write(f"**{class_name}:** {count}")
+                        else:
+                            for class_id, count in stats['class_counts'].items():
+                                st.write(f"**Class {class_id}:** {count}")
+
+                    # Sample images
+                    st.markdown("### Sample Images")
+                    sample_size = st.slider("Number of sample images", 1, 20, 5)
+                    conf_threshold = st.slider("Confidence threshold", 0.0, 1.0, 0.0)
+
+                    if st.button("Generate Samples"):
+                        with st.spinner("Generating sample images..."):
+                            samples = get_sample_images(
+                                dataset_splits,
+                                sample_size=sample_size,
+                                labels_dir=labels_dir,
+                                class_names=class_names,
+                                conf_threshold=conf_threshold
+                            )
+
+                        if samples:
+                             for i, sample in enumerate(samples):
+                                 st.markdown(f"**Sample {i+1}:** {os.path.basename(sample['path'])}")
+                                 st.image(sample['image'], use_column_width=True)
+                                 if sample['bboxes']:
+                                    st.write(f"Found {len(sample['bboxes'])} annotations")
+                        else:
+                            st.warning("No sample images could be generated.")
+                else:
+                    st.error("No valid dataset structure found. Make sure your dataset contains 'images/' directories in train/val/test folders or at root level.")
+
+            except Exception as e:
+                st.error(f"Error exploring dataset: {str(e)}")
+                logging.error(f"Dataset exploration error: {str(e)}")
+
+    elif mode == "Manual Annotation":
+        st.markdown("### Manual Annotation")
+        st.write("Upload images and manually add/edit bounding box annotations.")
+
+        # Upload images
+        uploaded_images = st.file_uploader(
+            "Upload Images",
+            type=["jpg", "png", "jpeg"],
+            accept_multiple_files=True,
+            help="Select multiple images to annotate"
+        )
+
+        class_names_input = st.text_input("Class Names (comma-separated)", placeholder="class1, class2")
+        class_names = [name.strip() for name in class_names_input.split(',')] if class_names_input else []
+
+        if uploaded_images and class_names:
+            # Select image
+            image_names = [img.name for img in uploaded_images]
+            selected_image = st.selectbox("Select Image to Annotate", image_names)
+
+            if selected_image:
+                img = [img for img in uploaded_images if img.name == selected_image][0]
+                image = Image.open(img)
+                img_array = np.array(image)
+
+                # Use session state for annotations
+                session_key = f"annotations_{selected_image}"
+                canvas_counter_key = f"canvas_counter_{selected_image}"
+                if session_key not in st.session_state:
+                    # Load existing annotations if any
+                    label_file_name = f"{selected_image.rsplit('.', 1)[0]}.txt"
+                    st.session_state[session_key] = []
+                    if os.path.exists(label_file_name):
+                        with open(label_file_name, 'r') as f:
+                            for line in f:
+                                parts = line.strip().split()
+                                if len(parts) == 5:
+                                    st.session_state[session_key].append({
+                                        'class_id': int(parts[0]),
+                                        'x': float(parts[1]),
+                                        'y': float(parts[2]),
+                                        'w': float(parts[3]),
+                                        'h': float(parts[4])
+                                    })
+                if canvas_counter_key not in st.session_state:
+                    st.session_state[canvas_counter_key] = 0
+
+                existing_annotations = st.session_state[session_key]
+
+                # Convert annotations to draw_annotations format
+                bboxes_for_draw = []
+                height, width = img_array.shape[:2]
+                for ann in existing_annotations:
+                    x_center = ann['x'] * width
+                    y_center = ann['y'] * height
+                    w = ann['w'] * width
+                    h = ann['h'] * height
+                    x1 = int(x_center - w / 2)
+                    y1 = int(y_center - h / 2)
+                    x2 = int(x_center + w / 2)
+                    y2 = int(y_center + h / 2)
+                    bboxes_for_draw.append({
+                        'class_id': ann['class_id'],
+                        'bbox': (x1, y1, x2, y2),
+                        'confidence': 1.0
+                    })
+
+                # Display image with current annotations
+                annotated_img = draw_annotations(img_array, bboxes_for_draw, class_names)
+                st.image(Image.fromarray(annotated_img), caption=f"Current annotations: {len(existing_annotations)} bboxes", use_column_width=True)
+
+                # Add new bbox with mouse
+                st.markdown("#### Add New Bounding Box")
+                new_class = st.selectbox("Select Class for New Box", class_names, key="new_class")
+
+                # Canvas for drawing
+                canvas_key = f"canvas_{selected_image}_{st.session_state[canvas_counter_key]}"
+                canvas_result = st_canvas(
+                    fill_color="rgba(255, 165, 0, 0.3)",  # Orange fill with transparency
+                    stroke_width=2,
+                    stroke_color="#FF0000",  # Red stroke
+                    background_color="#EEEEEE",
+                    background_image=image,  # Original PIL image
+                    update_streamlit=True,
+                    height=image.height,
+                    width=image.width,
+                    drawing_mode="rect",
+                    point_display_radius=0,
+                    key=canvas_key,
+                )
+
+                if st.button("Add Drawn Box"):
+                    if canvas_result and canvas_result.json_data and 'objects' in canvas_result.json_data:
+                        objects = canvas_result.json_data['objects']
+                        img_width, img_height = image.size  # PIL is (width, height)
+                        added_count = 0
+                        for obj in objects:
+                            if obj['type'] == 'rect':
+                                left = float(obj['left'])
+                                top = float(obj['top'])
+                                width = float(obj['width'])
+                                height = float(obj['height'])
+                                # Convert to normalized YOLO format
+                                x_center = (left + width / 2) / img_width
+                                y_center = (top + height / 2) / img_height
+                                w_norm = width / img_width
+                                h_norm = height / img_height
+                                class_id = class_names.index(new_class)
+                                st.session_state[session_key].append({
+                                    'class_id': class_id,
+                                    'x': x_center,
+                                    'y': y_center,
+                                    'w': w_norm,
+                                    'h': h_norm
+                                })
+                                added_count += 1
+                        if added_count > 0:
+                            st.success(f"Added {added_count} bounding box(es)!")
+                            st.session_state[canvas_counter_key] += 1
+                            st.rerun()
+                        else:
+                            st.warning("No rectangles found in drawing.")
+                    else:
+                        st.warning("Please draw a rectangle on the image first.")
+
+                # List current annotations
+                st.markdown("#### Current Annotations")
+                for i, ann in enumerate(existing_annotations):
+                    class_name = class_names[ann['class_id']] if ann['class_id'] < len(class_names) else f"Class {ann['class_id']}"
+                    st.write(f"{i+1}. {class_name}: x={ann['x']:.3f}, y={ann['y']:.3f}, w={ann['w']:.3f}, h={ann['h']:.3f}")
+                    if st.button(f"Remove {i+1}", key=f"remove_{i}"):
+                        st.session_state[session_key].pop(i)
+                        st.rerun()
+
+                if st.button("Save Annotations"):
+                    # Save to txt file
+                    label_file_name = f"{selected_image.rsplit('.', 1)[0]}.txt"
+                    annotations_lines = [f"{ann['class_id']} {ann['x']:.6f} {ann['y']:.6f} {ann['w']:.6f} {ann['h']:.6f}" for ann in st.session_state[session_key]]
+                    with open(label_file_name, "w") as f:
+                        f.write("\n".join(annotations_lines))
+                    st.success(f"Annotations saved to {label_file_name} ({len(st.session_state[session_key])} bboxes)")
+
+    # Clear dataset button
+    if st.button("Clear Uploaded Dataset"):
+        if 'dataset_temp_dir' in st.session_state and os.path.exists(st.session_state.dataset_temp_dir):
+            shutil.rmtree(st.session_state.dataset_temp_dir)
+            del st.session_state.dataset_temp_dir
+        st.success("Uploaded dataset cleared.")
+        st.rerun()
 
 elif page == "Export":
     st.title("📤 Model Export")
