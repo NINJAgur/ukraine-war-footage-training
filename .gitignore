@@ -145,7 +145,8 @@ ehthumbs.db
 Thumbs.db
 
 # YOLO specific
+datasets/
 runs/
-.mp4
+*.mp4
 *.yaml  # Generated YAML configs
 *.pt    # Model weights (optional, if not committing)
