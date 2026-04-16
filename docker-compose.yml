@@ -1,0 +1,128 @@
+# docker-compose.yml — Ukraine Combat Footage Web Application
+#
+# PHASE 0/1/2/3: Only postgres and redis services are active.
+# Uncomment application services as each phase is completed.
+#
+# PHASE 4: All services active. ml-engine uses NVIDIA Container Toolkit.
+# Requires: Docker Desktop with WSL2 backend + NVIDIA Container Toolkit installed.
+
+version: '3.8'
+
+services:
+
+  # ── Infrastructure Services (active from Phase 0) ──────────────────
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ukraine_footage
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ukraine_footage"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Phase 1: Scraper Engine ─────────────────────────────────────────
+  # Uncomment after completing Phase 1 tasks.
+
+  # scraper-worker:
+  #   build:
+  #     context: ./scraper-engine
+  #     dockerfile: Dockerfile
+  #   restart: unless-stopped
+  #   env_file: .env
+  #   command: celery -A celery_app worker -Q default --loglevel=info --concurrency=4
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #   volumes:
+  #     - ./media:/app/media
+
+  # scraper-beat:
+  #   build:
+  #     context: ./scraper-engine
+  #     dockerfile: Dockerfile
+  #   restart: unless-stopped
+  #   env_file: .env
+  #   command: celery -A celery_app beat --loglevel=info
+  #   depends_on:
+  #     - scraper-worker
+
+  # ── Phase 2: ML Engine ─────────────────────────────────────────────
+  # Uncomment after completing Phase 2 tasks.
+  # Requires NVIDIA Container Toolkit (Phase 4 prerequisite).
+
+  # ml-worker:
+  #   build:
+  #     context: ./ml-engine
+  #     dockerfile: Dockerfile
+  #   restart: unless-stopped
+  #   runtime: nvidia
+  #   environment:
+  #     NVIDIA_VISIBLE_DEVICES: all
+  #   env_file: .env
+  #   command: celery -A celery_app worker -Q gpu --loglevel=info --concurrency=1
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #   volumes:
+  #     - ./media:/app/media
+  #     - ./runs:/app/runs
+
+  # ── Phase 3: Web Application ────────────────────────────────────────
+  # Uncomment after completing Phase 3 tasks.
+
+  # backend:
+  #   build:
+  #     context: ./web-app/backend
+  #     dockerfile: Dockerfile
+  #   restart: unless-stopped
+  #   env_file: .env
+  #   ports:
+  #     - "8000:8000"
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #   volumes:
+  #     - ./media:/app/media
+
+  # frontend:
+  #   build:
+  #     context: ./web-app/frontend
+  #     dockerfile: Dockerfile
+  #   restart: unless-stopped
+  #   ports:
+  #     - "80:80"
+  #   depends_on:
+  #     - backend
+
+volumes:
+  postgres_data:
+  redis_data:
