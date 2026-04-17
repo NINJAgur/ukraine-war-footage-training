@@ -76,7 +76,8 @@ archival combat footage from the war in Ukraine, with a secure Admin panel for Y
 
 ### Scraping
 - **Playwright** (async) for Funker530 + similar sites
-- **yt-dlp** for YouTube and video platform downloads
+- **yt-dlp** for GeoConfirmed and video platform downloads (Telegram, Twitter/X)
+- **GeoConfirmed REST API** — `https://geoconfirmed.org/api/map/ExportAsKml/Ukraine` returns KML/GeoJSON incident metadata
 - **BeautifulSoup4** for HTML parsing
 - **kagglehub** for Kaggle dataset downloads
 - De-duplicate by `url_hash` (SHA256 of the canonical URL)

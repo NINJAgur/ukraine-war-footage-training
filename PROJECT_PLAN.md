@@ -17,7 +17,7 @@
 
 ### 1.1 Project Goal
 An automated, full-stack web application that:
-- Scrapes combat footage from open-source sites (Funker530, YouTube) on a schedule
+- Scrapes combat footage from open-source sites (Funker530, GeoConfirmed) on a schedule
 - Runs YOLOv8 auto-labeling on every downloaded clip
 - Packages labeled frames into YOLO/Kaggle-compatible datasets
 - Renders annotated MP4 previews for a public media dashboard
@@ -32,7 +32,7 @@ An automated, full-stack web application that:
 │  [Celery Beat]                                                      │
 │       │                                                             │
 │       ├──► scrape_funker530 task  (Playwright + BeautifulSoup)      │
-│       ├──► scrape_youtube task    (yt-dlp)                          │
+│       ├──► scrape_geoconfirmed task (GeoConfirmed REST API + yt-dlp) │
 │       └──► download_kaggle task   (Kaggle API)                      │
 │                    │                                                │
 │                    ▼                                                │
@@ -117,7 +117,7 @@ An automated, full-stack web application that:
 | **Hardware** | Windows 11, i5-13600KF, RTX 3060 Ti 8GB, CUDA 12.1 via pip |
 | **Backend API** | FastAPI + SQLAlchemy + PostgreSQL |
 | **Frontend** | Vue 3 (Composition API) + Vite + Tailwind CSS + Pinia |
-| **Scraping** | `yt-dlp` + `Playwright` + `BeautifulSoup` + Kaggle API |
+| **Scraping** | `yt-dlp` + `Playwright` + `BeautifulSoup` + GeoConfirmed REST API + Kaggle API |
 | **Async Queue** | Celery + Redis (broker + result backend) |
 | **ML** | Ultralytics YOLOv8 + PyTorch (`torch+cu121`) + OpenCV |
 | **Containers** | Docker + Docker Compose w/ NVIDIA runtime **(Phase 4 only)** |
@@ -236,7 +236,7 @@ yolo-training-template/                  ← monorepo root
 │   ├── tasks/
 │   │   ├── __init__.py
 │   │   ├── scrape_funker530.py
-│   │   ├── scrape_youtube.py
+│   │   ├── scrape_geoconfirmed.py
 │   │   └── download_kaggle.py
 │   └── db/
 │       ├── session.py
@@ -361,11 +361,12 @@ yolo-training-template/                  ← monorepo root
 - [x] **1.2** Create `celery_app.py` with Redis broker config
 - [x] **1.3** Create `db/session.py` + `models.py` (`Clip` ORM)
 - [x] **1.4** Implement `tasks/scrape_funker530.py` (Playwright + de-dup)
-- [x] **1.5** Implement `tasks/scrape_youtube.py` (yt-dlp wrapper)
+- [x] **1.5** Implement `tasks/scrape_geoconfirmed.py` (GeoConfirmed REST API + yt-dlp)
 - [x] **1.6** Implement `tasks/download_kaggle.py` (Kaggle API)
 - [x] **1.7** Configure `beat_schedule.py` (hourly scrape, nightly Kaggle)
 - [x] **1.8** Write `scraper-engine/Dockerfile`
 - [x] **1.9** Integration tests passed: DB schema verified, insert/idempotency/status-update/query (4/4), Redis ping, 5 Celery tasks + 3 Beat entries confirmed
+- [x] **1.10** Live scrape test passed (2026-04-17): Funker530 (Playwright, 9 links discovered), GeoConfirmed API (3 real video incidents with valid Twitter/X URLs returned)
 
 ---
 

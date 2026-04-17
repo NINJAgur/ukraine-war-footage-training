@@ -18,7 +18,7 @@ celery_app = Celery(
     backend=settings.CELERY_RESULT_BACKEND,
     include=[
         "tasks.scrape_funker530",
-        "tasks.scrape_youtube",
+        "tasks.scrape_geoconfirmed",
         "tasks.download_kaggle",
     ],
 )
