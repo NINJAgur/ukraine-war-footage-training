@@ -135,8 +135,8 @@ TrainingRun
 | Phase | Focus | Status |
 |-------|-------|--------|
 | **0** | Agentic workspace init | ✅ Complete |
-| **1** | Data Ingestion (scraper-engine) | 🔄 Next |
-| **2** | ML Pipeline (ml-engine) | ⏳ Pending |
+| **1** | Data Ingestion (scraper-engine) | ✅ Complete |
+| **2** | ML Pipeline (ml-engine) | 🔄 Next |
 | **3** | Web Application | ⏳ Pending |
 | **4** | Cloud & DevOps | ⏳ Pending |
 

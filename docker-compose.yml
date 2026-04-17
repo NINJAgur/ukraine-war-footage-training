@@ -6,8 +6,6 @@
 # PHASE 4: All services active. ml-engine uses NVIDIA Container Toolkit.
 # Requires: Docker Desktop with WSL2 backend + NVIDIA Container Toolkit installed.
 
-version: '3.8'
-
 services:
 
   # ── Infrastructure Services (active from Phase 0) ──────────────────

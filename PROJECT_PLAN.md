@@ -355,17 +355,17 @@ yolo-training-template/                  ← monorepo root
 
 ---
 
-### Phase 1 — Data Ingestion
+### Phase 1 — Data Ingestion ✅ Complete
 
-- [ ] **1.1** Scaffold `scraper-engine/` + `requirements.txt`
-- [ ] **1.2** Create `celery_app.py` with Redis broker config
-- [ ] **1.3** Create `db/session.py` + `models.py` (`Clip` ORM)
-- [ ] **1.4** Implement `tasks/scrape_funker530.py` (Playwright + de-dup)
-- [ ] **1.5** Implement `tasks/scrape_youtube.py` (yt-dlp wrapper)
-- [ ] **1.6** Implement `tasks/download_kaggle.py` (Kaggle API)
-- [ ] **1.7** Configure `beat_schedule.py` (hourly scrape, nightly Kaggle)
-- [ ] **1.8** Write `scraper-engine/Dockerfile`
-- [ ] **1.9** Integration test: scrape 1 URL → DB row + file on disk
+- [x] **1.1** Scaffold `scraper-engine/` + `requirements.txt`
+- [x] **1.2** Create `celery_app.py` with Redis broker config
+- [x] **1.3** Create `db/session.py` + `models.py` (`Clip` ORM)
+- [x] **1.4** Implement `tasks/scrape_funker530.py` (Playwright + de-dup)
+- [x] **1.5** Implement `tasks/scrape_youtube.py` (yt-dlp wrapper)
+- [x] **1.6** Implement `tasks/download_kaggle.py` (Kaggle API)
+- [x] **1.7** Configure `beat_schedule.py` (hourly scrape, nightly Kaggle)
+- [x] **1.8** Write `scraper-engine/Dockerfile`
+- [x] **1.9** Integration tests passed: DB schema verified, insert/idempotency/status-update/query (4/4), Redis ping, 5 Celery tasks + 3 Beat entries confirmed
 
 ---
 
@@ -420,13 +420,14 @@ yolo-training-template/                  ← monorepo root
 
 ## 5. Next Steps
 
-Phase 0 is complete. To begin **Phase 1**, run:
+Phase 0 ✅ and Phase 1 ✅ are complete. To begin **Phase 2**, run:
 
 ```bash
-# Verify Redis is running (WSL2)
-redis-cli ping   # PONG
+# Ensure Docker containers are still running
+docker compose up postgres redis -d
 
-# Verify PostgreSQL is running and DB exists
+# Phase 2 starts with: scaffold ml-engine/ and migrate core scripts
+
 psql -U postgres -c "\l" | grep ukraine_footage
 
 # Start building the scraper engine

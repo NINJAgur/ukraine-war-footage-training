@@ -1,0 +1,33 @@
+# scraper-engine/requirements.txt
+# Install: pip install -r requirements.txt
+# Then:    playwright install chromium
+
+# ── Task Queue ────────────────────────────────────────────────────────
+celery==5.3.6
+celery[redis]==5.3.6
+redis==5.0.3
+
+# ── Web Scraping ──────────────────────────────────────────────────────
+playwright==1.44.0
+beautifulsoup4==4.12.3
+lxml==5.2.2
+
+# ── Video Download ────────────────────────────────────────────────────
+yt-dlp==2024.5.27
+
+# ── Database ──────────────────────────────────────────────────────────
+sqlalchemy==2.0.30
+psycopg2-binary==2.9.9
+# asyncpg for the FastAPI backend — not needed in Celery workers (sync only)
+
+# ── Datasets ─────────────────────────────────────────────────────────
+kagglehub==0.3.13
+
+# ── Config ────────────────────────────────────────────────────────────
+pydantic==2.7.1
+pydantic-settings==2.3.0
+python-dotenv==1.0.1
+
+# ── Utilities ─────────────────────────────────────────────────────────
+requests==2.32.2
+tqdm==4.66.4
