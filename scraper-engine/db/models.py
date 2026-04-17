@@ -28,7 +28,7 @@ class ClipStatus(str, enum.Enum):
 
 class ClipSource(str, enum.Enum):
     FUNKER530 = "funker530"
-    YOUTUBE = "youtube"
+    GEOCONFIRMED = "geoconfirmed"
     KAGGLE = "kaggle"
     SUBMITTED = "submitted"       # user-submitted via public form
 

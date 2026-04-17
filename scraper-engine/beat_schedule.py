@@ -3,9 +3,9 @@ scraper-engine/beat_schedule.py
 Celery Beat periodic task definitions.
 
 Schedule overview:
-  - Funker530 scraper:  every hour
-  - YouTube scraper:    every 2 hours
-  - Kaggle datasets:    every night at 02:00 UTC
+  - Funker530 scraper:     every hour
+  - GeoConfirmed scraper:  every 2 hours
+  - Kaggle datasets:       every night at 02:00 UTC
 """
 from celery.schedules import crontab
 
@@ -17,9 +17,9 @@ BEAT_SCHEDULE = {
         "options": {"queue": "default"},
     },
 
-    # ── YouTube: check configured channels every 2 hours ──────────────
-    "scrape-youtube-bihourly": {
-        "task": "tasks.scrape_youtube.scrape_youtube_channels",
+    # ── GeoConfirmed: fetch latest incidents every 2 hours ───────────
+    "scrape-geoconfirmed-bihourly": {
+        "task": "tasks.scrape_geoconfirmed.scrape_geoconfirmed",
         "schedule": crontab(minute=15, hour="*/2"),   # :15 every 2nd hour
         "options": {"queue": "default"},
     },

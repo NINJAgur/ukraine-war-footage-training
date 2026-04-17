@@ -30,8 +30,9 @@ class Settings(BaseSettings):
     FUNKER530_BASE_URL: str = "https://funker530.com"
     SCRAPE_MAX_PAGES: int = 10
     SCRAPE_DELAY_SECONDS: float = 2.0
-    # Comma-separated YouTube channel URLs/IDs
-    YOUTUBE_CHANNELS: str = ""
+    # GeoConfirmed API
+    GEOCONFIRMED_API_URL: str = "https://geoconfirmed.org/api/placemark/Ukraine"
+    GEOCONFIRMED_MAX_INCIDENTS: int = 20   # max video incidents to process per run
     YTDLP_FORMAT: str = "bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4]/best"
 
     # ── Kaggle ────────────────────────────────────────────────────────
@@ -45,10 +46,6 @@ class Settings(BaseSettings):
         # Ensure media directories exist
         self.RAW_VIDEO_DIR.mkdir(parents=True, exist_ok=True)
         self.DATASETS_DIR.mkdir(parents=True, exist_ok=True)
-
-    @property
-    def youtube_channel_list(self) -> list[str]:
-        return [c.strip() for c in self.YOUTUBE_CHANNELS.split(",") if c.strip()]
 
     @property
     def kaggle_dataset_list(self) -> list[str]:
