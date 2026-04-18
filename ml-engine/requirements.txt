@@ -17,6 +17,7 @@ opencv-python-headless==4.9.0.80
 # Install from source: pip install git+https://github.com/IDEA-Research/GroundingDINO.git
 groundingdino-py==0.4.0
 
+kagglehub==0.3.4
 supervision==0.21.0
 numpy==1.26.4
 Pillow==10.3.0

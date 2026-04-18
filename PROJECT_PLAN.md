@@ -370,16 +370,35 @@ yolo-training-template/                  ← monorepo root
 
 ### Phase 2 — ML Pipeline
 
+#### 2a — Core Tasks (complete)
 - [x] **2.1** Scaffold `ml-engine/` + `requirements.txt`
 - [x] **2.2** Migrate `core/` scripts from existing repo (`main.py`, `inference.py`, `preprocessing.py`, `dataset_explorer.py`, `autolabeling/auto_label.py`)
-- [x] **2.3** Create `celery_app.py` (concurrency=1, GPU queue)
-- [ ] **2.4** Implement `tasks/auto_label.py` (GroundingDINO → .txt files)
-- [ ] **2.5** Implement `tasks/package_dataset.py` (YOLO dir + data.yaml)
-- [ ] **2.6** Implement `tasks/render_annotated.py` (inference → H.264 MP4)
-- [ ] **2.7** Implement `tasks/train_baseline.py` (Stage 1)
-- [ ] **2.8** Implement `tasks/train_finetune.py` (Stage 2)
-- [ ] **2.9** Write `ml-engine/Dockerfile`
-- [ ] **2.10** Integration test: auto-label 10 frames
+- [x] **2.3** Create `celery_app.py` (concurrency=1, GPU queue, Beat schedule every 5 min)
+- [x] **2.4** Implement `tasks/poll_clips.py` — Beat bridge: DOWNLOADED → QUEUED → dispatches auto_label_clip
+- [x] **2.5** Implement `tasks/auto_label.py` — extract frames + GroundingDINO → YOLO .txt labels → Dataset(LABELED) → dispatch package_dataset
+- [x] **2.6** Implement `tasks/package_dataset.py` — 80/20 train/val split + data.yaml → Dataset(PACKAGED) → dispatch render_annotated
+- [x] **2.7** Implement `tasks/render_annotated.py` — YOLO inference on raw clip → H.264 MP4 → Clip(ANNOTATED)
+- [x] **2.8** Implement `tasks/train_baseline.py` — Stage 1: Kaggle datasets → best.pt
+- [x] **2.9** Implement `tasks/train_finetune.py` — Stage 2: merge custom datasets → fine-tune from baseline → best.pt
+- [x] **2.10** Write `ml-engine/Dockerfile` (NVIDIA PyTorch base, GroundingDINO from source)
+- [x] **2.11** Add `kagglehub` to `ml-engine/requirements.txt`
+- [x] **2.12** Add `ClipStatus.QUEUED` to both `scraper-engine/db/models.py` and `ml-engine/db/models.py`
+
+#### 2b — Multi-Model Architecture (next session)
+- [ ] **2.13** Add `ModelType` enum (GENERAL, SOLDIER, VEHICLE, AIRCRAFT) to `ml-engine/db/models.py`; add `model_type` column to `TrainingRun`
+- [ ] **2.14** Update `ml-engine/config.py` — add `MODEL_CLASSES` dict + `GDINO_CLASS_TO_MODEL` index mapping
+- [ ] **2.15** Update `ml-engine/tasks/train_baseline.py` — per-model Kaggle dataset config dict, reads `model_type` from TrainingRun
+- [ ] **2.16** Update `ml-engine/tasks/train_finetune.py` — filter + remap class IDs per model_type when building merged dataset
+- [ ] **2.17** Add `infer_video_multi_model()` to `ml-engine/core/inference.py` — load all available models, run frame-by-frame, combine detections with per-model colours
+- [ ] **2.18** Update `ml-engine/tasks/render_annotated.py` — call `infer_video_multi_model()` with best weights for all 4 model types
+- [ ] **2.19** Verify / update Kaggle baseline dataset slugs and class counts — confirm these are valid YOLO datasets:
+  - GENERAL: `rawsi18/military-assets-dataset-12-classes-yolo8-format`
+  - SOLDIER: `hillsworld/human-detection-yolo`
+  - VEHICLE: `sudipchakrabarty/kiit-mita`
+  - AIRCRAFT: `rookieengg/military-aircraft-detection-dataset-yolo-format` + `muki2003/yolo-drone-detection-dataset`
+
+#### 2c — Testing
+- [ ] **2.20** Write `ml-engine/tests/test_pipeline_e2e.py` — E2E integration test: scrape one real clip → auto_label → package_dataset → verify frames/labels/data.yaml → self-cleaning teardown (DB rows + files). Supports `--skip-gdino` flag for environments without GroundingDINO.
 
 ---
 
@@ -419,18 +438,22 @@ yolo-training-template/                  ← monorepo root
 
 ## 5. Next Steps
 
-Phase 0 ✅, Phase 1 ✅, and Phase 2 scaffold ✅ are complete. Next: implement Phase 2 ML tasks.
+Phase 0 ✅, Phase 1 ✅, Phase 2a ✅ (core ML tasks + Dockerfile + Beat polling bridge) are complete.
+
+**Currently in progress:** Phase 2b — multi-model architecture (GENERAL + SOLDIER + VEHICLE + AIRCRAFT).
 
 ```bash
-# Verify Phase 1 still green before starting Phase 2 tasks
-cd scraper-engine && python tests/test_scrape_live.py
+# Next session — start here (Phase 2b):
+# 2.13  db/models.py       — add ModelType enum + model_type to TrainingRun
+# 2.14  config.py          — MODEL_CLASSES dict + GDINO_CLASS_TO_MODEL mapping
+# 2.15  train_baseline.py  — per-model Kaggle dataset config
+# 2.16  train_finetune.py  — per-model class filtering + ID remap
+# 2.17  inference.py       — infer_video_multi_model()
+# 2.18  render_annotated.py — 4-model rendering
+# 2.19  verify Kaggle dataset slugs
+# 2.20  test_pipeline_e2e.py — E2E integration test with self-cleaning teardown
 
-# Phase 2 next tasks:
-# 2.4  tasks/auto_label.py — extract frames → GroundingDINO → YOLO .txt labels
-# 2.5  tasks/package_dataset.py — assemble YOLO dir structure + data.yaml
-# 2.6  tasks/render_annotated.py — run inference.py on raw clip → annotated MP4
-# 2.7  tasks/train_baseline.py — Stage 1 Kaggle military datasets
-# 2.8  tasks/train_finetune.py — Stage 2 load baseline.pt + custom labeled data
+# Then move to Phase 3 (web-app)
 ```
 
 ---

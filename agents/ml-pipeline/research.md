@@ -34,9 +34,45 @@ You focus exclusively on the `ml-engine/` service.
 - `torch` + `torchvision` (cu121 build)
 - `albumentations` — data augmentation (already in repo)
 
+### Multi-Model Architecture (4 models)
+| Model | Classes | Kaggle Baseline | Fine-tune from |
+|-------|---------|-----------------|---------------|
+| GENERAL | soldier, tank, armored vehicle, military vehicle, artillery, aircraft, helicopter, drone | rawsi18/military-assets-dataset-12-classes-yolo8-format | — |
+| SOLDIER | soldier | hillsworld/human-detection-yolo | GENERAL |
+| VEHICLE | tank, armored vehicle, military vehicle, artillery | sudipchakrabarty/kiit-mita | GENERAL |
+| AIRCRAFT | aircraft, helicopter, drone | rookieengg/military-aircraft-detection-dataset-yolo-format + muki2003/yolo-drone-detection-dataset | GENERAL |
+
+GroundingDINO class→model mapping (GDINO_TEXT_PROMPT order):
+- idx 0 soldier → SOLDIER
+- idx 1 tank, 2 armored vehicle, 3 military vehicle, 4 artillery → VEHICLE
+- idx 5 aircraft, 6 helicopter, 7 drone → AIRCRAFT
+
 ### Two-Stage Training Strategy
-- **Stage 1 (Baseline):** Train on Kaggle military datasets → `runs/baseline/weights/best.pt`
-- **Stage 2 (Fine-Tune):** Load `baseline.pt` as initial weights → train on custom auto-labeled data → `runs/finetune/weights/best.pt`
+- **Stage 1 (Baseline):** Train GENERAL model on combined Kaggle data → `runs/baseline/GENERAL/weights/best.pt`
+- **Stage 1b (Specialist Baseline):** Train each specialist (SOLDIER/VEHICLE/AIRCRAFT) on domain Kaggle data → `runs/baseline/<model_type>/weights/best.pt`
+- **Stage 2 (Fine-Tune):** Load GENERAL baseline → fine-tune each model on class-filtered GroundingDINO auto-labeled data → `runs/finetune/<model_type>/weights/best.pt`
+
+### Database Schema
+```
+Clip
+  id, url, url_hash (unique), source (funker530|geoconfirmed|kaggle|submitted)
+  title, description, channel, published_at
+  status: PENDING|DOWNLOADING|DOWNLOADED|QUEUED|LABELED|ANNOTATED|ERROR
+  file_path, mp4_path, duration_seconds, width, height
+  created_at, updated_at
+
+Dataset
+  id, name, clip_id (FK→clips), yolo_dir_path, yaml_path
+  status: LABELED|PACKAGED|TRAINED
+  frame_count, class_count, created_at, updated_at
+
+TrainingRun
+  id, stage (BASELINE|FINETUNE), model_type (GENERAL|SOLDIER|VEHICLE|AIRCRAFT)
+  status (QUEUED|RUNNING|DONE|ERROR)
+  dataset_ids (JSON array of Dataset.id)
+  weights_path, baseline_weights, metrics (JSON), error_message
+  celery_task_id, started_at, completed_at, created_at
+```
 
 ---
 
