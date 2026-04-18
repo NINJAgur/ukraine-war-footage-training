@@ -18,6 +18,8 @@ import cv2
 from celery_app import celery_app
 from config import settings
 from db.models import Clip, ClipStatus, Dataset, DatasetStatus
+
+_RUNNABLE_STATUSES = {ClipStatus.DOWNLOADED, ClipStatus.QUEUED}
 from db.session import get_session
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "core"))
@@ -74,6 +76,12 @@ def auto_label_clip(self, clip_id: int) -> dict:
         clip = session.get(Clip, clip_id)
         if clip is None:
             raise ValueError(f"Clip {clip_id} not found")
+        if clip.status not in _RUNNABLE_STATUSES:
+            logger.info(
+                f"[{self.request.id}] Clip {clip_id} status={clip.status} — skipping "
+                f"(already processed or in wrong state)"
+            )
+            return {"status": "skipped", "clip_id": clip_id, "reason": clip.status}
         if not clip.file_path or not Path(clip.file_path).exists():
             raise ValueError(f"Clip {clip_id} has no file on disk: {clip.file_path}")
         video_path = Path(clip.file_path)
