@@ -17,9 +17,9 @@ You focus exclusively on the `scraper-engine/` service.
 ### What We Scrape
 | Source | Method | Notes |
 |--------|--------|-------|
-| **Funker530** (funker530.com) | Playwright + BeautifulSoup | News/video site with paginated posts; embedded Rumble video players |
-| **GeoConfirmed** (geoconfirmed.org) | REST API + yt-dlp | Geolocated incidents API; videos hosted on Telegram/Twitter/X |
-| **Kaggle datasets** | kagglehub API | Military/vehicle detection datasets for Stage 1 training |
+| **Funker530** (funker530.com) | REST API + yt-dlp | `GET https://api.funker530.com/api/Get?categories=16` with `gettype: Video` header; yt-dlp downloads Bunny.net HLS streams |
+| **GeoConfirmed** (geoconfirmed.org) | REST API + yt-dlp | `GET /api/placemark/Ukraine` list + `GET /api/placemark/detail/{id}` detail; parallel detail fetch; yt-dlp for Telegram/Twitter/X video |
+| **Kaggle datasets** | kagglehub API | Military/vehicle detection datasets for Stage 1 baseline training |
 
 ### Storage Model
 - Raw videos saved to `MEDIA_ROOT/raw/{source}/{url_hash[:8]}_{title_slug}.mp4`
