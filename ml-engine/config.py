@@ -45,8 +45,8 @@ class Settings(BaseSettings):
     GDINO_BOX_THRESHOLD: float = 0.35
     GDINO_TEXT_THRESHOLD: float = 0.25
     GDINO_TEXT_PROMPT: str = (
-        "military vehicle . soldier . tank . armored vehicle . "
-        "artillery . drone . weapon . helicopter . truck"
+        "military vehicle, soldier, tank, armored vehicle, "
+        "artillery, drone, weapon, helicopter, truck"
     )
     FRAME_INTERVAL: int = 30            # extract every Nth frame (30 = 1fps @ 30fps)
     MAX_FRAMES_PER_CLIP: int = 300      # cap per clip
