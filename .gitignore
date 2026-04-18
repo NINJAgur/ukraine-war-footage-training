@@ -144,9 +144,11 @@ dmypy.json
 ehthumbs.db
 Thumbs.db
 
-# YOLO specific
-datasets/
-runs/
+# Project-specific generated outputs
+media/
+ml-engine/runs/
+ml-engine/media/
 *.mp4
-*.yaml  # Generated YAML configs
-*.pt    # Model weights (optional, if not committing)
+*.pt
+# YOLO data.yaml files are generated — don't commit
+data.yaml

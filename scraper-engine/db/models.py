@@ -47,7 +47,7 @@ class Clip(Base):
     )
     title = Column(String(500))
     description = Column(Text)
-    channel = Column(String(200))                   # YouTube channel name, Funker530 author, etc.
+    channel = Column(String(200))                   # source channel or author name
     published_at = Column(DateTime)                 # original publish date if known
 
     # Processing state
