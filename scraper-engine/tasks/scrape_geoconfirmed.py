@@ -1,22 +1,8 @@
 """
-scraper-engine/tasks/scrape_geoconfirmed.py
-
 Celery task: fetch geolocated Ukraine incidents from GeoConfirmed REST API,
 create Clip records for new video entries, and dispatch yt-dlp downloads.
-
-API structure (discovered via browser DevTools):
-  GET /api/placemark/Ukraine
-    → [{factionId, name, color, icons: [{iconId, icon, placemarks: [{id, date, la, lo, ds}]}]}]
-  GET /api/placemark/detail/{id}
-    → {id, name, description, date, latitude, longitude, icon, faction,
-       originalSource, geolocation, origin, gear, units, plusCode, ...}
-
-Flow:
-  1. Fetch all placemarks, sort by date desc, take GEOCONFIRMED_MAX_INCIDENTS newest
-  2. For each, fetch detail and filter origin=="VID" (video clips only)
-  3. Skip if no originalSource or if URL not downloadable by yt-dlp
-  4. Insert Clip records (ON CONFLICT DO NOTHING) and dispatch downloads
 """
+import concurrent.futures
 import hashlib
 import logging
 import re
@@ -32,6 +18,7 @@ from celery_app import celery_app
 from config import settings
 from db.models import Clip, ClipSource, ClipStatus
 from db.session import get_session
+from tasks._filter import check_equipment, is_infrastructure_strike
 
 logger = logging.getLogger(__name__)
 
@@ -49,13 +36,10 @@ _HEADERS = {
     "Referer": "https://geoconfirmed.org/map/ukraine",
 }
 
-# Domains yt-dlp can download from
 _DOWNLOADABLE_DOMAINS = (
     "t.me",
     "twitter.com",
     "x.com",
-    "youtube.com",
-    "youtu.be",
     "rumble.com",
     "telegram.org",
     "vxtwitter.com",
@@ -63,15 +47,12 @@ _DOWNLOADABLE_DOMAINS = (
 )
 
 
-# ── Helpers ───────────────────────────────────────────────────────────
-
 def canonical_url(url: str) -> str:
     url = url.strip()
     parsed = urlparse(url)
     if "t.me" in parsed.netloc:
         return f"https://t.me{parsed.path}"
     if "twitter.com" in parsed.netloc or "x.com" in parsed.netloc:
-        # Keep only scheme + netloc + path (strip query/fragment)
         return f"https://twitter.com{parsed.path}"
     return url
 
@@ -100,18 +81,11 @@ def is_downloadable(url: str) -> bool:
     return any(domain in url for domain in _DOWNLOADABLE_DOMAINS)
 
 
-# ── GeoConfirmed API ──────────────────────────────────────────────────
-
-def fetch_recent_placemark_ids(max_count: int, days_back: int = 30) -> list[dict]:
-    """
-    Fetch all placemarks from GeoConfirmed API, return the `max_count` most recent.
-    Filters to last `days_back` days to avoid re-processing ancient data.
-    Returns list of {id, date}.
-    """
-    logger.info(f"Fetching GeoConfirmed placemark list...")
+def fetch_recent_placemark_ids(days_back: int = 60) -> list[dict]:
+    logger.info("Fetching GeoConfirmed placemark list...")
     resp = requests.get(GEOCONFIRMED_LIST_URL, headers=_HEADERS, timeout=30)
     resp.raise_for_status()
-    factions = resp.json()  # list of faction objects
+    factions = resp.json()
 
     cutoff = datetime.utcnow() - timedelta(days=days_back)
     all_pms: list[dict] = []
@@ -127,18 +101,12 @@ def fetch_recent_placemark_ids(max_count: int, days_back: int = 30) -> list[dict
                 if pm_date and pm_date >= cutoff:
                     all_pms.append({"id": pm["id"], "date": pm_date})
 
-    # Sort by date descending, take most recent max_count
     all_pms.sort(key=lambda x: x["date"], reverse=True)
-    selected = all_pms[:max_count]
-    logger.info(
-        f"GeoConfirmed: {len(all_pms)} placemarks in last {days_back} days, "
-        f"processing {len(selected)}"
-    )
-    return selected
+    logger.info(f"GeoConfirmed: {len(all_pms)} placemarks available in last {days_back} days.")
+    return all_pms
 
 
 def fetch_placemark_detail(placemark_id: str) -> Optional[dict]:
-    """Fetch full incident detail for a single placemark ID."""
     url = GEOCONFIRMED_DETAIL_URL.format(id=placemark_id)
     try:
         resp = requests.get(url, headers=_HEADERS, timeout=10)
@@ -150,10 +118,6 @@ def fetch_placemark_detail(placemark_id: str) -> Optional[dict]:
 
 
 def extract_first_url(raw: str) -> Optional[str]:
-    """
-    Extract the first valid URL from a GeoConfirmed originalSource string.
-    The field often contains multiple newline-separated URLs plus free text.
-    """
     if not raw:
         return None
     for line in raw.splitlines():
@@ -164,63 +128,104 @@ def extract_first_url(raw: str) -> Optional[str]:
 
 
 def extract_video_incidents(max_incidents: int) -> list[dict]:
-    """
-    Fetch recent GeoConfirmed video incidents.
-    Returns list of {url, url_hash, title, description, published_at}.
-    """
-    recent_pms = fetch_recent_placemark_ids(
-        max_count=max_incidents * 3,  # over-fetch since many won't be videos
-        days_back=30,
-    )
+    recent_pms = fetch_recent_placemark_ids(days_back=60)
 
     seen_hashes: set[str] = set()
-    incidents: list[dict] = []
-    for pm in recent_pms:
-        if len(incidents) >= max_incidents:
+    results: list[dict] = []
+    skipped = 0
+    checked = 0
+    
+    BATCH_SIZE = 20
+    MAX_WORKERS = 10
+
+    for i in range(0, len(recent_pms), BATCH_SIZE):
+        if len(results) >= max_incidents:
             break
-        detail = fetch_placemark_detail(pm["id"])
-        if not detail:
-            continue
+            
+        batch = recent_pms[i : i + BATCH_SIZE]
+        logger.info(f"Processing GeoConfirmed batch {i} to {i+len(batch)}...")
 
-        # Only process video clips
-        if detail.get("origin") != "VID":
-            continue
+        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            future_to_pm = {executor.submit(fetch_placemark_detail, pm["id"]): pm for pm in batch}
+            
+            for future in concurrent.futures.as_completed(future_to_pm):
+                pm_stub = future_to_pm[future]
+                checked += 1
+                
+                try:
+                    detail = future.result()
+                except Exception:
+                    skipped += 1
+                    continue
 
-        raw_source = detail.get("originalSource") or ""
-        source_url = extract_first_url(raw_source)
-        if not source_url or not is_downloadable(source_url):
-            continue
+                if not detail:
+                    skipped += 1
+                    continue
 
-        h = url_hash(source_url)
-        if h in seen_hashes:
-            continue
-        seen_hashes.add(h)
+                raw_source = detail.get("originalSource") or ""
+                source_url = extract_first_url(raw_source)
+                if not source_url or not is_downloadable(source_url):
+                    skipped += 1
+                    continue
 
-        # Build a descriptive title from name + description
-        name = (detail.get("name") or "").strip()
-        desc = (detail.get("description") or "").strip()
-        title = f"{name} — {desc}" if name and desc else name or desc
+                h = url_hash(source_url)
+                if h in seen_hashes:
+                    continue
+                seen_hashes.add(h)
 
-        incidents.append({
-            "url": canonical_url(source_url),
-            "url_hash": h,
-            "title": title[:500],
-            "description": raw_source[:2000],
-            "published_at": pm["date"],
-        })
+                name = (detail.get("name") or "").strip()
+                desc = (detail.get("description") or "").strip()
+                
+                gear = str(detail.get("gear") or "")
+                units = str(detail.get("units") or "")
+                
+                title = f"{name} — {desc}" if name and desc else name or desc
 
-    logger.info(f"GeoConfirmed: found {len(incidents)} downloadable video incidents")
-    return incidents
+                # Feed description + gear into the filter
+                filter_text = f"{desc} {gear} {units}"
+                equip_ok, equip_reason = check_equipment(name, filter_text)
+                is_infra, infra_reason = is_infrastructure_strike(name, filter_text)
 
+                # Multi-line console logging restored
+                logger.info(
+                    f"  GeoConfirmed candidate  equipment={equip_reason!r}  impact={is_infra}\n"
+                    f"    name: {name}\n"
+                    f"    desc: {desc}\n"
+                    f"    gear: {gear}"
+                )
 
-# ── yt-dlp download ───────────────────────────────────────────────────
+                if is_infra:
+                    logger.info(f"    → SKIP: {infra_reason}")
+                    skipped += 1
+                    continue
+                if not equip_ok:
+                    logger.info(f"    → SKIP: {equip_reason}")
+                    skipped += 1
+                    continue
+
+                results.append({
+                    "url": canonical_url(source_url),
+                    "url_hash": h,
+                    "title": title[:500],
+                    "description": desc[:2000],
+                    "published_at": pm_stub["date"],
+                    "equipment_match": equip_reason,
+                })
+                logger.info(f"    → ACCEPT  equipment='{equip_reason}'")
+                
+                if len(results) >= max_incidents:
+                    break
+
+    logger.info(f"GeoConfirmed: {len(results)} accepted, {skipped} skipped (checked {checked} placemarks)")
+    return results[:max_incidents]
+
 
 def _download_video(video_url: str, output_path: Path) -> dict:
     import yt_dlp
-
+    stem = str(output_path.with_suffix(""))
     ydl_opts = {
         "format": settings.YTDLP_FORMAT,
-        "outtmpl": str(output_path.with_suffix("")),
+        "outtmpl": f"{stem}.%(ext)s",
         "quiet": True,
         "no_warnings": True,
         "socket_timeout": 60,
@@ -232,7 +237,13 @@ def _download_video(video_url: str, output_path: Path) -> dict:
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(video_url, download=True)
 
-    final_path = output_path if output_path.exists() else output_path.with_suffix(".mp4")
+    ext = info.get("ext") or "mp4"
+    final_path = output_path.with_suffix(f".{ext}")
+    if not final_path.exists():
+        matches = list(output_path.parent.glob(f"{output_path.stem}.*"))
+        if matches:
+            final_path = matches[0]
+
     return {
         "file_path": str(final_path),
         "duration_seconds": int(info.get("duration") or 0),
@@ -243,8 +254,6 @@ def _download_video(video_url: str, output_path: Path) -> dict:
     }
 
 
-# ── Celery Tasks ──────────────────────────────────────────────────────
-
 @celery_app.task(
     bind=True,
     name="tasks.scrape_geoconfirmed.scrape_geoconfirmed",
@@ -254,17 +263,10 @@ def _download_video(video_url: str, output_path: Path) -> dict:
     default_retry_delay=300,
 )
 def scrape_geoconfirmed(self) -> dict:
-    """
-    Fetch latest GeoConfirmed video incidents, create Clip records for new ones,
-    and dispatch per-video download tasks.
-    Uses a Redis lock to prevent overlapping Beat executions.
-    """
     import redis as redis_lib
-
     r = redis_lib.from_url(settings.REDIS_URL)
     lock_key = "lock:scrape_geoconfirmed"
     if not r.set(lock_key, self.request.id, ex=3600, nx=True):
-        logger.info(f"[{self.request.id}] scrape_geoconfirmed already running — skipping")
         return {"status": "skipped", "reason": "lock_held"}
 
     logger.info(f"[{self.request.id}] scrape_geoconfirmed started")
@@ -297,21 +299,13 @@ def scrape_geoconfirmed(self) -> dict:
                 if row:
                     clip_id = row[0]
                     new_count += 1
-                    download_geoconfirmed_video.delay(
-                        clip_id=clip_id, video_url=incident["url"]
-                    )
+                    download_geoconfirmed_video.delay(clip_id=clip_id, video_url=incident["url"])
                 else:
                     skipped_count += 1
 
-        summary = {
-            "source": "geoconfirmed",
-            "incidents_checked": len(incidents),
-            "new": new_count,
-            "skipped": skipped_count,
-        }
+        summary = {"source": "geoconfirmed", "incidents_checked": len(incidents), "new": new_count, "skipped": skipped_count}
         logger.info(f"[{self.request.id}] scrape_geoconfirmed completed: {summary}")
         return summary
-
     finally:
         r.delete(lock_key)
 
@@ -325,30 +319,18 @@ def scrape_geoconfirmed(self) -> dict:
     default_retry_delay=60,
 )
 def download_geoconfirmed_video(self, clip_id: int, video_url: str) -> dict:
-    """
-    Download a single GeoConfirmed-sourced video for an existing Clip record.
-    Updates status to DOWNLOADED on success, ERROR on failure.
-    Idempotent: skips if file already on disk.
-    """
-    logger.info(
-        f"[{self.request.id}] download_geoconfirmed_video clip_id={clip_id} url={video_url}"
-    )
-
     with get_session() as session:
         clip = session.get(Clip, clip_id)
         if clip is None:
             raise ValueError(f"Clip {clip_id} not found")
         if clip.file_path and Path(clip.file_path).exists():
-            logger.info(f"[{self.request.id}] Already downloaded: {clip.file_path}")
             return {"status": "skipped", "clip_id": clip_id}
         clip.status = ClipStatus.DOWNLOADING
         clip.error_message = None
 
     output_path = get_output_path(video_url, "")
-
     try:
         meta = _download_video(video_url, output_path)
-
         with get_session() as session:
             clip = session.get(Clip, clip_id)
             clip.status = ClipStatus.DOWNLOADED
@@ -358,12 +340,8 @@ def download_geoconfirmed_video(self, clip_id: int, video_url: str) -> dict:
             clip.height = meta["height"]
             if not clip.title and meta["title"]:
                 clip.title = meta["title"]
-
-        logger.info(f"[{self.request.id}] Downloaded: {meta['file_path']}")
         return {"status": "downloaded", "clip_id": clip_id, "file_path": meta["file_path"]}
-
     except Exception as exc:
-        logger.error(f"[{self.request.id}] Download failed for clip {clip_id}: {exc}")
         with get_session() as session:
             clip = session.get(Clip, clip_id)
             if clip:

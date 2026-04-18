@@ -1,51 +1,59 @@
 """
-scraper-engine/tasks/scrape_funker530.py
-
-Celery task: scrape latest video posts from Funker530.
-Uses Playwright (headless Chromium) + BeautifulSoup.
+Celery task: fetch latest Ukraine war video posts from Funker530 REST API,
+create Clip records for new entries, and dispatch yt-dlp downloads.
 
 Flow:
-  1. Navigate funker530.com category pages
-  2. Extract video post URLs + metadata
-  3. For each new URL (not yet in DB), create a Clip record and dispatch download
+  1. Fetch recent video posts strictly from the Ukraine category (categories=16)
+  2. Iterate until max_count is reached
+  3. Require: geo keyword match (Ukraine/Russia theater)
+  4. Require: explicit equipment or personnel keyword
+  5. Reject: infrastructure or civilian targeting
+  6. Resolve video URL from rumbleJson or bunnyId
+  7. Insert Clip records (ON CONFLICT DO NOTHING) and dispatch downloads
 """
-import asyncio
 import hashlib
+import json
 import logging
 import re
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlparse
 
-from bs4 import BeautifulSoup
-from playwright.async_api import async_playwright, Browser, Page
+import requests
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from celery_app import celery_app
 from config import settings
 from db.models import Clip, ClipSource, ClipStatus
 from db.session import get_session
+from tasks._filter import check_equipment, check_geo, is_infrastructure_strike
 
 logger = logging.getLogger(__name__)
 
-# ── Constants ─────────────────────────────────────────────────────────
-FUNKER530_CATEGORIES = [
-    "/videos/",
-    "/ukraine/",
-]
-HEADERS = {
+FUNKER530_API_URL = (
+    "https://api.funker530.com/api/Get"
+    "?code=sL3mjD-c0BJdI9b9h4s7WhIPU8ca9p6h3yiLyFczS-I9AzFupvbo9g%3D%3D"
+    "&categories=16"
+)
+BUNNY_LIBRARY_ID = "167129"
+BUNNY_EMBED_BASE = f"https://iframe.mediadelivery.net/embed/{BUNNY_LIBRARY_ID}"
+
+_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/124.0.0.0 Safari/537.36"
-    )
+    ),
+    "gettype": "Video",
+    "Accept": "application/json",
+    "Referer": "https://funker530.com/",
 }
 
 
 # ── Helpers ───────────────────────────────────────────────────────────
 
 def canonical_url(url: str) -> str:
-    """Normalize a URL for consistent hashing (strip query, fragments, www.)."""
     parsed = urlparse(url)
     host = parsed.netloc.lstrip("www.")
     path = parsed.path.rstrip("/")
@@ -56,175 +64,178 @@ def url_hash(url: str) -> str:
     return hashlib.sha256(canonical_url(url).encode()).hexdigest()
 
 
-def extract_post_metadata(soup: BeautifulSoup, post_url: str) -> dict:
-    """Extract title, description, and published date from a post page."""
-    title = ""
-    description = ""
-    published_at: Optional[datetime] = None
+def slugify(text: str, max_len: int = 60) -> str:
+    slug = re.sub(r"[^\w\s-]", "", (text or "").lower())
+    slug = re.sub(r"[\s_-]+", "-", slug).strip("-")
+    return slug[:max_len] or "video"
 
-    # Title
-    h1 = soup.find("h1")
-    if h1:
-        title = h1.get_text(strip=True)
 
-    # Meta description
-    meta_desc = soup.find("meta", attrs={"name": "description"})
-    if meta_desc:
-        description = meta_desc.get("content", "")
+def get_output_path(url: str, title: str) -> Path:
+    h = url_hash(url)
+    slug = slugify(title)
+    path = settings.RAW_VIDEO_DIR / "funker530" / f"{h[:8]}_{slug}.mp4"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
 
-    # Published date (common patterns)
-    time_tag = soup.find("time")
-    if time_tag and time_tag.get("datetime"):
+
+def resolve_video_url(post: dict) -> Optional[str]:
+    """
+    Resolve a yt-dlp-downloadable video URL from a Funker530 API post object.
+    Priority: rumbleJson URL → Bunny.net embed URL.
+    """
+    rumble_raw = post.get("rumbleJson") or ""
+    if rumble_raw:
         try:
-            published_at = datetime.fromisoformat(
-                time_tag["datetime"].replace("Z", "+00:00")
-            )
-        except ValueError:
+            rj = json.loads(rumble_raw)
+            rumble_url = rj.get("url", "")
+            if rumble_url and rumble_url.startswith("http"):
+                return rumble_url
+        except (json.JSONDecodeError, AttributeError):
             pass
 
-    return {
-        "title": title[:500] if title else None,
-        "description": description[:2000] if description else None,
-        "published_at": published_at,
-    }
+    bunny_id = (post.get("bunnyId") or "").strip()
+    if bunny_id:
+        return f"{BUNNY_EMBED_BASE}/{bunny_id}"
+
+    return None
 
 
-async def _find_video_urls_on_page(page: Page, category_url: str, max_pages: int) -> list[dict]:
+# ── Funker530 API ──────────────────────────────────────────────────────
+
+def fetch_ukraine_posts(max_count: int) -> list[dict]:
     """
-    Paginate through a Funker530 category page and collect video post links.
-    Returns a list of dicts: {url, title, description, published_at}.
+    Fetch Ukraine-category video posts from Funker530 REST API.
+    Returns list of {url_hash, page_url, video_url, title, description, published_at}.
     """
-    posts: list[dict] = []
-    current_url = category_url
+    logger.info("Fetching Funker530 Ukraine posts from REST API...")
+    resp = requests.get(FUNKER530_API_URL, headers=_HEADERS, timeout=30)
+    resp.raise_for_status()
+    data = resp.json()
+    posts = data if isinstance(data, list) else data.get("posts", data.get("items", []))
 
-    for page_num in range(1, max_pages + 1):
-        logger.info(f"Funker530: scraping page {page_num} — {current_url}")
-
+    def parse_date(p: dict) -> datetime:
+        raw = p.get("publicationDate") or p.get("creationDate") or ""
         try:
-            await page.goto(current_url, wait_until="domcontentloaded", timeout=30_000)
-            await page.wait_for_timeout(int(settings.SCRAPE_DELAY_SECONDS * 1000))
-        except Exception as exc:
-            logger.warning(f"Failed to load {current_url}: {exc}")
+            return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except (ValueError, AttributeError):
+            return datetime.min
+
+    posts_sorted = sorted(posts, key=parse_date, reverse=True)
+    logger.info(f"Funker530: {len(posts_sorted)} posts loaded. Searching for {max_count} valid clips...")
+
+    seen_hashes: set[str] = set()
+    results: list[dict] = []
+    skipped = 0
+    checked = 0
+
+    for post in posts_sorted:
+        if len(results) >= max_count:
             break
 
-        html = await page.content()
-        soup = BeautifulSoup(html, "lxml")
+        slug = (post.get("slug") or "").strip()
+        if not slug:
+            continue
 
-        # Find article/post links — Funker530 uses <article> or card-style divs
-        post_links: list[str] = []
-        for a_tag in soup.find_all("a", href=True):
-            href = a_tag["href"]
-            full_url = urljoin(settings.FUNKER530_BASE_URL, href)
-            # Filter to article/video post URLs (avoid category pages, tags, etc.)
-            parsed = urlparse(full_url)
-            if (
-                parsed.netloc
-                and "funker530.com" in parsed.netloc
-                and len(parsed.path.strip("/").split("/")) >= 1
-                and not any(skip in parsed.path for skip in ["/category/", "/tag/", "/page/", "/author/"])
-                and parsed.path not in ["/", "/videos/", "/ukraine/"]
-            ):
-                post_links.append(full_url)
+        title = (post.get("title") or "").strip()
+        raw_desc = (
+            post.get("ogDescription") or 
+            post.get("excerpt") or 
+            post.get("description") or 
+            post.get("content") or 
+            ""
+        ).strip()
+        
+        description = re.sub(r'<[^>]+>', '', raw_desc).strip()
+        checked += 1
 
-        # De-duplicate within this page
-        post_links = list(dict.fromkeys(post_links))
+        geo = check_geo(title, description)
+        equip_ok, equip_reason = check_equipment(title, description)
+        is_infra, infra_reason = is_infrastructure_strike(title, description)
 
-        for post_url in post_links[:20]:  # max 20 posts per page
-            try:
-                await page.goto(post_url, wait_until="domcontentloaded", timeout=20_000)
-                post_html = await page.content()
-                post_soup = BeautifulSoup(post_html, "lxml")
-                metadata = extract_post_metadata(post_soup, post_url)
-                posts.append({"url": post_url, **metadata})
-            except Exception as exc:
-                logger.warning(f"Failed to load post {post_url}: {exc}")
-                continue
-
-        # Find "next page" link
-        next_link = soup.find("a", string=re.compile(r"next|›|»", re.I))
-        if not next_link or not next_link.get("href"):
-            break
-        current_url = urljoin(settings.FUNKER530_BASE_URL, next_link["href"])
-
-    return posts
-
-
-async def _run_scrape() -> dict:
-    """Main async scraping logic. Returns summary dict."""
-    new_count = 0
-    skipped_count = 0
-    error_count = 0
-
-    async with async_playwright() as p:
-        browser: Browser = await p.chromium.launch(headless=True)
-        context = await browser.new_context(
-            user_agent=HEADERS["User-Agent"],
-            viewport={"width": 1920, "height": 1080},
+        logger.info(
+            f"  Funker530 candidate  geo={geo!r}  equipment={equip_reason!r}  impact={is_infra}\n"
+            f"    title: {title}\n"
+            f"    desc:  {description}"
         )
-        page = await context.new_page()
 
-        try:
-            all_posts: list[dict] = []
-            for category in FUNKER530_CATEGORIES:
-                category_url = settings.FUNKER530_BASE_URL + category
-                posts = await _find_video_urls_on_page(
-                    page, category_url, settings.SCRAPE_MAX_PAGES
-                )
-                all_posts.extend(posts)
+        if not geo:
+            logger.info(f"    → SKIP: no Ukraine/Russia geo keyword")
+            skipped += 1
+            continue
+        if is_infra:
+            logger.info(f"    → SKIP: {infra_reason}")
+            skipped += 1
+            continue
+        if not equip_ok:
+            logger.info(f"    → SKIP: {equip_reason}")
+            skipped += 1
+            continue
 
-            # De-duplicate across categories by URL
-            seen: set[str] = set()
-            unique_posts = []
-            for post in all_posts:
-                h = url_hash(post["url"])
-                if h not in seen:
-                    seen.add(h)
-                    unique_posts.append({**post, "url_hash": h})
+        video_url = resolve_video_url(post)
+        if not video_url:
+            logger.info(f"    → SKIP: no downloadable URL")
+            skipped += 1
+            continue
 
-            logger.info(f"Funker530: found {len(unique_posts)} unique posts")
+        page_url = f"https://funker530.com/video/{slug}/"
+        h = url_hash(page_url)
+        if h in seen_hashes:
+            continue
+        seen_hashes.add(h)
 
-            # Insert new Clips; skip existing (ON CONFLICT DO NOTHING)
-            with get_session() as session:
-                for post in unique_posts:
-                    try:
-                        stmt = (
-                            pg_insert(Clip)
-                            .values(
-                                url=post["url"],
-                                url_hash=post["url_hash"],
-                                source=ClipSource.FUNKER530,
-                                title=post.get("title"),
-                                description=post.get("description"),
-                                published_at=post.get("published_at"),
-                                status=ClipStatus.PENDING,
-                            )
-                            .on_conflict_do_nothing(index_elements=["url_hash"])
-                            .returning(Clip.id)
-                        )
-                        result = session.execute(stmt)
-                        row = result.fetchone()
-                        if row:
-                            new_count += 1
-                            logger.debug(f"New clip: {post['url']}")
-                        else:
-                            skipped_count += 1
-                    except Exception as exc:
-                        logger.error(f"DB error for {post['url']}: {exc}")
-                        error_count += 1
+        published_at = parse_date(post)
+        results.append({
+            "page_url": page_url,
+            "video_url": video_url,
+            "url_hash": h,
+            "title": title[:500],
+            "description": description[:2000],
+            "published_at": published_at if published_at != datetime.min else None,
+        })
+        logger.info(f"    → ACCEPT  equipment='{equip_reason}'  geo='{geo}'")
 
-        finally:
-            await context.close()
-            await browser.close()
+    logger.info(f"Funker530: {len(results)} accepted, {skipped} skipped (checked {checked} candidates)")
+    return results
+
+
+# ── yt-dlp download ───────────────────────────────────────────────────
+
+def _download_video(video_url: str, output_path: Path) -> dict:
+    import yt_dlp
+    stem = str(output_path.with_suffix(""))
+    fmt = "bestvideo[height<=1080]+bestaudio/bestvideo+bestaudio/best[height<=1080]/best"
+    ydl_opts = {
+        "format": fmt,
+        "outtmpl": f"{stem}.%(ext)s",
+        "quiet": True,
+        "no_warnings": True,
+        "socket_timeout": 60,
+        "retries": 3,
+        "merge_output_format": "mp4",
+        "writeinfojson": False,
+        "writethumbnail": False,
+    }
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(video_url, download=True)
+
+    ext = info.get("ext") or "mp4"
+    final_path = output_path.with_suffix(f".{ext}")
+    if not final_path.exists():
+        matches = list(output_path.parent.glob(f"{output_path.stem}.*"))
+        if matches:
+            final_path = matches[0]
 
     return {
-        "source": "funker530",
-        "new": new_count,
-        "skipped": skipped_count,
-        "errors": error_count,
+        "file_path": str(final_path),
+        "duration_seconds": int(info.get("duration") or 0),
+        "width": info.get("width"),
+        "height": info.get("height"),
+        "title": (info.get("title") or "")[:500],
+        "description": (info.get("description") or "")[:2000],
     }
 
 
-# ── Celery Task ───────────────────────────────────────────────────────
+# ── Celery Tasks ──────────────────────────────────────────────────────
 
 @celery_app.task(
     bind=True,
@@ -232,30 +243,95 @@ async def _run_scrape() -> dict:
     queue="default",
     autoretry_for=(Exception,),
     max_retries=3,
-    default_retry_delay=120,
+    default_retry_delay=300,
 )
 def scrape_funker530(self) -> dict:
-    """
-    Scrape latest video posts from Funker530.
-    Uses a Redis lock to prevent overlapping Beat executions.
-    """
     import redis as redis_lib
-
     r = redis_lib.from_url(settings.REDIS_URL)
     lock_key = "lock:scrape_funker530"
-    lock_ttl = 3600  # 1 hour
-
-    if not r.set(lock_key, self.request.id, ex=lock_ttl, nx=True):
-        logger.info(f"[{self.request.id}] scrape_funker530 already running — skipping")
+    if not r.set(lock_key, self.request.id, ex=3600, nx=True):
         return {"status": "skipped", "reason": "lock_held"}
 
     logger.info(f"[{self.request.id}] scrape_funker530 started")
+    new_count = 0
+    skipped_count = 0
+
     try:
-        result = asyncio.run(_run_scrape())
-        logger.info(f"[{self.request.id}] scrape_funker530 completed: {result}")
-        return result
-    except Exception as exc:
-        logger.error(f"[{self.request.id}] scrape_funker530 failed: {exc}", exc_info=True)
-        raise
+        posts = fetch_ukraine_posts(settings.FUNKER530_MAX_POSTS)
+        if not posts:
+            return {"status": "ok", "new": 0, "skipped": 0}
+
+        with get_session() as session:
+            for post in posts:
+                stmt = (
+                    pg_insert(Clip)
+                    .values(
+                        url=post["page_url"],
+                        url_hash=post["url_hash"],
+                        source=ClipSource.FUNKER530,
+                        title=post["title"] or None,
+                        description=post["description"] or None,
+                        published_at=post["published_at"],
+                        status=ClipStatus.PENDING,
+                    )
+                    .on_conflict_do_nothing(index_elements=["url_hash"])
+                    .returning(Clip.id)
+                )
+                result = session.execute(stmt)
+                row = result.fetchone()
+                if row:
+                    clip_id = row[0]
+                    new_count += 1
+                    download_funker530_video.delay(
+                        clip_id=clip_id,
+                        video_url=post["video_url"],
+                        page_url=post["page_url"],
+                    )
+                else:
+                    skipped_count += 1
+
+        summary = {"source": "funker530", "posts_checked": len(posts), "new": new_count, "skipped": skipped_count}
+        logger.info(f"[{self.request.id}] scrape_funker530 completed: {summary}")
+        return summary
     finally:
         r.delete(lock_key)
+
+
+@celery_app.task(
+    bind=True,
+    name="tasks.scrape_funker530.download_funker530_video",
+    queue="default",
+    autoretry_for=(Exception,),
+    max_retries=3,
+    default_retry_delay=60,
+)
+def download_funker530_video(self, clip_id: int, video_url: str, page_url: str) -> dict:
+    with get_session() as session:
+        clip = session.get(Clip, clip_id)
+        if clip is None:
+            raise ValueError(f"Clip {clip_id} not found")
+        if clip.file_path and Path(clip.file_path).exists():
+            return {"status": "skipped", "clip_id": clip_id}
+        clip.status = ClipStatus.DOWNLOADING
+        clip.error_message = None
+
+    output_path = get_output_path(page_url, "")
+    try:
+        meta = _download_video(video_url, output_path)
+        with get_session() as session:
+            clip = session.get(Clip, clip_id)
+            clip.status = ClipStatus.DOWNLOADED
+            clip.file_path = meta["file_path"]
+            clip.duration_seconds = meta["duration_seconds"]
+            clip.width = meta["width"]
+            clip.height = meta["height"]
+            if not clip.title and meta["title"]:
+                clip.title = meta["title"]
+        return {"status": "downloaded", "clip_id": clip_id, "file_path": meta["file_path"]}
+    except Exception as exc:
+        with get_session() as session:
+            clip = session.get(Clip, clip_id)
+            if clip:
+                clip.status = ClipStatus.ERROR
+                clip.error_message = str(exc)[:1000]
+        raise

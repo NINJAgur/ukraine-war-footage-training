@@ -3,6 +3,15 @@
 
 ---
 
+## Response Format Rules
+
+Every single response MUST end with BOTH of these lines (no exceptions):
+
+1. **What changed:** One sentence summarizing what was implemented or fixed this response.
+2. **Token status:** `[session: ~Xk tokens used / Yk remaining]` — estimate from conversation length. Warn explicitly if < 20k remaining.
+
+---
+
 ## Project Identity
 
 **Name:** Ukraine Combat Footage Archival System  
@@ -75,12 +84,12 @@ archival combat footage from the war in Ukraine, with a secure Admin panel for Y
 - All tasks must be idempotent (safe to retry)
 
 ### Scraping
-- **Playwright** (async) for Funker530 + similar sites
-- **yt-dlp** for GeoConfirmed and video platform downloads (Telegram, Twitter/X)
-- **GeoConfirmed REST API** — `https://geoconfirmed.org/api/map/ExportAsKml/Ukraine` returns KML/GeoJSON incident metadata
-- **BeautifulSoup4** for HTML parsing
+- **Funker530 REST API** — `https://api.funker530.com/api/Get?categoryId=16` with `gettype: Video` header; no Playwright needed
+- **GeoConfirmed REST API** — `GET /api/placemark/Ukraine` (list) + `GET /api/placemark/detail/{id}` (detail); filter `origin=="VID"`
+- **yt-dlp** for all video downloads (Bunny.net HLS, Rumble, Telegram, Twitter/X) — not YouTube-specific
 - **kagglehub** for Kaggle dataset downloads
 - De-duplicate by `url_hash` (SHA256 of the canonical URL)
+- 3-tier content filtering: tier-1-hc (equipment visible), tier-1 (equipment mentioned), tier-2 (geo only)
 
 ---
 
@@ -109,14 +118,22 @@ TrainingRun
 
 | What | Where |
 |------|-------|
-| Training entry point (original) | `scripts/main.py` |
-| Inference script (original) | `scripts/inference.py` |
-| Auto-label script (original) | `autolabeling/auto-label.py` |
-| Preprocessing utils (original) | `scripts/preprocessing.py` |
+| Training entry point | `ml-engine/core/main.py` |
+| Inference script | `ml-engine/core/inference.py` |
+| Auto-label script | `ml-engine/core/autolabeling/auto_label.py` |
+| Preprocessing utils | `ml-engine/core/preprocessing.py` |
+| Funker530 scraper task | `scraper-engine/tasks/scrape_funker530.py` |
+| GeoConfirmed scraper task | `scraper-engine/tasks/scrape_geoconfirmed.py` |
+| Phase 1 integration test | `scraper-engine/tests/test_scrape_live.py` |
 | Project plan (source of truth) | `PROJECT_PLAN.md` |
 | Agent personas | `agents/` |
 | Coding rules | `rules/` |
 | CLI commands | `commands/` |
+
+**Run Phase 1 test:**
+```bash
+cd scraper-engine && python tests/test_scrape_live.py
+```
 
 ---
 
@@ -146,17 +163,16 @@ TrainingRun
 ## Environment Variables (key ones)
 
 ```
+DATABASE_SYNC_URL=postgresql://postgres:postgres@localhost:5432/ukraine_footage
 DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/ukraine_footage
 REDIS_URL=redis://localhost:6379/0
 KAGGLE_USERNAME=...
 KAGGLE_KEY=...
 JWT_SECRET=...
 ADMIN_PASSWORD=...
-GPU_DEVICE=cuda:0
-MEDIA_ROOT=./media
 ```
 
-See `.env.example` for the full list.
+Do NOT set `MEDIA_ROOT`, `RAW_VIDEO_DIR`, or `DATASETS_DIR` in `.env` — Python defaults (relative to `__file__`) are correct and CWD-independent.
 
 ---
 

@@ -1,8 +1,0 @@
-names:
-- Potholes
-nc: 1
-path: D:\Proj\yolo-training-template\datasets\datasets\jocelyndumlao\multi-weather-pothole-detection-mwpd\versions\1\Multi-Weather
-  Pothole Detection (MWPD)\MWPD
-test: test\images
-train: train\images
-val: valid\images
