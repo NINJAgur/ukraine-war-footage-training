@@ -19,8 +19,9 @@ class Base(DeclarativeBase):
 
 class ClipStatus(str, enum.Enum):
     PENDING = "PENDING"           # URL discovered, not yet downloaded
-    DOWNLOADING = "DOWNLOADING"   # yt-dlp / Playwright download in progress
-    DOWNLOADED = "DOWNLOADED"     # raw video on disk
+    DOWNLOADING = "DOWNLOADING"   # yt-dlp download in progress
+    DOWNLOADED = "DOWNLOADED"     # raw video on disk, awaiting ml-engine pickup
+    QUEUED = "QUEUED"             # dispatched to ml-engine gpu queue
     LABELED = "LABELED"           # auto-labeling complete, .txt files generated
     ANNOTATED = "ANNOTATED"       # annotated MP4 rendered, ready for public feed
     ERROR = "ERROR"               # something failed — check error_message

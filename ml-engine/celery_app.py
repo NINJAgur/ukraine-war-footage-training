@@ -17,6 +17,7 @@ celery_app = Celery(
     broker=settings.CELERY_BROKER_URL,
     backend=settings.CELERY_RESULT_BACKEND,
     include=[
+        "tasks.poll_clips",
         "tasks.auto_label",
         "tasks.package_dataset",
         "tasks.render_annotated",
@@ -38,4 +39,13 @@ celery_app.conf.update(
     task_default_queue="gpu",
 
     result_expires=86400,
+
+    beat_schedule={
+        # Poll for newly downloaded clips every 5 minutes
+        "poll-downloaded-clips": {
+            "task": "tasks.poll_clips.poll_downloaded_clips",
+            "schedule": 300.0,   # seconds
+            "options": {"queue": "gpu"},
+        },
+    },
 )
