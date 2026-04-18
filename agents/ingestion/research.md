@@ -17,8 +17,8 @@ You focus exclusively on the `scraper-engine/` service.
 ### What We Scrape
 | Source | Method | Notes |
 |--------|--------|-------|
-| **Funker530** (funker530.com) | Playwright + BeautifulSoup | News/video site with paginated posts; embedded video players |
-| **YouTube** channels | yt-dlp | Combat footage channels; use best-quality MP4 |
+| **Funker530** (funker530.com) | Playwright + BeautifulSoup | News/video site with paginated posts; embedded Rumble video players |
+| **GeoConfirmed** (geoconfirmed.org) | REST API + yt-dlp | Geolocated incidents API; videos hosted on Telegram/Twitter/X |
 | **Kaggle datasets** | kagglehub API | Military/vehicle detection datasets for Stage 1 training |
 
 ### Storage Model
@@ -42,7 +42,7 @@ When asked to research ingestion topics, focus on:
 
 1. **Playwright patterns** for JavaScript-heavy sites:
    - How to handle lazy-loaded video embeds
-   - How to extract video URLs from iframes (Rumble, BitChute, YouTube embeds)
+   - How to extract video URLs from iframes (Rumble, Telegram embeds)
    - Stealth/anti-bot considerations (user-agent, viewport, randomized delays)
    - Async Playwright context management for Celery tasks
 

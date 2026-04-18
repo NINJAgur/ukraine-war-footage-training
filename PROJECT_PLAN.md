@@ -1,6 +1,6 @@
 # PROJECT_PLAN.md — Ukraine Combat Footage Web Application
 > **Source of Truth** — All phases, structure, and decisions are tracked here.
-> Last updated: 2026-04-16
+> Last updated: 2026-04-18
 
 ---
 
@@ -31,7 +31,7 @@ An automated, full-stack web application that:
 │                                                                     │
 │  [Celery Beat]                                                      │
 │       │                                                             │
-│       ├──► scrape_funker530 task  (Playwright + BeautifulSoup)      │
+│       ├──► scrape_funker530 task  (REST API + yt-dlp download)      │
 │       ├──► scrape_geoconfirmed task (GeoConfirmed REST API + yt-dlp) │
 │       └──► download_kaggle task   (Kaggle API)                      │
 │                    │                                                │
@@ -117,7 +117,7 @@ An automated, full-stack web application that:
 | **Hardware** | Windows 11, i5-13600KF, RTX 3060 Ti 8GB, CUDA 12.1 via pip |
 | **Backend API** | FastAPI + SQLAlchemy + PostgreSQL |
 | **Frontend** | Vue 3 (Composition API) + Vite + Tailwind CSS + Pinia |
-| **Scraping** | `yt-dlp` + `Playwright` + `BeautifulSoup` + GeoConfirmed REST API + Kaggle API |
+| **Scraping** | `yt-dlp` + Funker530 REST API + GeoConfirmed REST API + Kaggle API |
 | **Async Queue** | Celery + Redis (broker + result backend) |
 | **ML** | Ultralytics YOLOv8 + PyTorch (`torch+cu121`) + OpenCV |
 | **Containers** | Docker + Docker Compose w/ NVIDIA runtime **(Phase 4 only)** |
@@ -176,12 +176,7 @@ Create DB: `createdb ukraine_footage`
 pip install yt-dlp
 ```
 
-### Step 9 — Playwright
-```bash
-pip install playwright && playwright install chromium
-```
-
-### Step 10 — GCP SDK *(Phase 4 only)*
+### Step 9 — GCP SDK *(Phase 4 only)*
 Install `gcloud` CLI from cloud.google.com/sdk
 
 ### Step 11 — Docker Desktop + NVIDIA Container Toolkit *(Phase 4 only)*
@@ -197,7 +192,7 @@ yolo-training-template/                  ← monorepo root
 │
 ├── PROJECT_PLAN.md                      ← THIS FILE — source of truth
 ├── CLAUDE.md                            ← Claude Code persistent system prompt
-├── .env.example                         ← all environment variables documented
+├── .env                                 ← environment variables (gitignored)
 ├── docker-compose.yml                   ← orchestrates all services
 │
 ├── .claude/                             ← Claude Code agentic workspace
@@ -205,73 +200,81 @@ yolo-training-template/                  ← monorepo root
 │
 ├── agents/                              ← multi-agent swarm definitions
 │   ├── ingestion/
-│   │   ├── research.md                  ← Research agent: scrapers, yt-dlp, Playwright
-│   │   ├── qa.md                        ← QA agent: data integrity, de-dup, DB checks
-│   │   └── review.md                    ← Review agent: Playwright + yt-dlp code review
+│   │   ├── research.md
+│   │   ├── qa.md
+│   │   └── review.md
 │   ├── ml-pipeline/
-│   │   ├── research.md                  ← Research agent: PyTorch, YOLOv8, VRAM mgmt
-│   │   ├── qa.md                        ← QA agent: model metrics, dataset validation
-│   │   └── review.md                    ← Review agent: Celery GPU task code review
+│   │   ├── research.md
+│   │   ├── qa.md
+│   │   └── review.md
 │   └── web-app/
-│       ├── research.md                  ← Research agent: Vue 3, FastAPI, REST design
-│       ├── qa.md                        ← QA agent: API contracts, UX, accessibility
-│       └── review.md                    ← Review agent: full-stack code review
+│       ├── research.md
+│       ├── qa.md
+│       └── review.md
 │
 ├── rules/                               ← enforced coding standards per domain
-│   ├── vue3-rules.md                    ← Composition API, Pinia, no Options API
-│   ├── fastapi-rules.md                 ← async endpoints, Pydantic v2, no sync DB calls
-│   ├── yolo-rules.md                    ← ultralytics patterns, VRAM budgets, export rules
-│   └── celery-rules.md                  ← task idempotency, retry policy, chord/chain use
+│   ├── vue3-rules.md
+│   ├── fastapi-rules.md
+│   ├── yolo-rules.md
+│   └── celery-rules.md
 │
 ├── commands/                            ← custom Claude Code slash-commands
-│   ├── scrape.md                        ← /scrape — trigger a manual scrape run
-│   ├── train.md                         ← /train — queue baseline or fine-tune job
-│   └── annotate.md                      ← /annotate — run auto-labeling on a folder
+│   ├── scrape.md
+│   ├── train.md
+│   └── annotate.md
 │
-├── scraper-engine/                      ← PHASE 1: Data Ingestion
+│
+├── scraper-engine/                      ← PHASE 1: Data Ingestion ✅ Complete
 │   ├── Dockerfile
 │   ├── requirements.txt
 │   ├── celery_app.py
 │   ├── beat_schedule.py
+│   ├── config.py
 │   ├── tasks/
-│   │   ├── __init__.py
-│   │   ├── scrape_funker530.py
-│   │   ├── scrape_geoconfirmed.py
+│   │   ├── _filter.py                   ← shared content filter (equipment + impact/aftermath gate)
+│   │   ├── scrape_funker530.py          ← Funker530 REST API + filter + yt-dlp
+│   │   ├── scrape_geoconfirmed.py       ← GeoConfirmed REST API + parallel fetch + filter + yt-dlp
 │   │   └── download_kaggle.py
-│   └── db/
-│       ├── session.py
-│       └── models.py
+│   ├── db/
+│   │   ├── session.py
+│   │   └── models.py
+│   └── tests/
+│       └── test_scrape_live.py          ← Phase 1 end-to-end test
 │
-├── ml-engine/                           ← PHASE 2: ML Pipeline
+├── ml-engine/                           ← PHASE 2: ML Pipeline 🔄 Next
 │   ├── Dockerfile
 │   ├── requirements.txt
 │   ├── celery_app.py
-│   ├── tasks/
-│   │   ├── __init__.py
+│   ├── config.py
+│   ├── runs/                            ← YOLO training output (gitignored)
+│   ├── media/                           ← frames, annotated, datasets (gitignored)
+│   ├── tasks/                           ← Phase 2 (not yet implemented)
 │   │   ├── auto_label.py
 │   │   ├── package_dataset.py
 │   │   ├── render_annotated.py
 │   │   ├── train_baseline.py
 │   │   └── train_finetune.py
-│   └── core/
-│       ├── main.py
-│       ├── inference.py
-│       ├── preprocessing.py
-│       ├── dataset_explorer.py
-│       └── autolabeling/
-│           └── auto_label.py
+│   ├── tests/
+│   ├── core/                            ← migrated from original repo
+│   │   ├── main.py                      ← from scripts/main.py
+│   │   ├── inference.py                 ← from scripts/inference.py
+│   │   ├── preprocessing.py             ← from scripts/preprocessing.py
+│   │   ├── dataset_explorer.py          ← from scripts/dataset_explorer.py
+│   │   └── autolabeling/
+│   │       └── auto_label.py            ← from autolabeling/auto-label.py
+│   └── db/
+│       ├── session.py
+│       └── models.py
 │
-├── web-app/                             ← PHASE 3: Web Application
+├── web-app/                             ← PHASE 3: Web Application ⏳ Pending
 │   ├── backend/
 │   │   ├── Dockerfile
 │   │   ├── requirements.txt
 │   │   ├── main.py
 │   │   ├── api/
-│   │   │   ├── __init__.py
 │   │   │   ├── public.py
 │   │   │   └── admin.py
 │   │   ├── db/
-│   │   │   ├── __init__.py
 │   │   │   ├── session.py
 │   │   │   └── models.py
 │   │   └── schemas/
@@ -303,7 +306,7 @@ yolo-training-template/                  ← monorepo root
 │               ├── DatasetRow.vue
 │               └── TrainingProgress.vue
 │
-├── infra/                               ← PHASE 4: Cloud & DevOps
+├── infra/                               ← PHASE 4: Cloud & DevOps ⏳ Pending
 │   ├── gcp/
 │   │   ├── main.tf
 │   │   └── variables.tf
@@ -315,14 +318,9 @@ yolo-training-template/                  ← monorepo root
 │       ├── ci.yml
 │       └── deploy.yml
 │
-├── scripts/                             ← kept from original repo
-│   ├── preprocessing.py
-│   └── dataset_explorer.py
-│
-└── autolabeling/                        ← kept from original repo
-    ├── auto-label.py
-    └── README.md
 ```
+
+> Tests live inside each service directory (`scraper-engine/tests/`, `ml-engine/tests/`, `web-app/tests/`) — not at the repo root.
 
 ---
 
@@ -360,21 +358,21 @@ yolo-training-template/                  ← monorepo root
 - [x] **1.1** Scaffold `scraper-engine/` + `requirements.txt`
 - [x] **1.2** Create `celery_app.py` with Redis broker config
 - [x] **1.3** Create `db/session.py` + `models.py` (`Clip` ORM)
-- [x] **1.4** Implement `tasks/scrape_funker530.py` (Playwright + de-dup)
-- [x] **1.5** Implement `tasks/scrape_geoconfirmed.py` (GeoConfirmed REST API + yt-dlp)
+- [x] **1.4** Implement `tasks/scrape_funker530.py` (Funker530 REST API, multi-field description fallback, yt-dlp)
+- [x] **1.5** Implement `tasks/scrape_geoconfirmed.py` (GeoConfirmed REST API, parallel detail fetch with ThreadPoolExecutor, gear+units metadata, yt-dlp)
 - [x] **1.6** Implement `tasks/download_kaggle.py` (Kaggle API)
 - [x] **1.7** Configure `beat_schedule.py` (hourly scrape, nightly Kaggle)
 - [x] **1.8** Write `scraper-engine/Dockerfile`
-- [x] **1.9** Integration tests passed: DB schema verified, insert/idempotency/status-update/query (4/4), Redis ping, 5 Celery tasks + 3 Beat entries confirmed
-- [x] **1.10** Live scrape test passed (2026-04-17): Funker530 (Playwright, 9 links discovered), GeoConfirmed API (3 real video incidents with valid Twitter/X URLs returned)
+- [x] **1.9** Implement `tasks/_filter.py` — shared content filter: equipment keyword gate (regex + word boundaries, specific hardware names) + impact/aftermath rejection gate (fire, smoke, ruins, wreckage — blocks aftermath footage, not target type)
+- [x] **1.10** Live scrape + download test passed (2026-04-18): 4/4 tests pass. Funker530 (5 clips, all valid Ukraine drone/infantry footage), GeoConfirmed (5 clips, all valid FPV/UAV strike footage). Impact filter correctly rejects refinery smoke plumes and aftermath videos.
 
 ---
 
 ### Phase 2 — ML Pipeline
 
-- [ ] **2.1** Scaffold `ml-engine/` + `requirements.txt`
-- [ ] **2.2** Migrate `core/` scripts from existing repo
-- [ ] **2.3** Create `celery_app.py` (concurrency=1, GPU queue)
+- [x] **2.1** Scaffold `ml-engine/` + `requirements.txt`
+- [x] **2.2** Migrate `core/` scripts from existing repo (`main.py`, `inference.py`, `preprocessing.py`, `dataset_explorer.py`, `autolabeling/auto_label.py`)
+- [x] **2.3** Create `celery_app.py` (concurrency=1, GPU queue)
 - [ ] **2.4** Implement `tasks/auto_label.py` (GroundingDINO → .txt files)
 - [ ] **2.5** Implement `tasks/package_dataset.py` (YOLO dir + data.yaml)
 - [ ] **2.6** Implement `tasks/render_annotated.py` (inference → H.264 MP4)
@@ -421,21 +419,19 @@ yolo-training-template/                  ← monorepo root
 
 ## 5. Next Steps
 
-Phase 0 ✅ and Phase 1 ✅ are complete. To begin **Phase 2**, run:
+Phase 0 ✅, Phase 1 ✅, and Phase 2 scaffold ✅ are complete. Next: implement Phase 2 ML tasks.
 
 ```bash
-# Ensure Docker containers are still running
-docker compose up postgres redis -d
+# Verify Phase 1 still green before starting Phase 2 tasks
+cd scraper-engine && python tests/test_scrape_live.py
 
-# Phase 2 starts with: scaffold ml-engine/ and migrate core scripts
-
-psql -U postgres -c "\l" | grep ukraine_footage
-
-# Start building the scraper engine
-cd scraper-engine && pip install -r requirements.txt
+# Phase 2 next tasks:
+# 2.4  tasks/auto_label.py — extract frames → GroundingDINO → YOLO .txt labels
+# 2.5  tasks/package_dataset.py — assemble YOLO dir structure + data.yaml
+# 2.6  tasks/render_annotated.py — run inference.py on raw clip → annotated MP4
+# 2.7  tasks/train_baseline.py — Stage 1 Kaggle military datasets
+# 2.8  tasks/train_finetune.py — Stage 2 load baseline.pt + custom labeled data
 ```
-
-First task: **1.1** — scaffold `scraper-engine/` with its `requirements.txt`.
 
 ---
 

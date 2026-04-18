@@ -12,16 +12,15 @@ Use this to test scraper functionality, backfill missing content, or re-run a fa
 ### Arguments
 | Argument | Values | Description |
 |----------|--------|-------------|
-| `source` | `funker530`, `youtube`, `kaggle`, `all` | Which source to scrape. Defaults to `all`. |
+| `source` | `funker530`, `geoconfirmed`, `kaggle`, `all` | Which source to scrape. Defaults to `all`. |
 | `--url` | URL string | Optional: scrape a specific URL instead of running the full batch |
 
 ### Examples
 ```bash
 /scrape funker530          # scrape latest Funker530 posts
-/scrape youtube            # run yt-dlp on configured YouTube channels
+/scrape geoconfirmed       # fetch latest GeoConfirmed video incidents
 /scrape kaggle             # pull configured Kaggle datasets
 /scrape all                # trigger all three scrapers
-/scrape --url https://www.youtube.com/watch?v=XXXX   # scrape one specific video
 ```
 
 ## What This Command Does
@@ -30,7 +29,7 @@ Use this to test scraper functionality, backfill missing content, or re-run a fa
 2. Verify the scraper-engine Celery worker is running
 3. Dispatch the appropriate Celery task:
    - `scrape_funker530.delay()` for funker530
-   - `scrape_youtube.delay()` for youtube
+   - `scrape_geoconfirmed.delay()` for geoconfirmed
    - `download_kaggle.delay()` for kaggle
 4. Return the Celery task ID for monitoring
 5. Poll task status and print result when complete

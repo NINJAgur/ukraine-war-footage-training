@@ -27,7 +27,7 @@ soldier, armed personnel, drone, UAV, artillery, mortar, truck, helicopter
 ### Examples
 ```bash
 /annotate ./media/raw/funker530/abc12345/   # auto-label extracted frames
-/annotate ./media/raw/youtube/def67890/ --prompt "soldier, vehicle, tank"
+/annotate ./media/raw/geoconfirmed/def67890/ --prompt "soldier, vehicle, tank"
 /annotate ./media/raw/ --package           # label + package all raw frames as dataset
 /annotate video.mp4                        # extract frames then label
 ```
