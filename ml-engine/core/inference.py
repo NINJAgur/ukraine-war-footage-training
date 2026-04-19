@@ -95,6 +95,101 @@ def infer_video(model, video_path, conf_thresh=0.5, save_path=None, no_display=F
 
 
 
+def infer_video_multi_model(
+    models_info: list,
+    video_path: str,
+    conf_thresh: float = 0.4,
+    save_path: str = None,
+    no_display: bool = False,
+) -> int:
+    """
+    Run multiple YOLO models on the same video, drawing all detections onto
+    each frame with per-model colours. Sequential inference — models are run
+    one at a time to avoid VRAM contention.
+
+    models_info: list of (model, label_prefix: str, color_bgr: tuple)
+      e.g. [(soldier_model, "SOLDIER", (0, 80, 255)), ...]
+
+    Returns total frame count processed.
+    """
+    if not os.path.exists(video_path):
+        raise FileNotFoundError(f"Video not found: {video_path}")
+
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        raise ValueError(f"Cannot open video: {video_path}")
+
+    fps    = cap.get(cv2.CAP_PROP_FPS) or 30
+    width  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    total  = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    cap.release()
+
+    # Pass 1-N: run each model, collect {frame_idx: [(box, conf, cls_name)]}
+    all_detections: list[dict] = []   # one dict per model
+    for model, label_prefix, _ in models_info:
+        frame_dets: dict[int, list] = {}
+        cap2 = cv2.VideoCapture(video_path)
+        idx = 0
+        while cap2.isOpened():
+            ret, frame = cap2.read()
+            if not ret:
+                break
+            results = model(frame, conf=conf_thresh, verbose=False)
+            dets = []
+            for box in results[0].boxes:
+                x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+                conf_val = float(box.conf[0])
+                cls_id   = int(box.cls[0])
+                cls_name = results[0].names.get(cls_id, str(cls_id))
+                dets.append((x1, y1, x2, y2, conf_val, f"{label_prefix}:{cls_name}"))
+            frame_dets[idx] = dets
+            idx += 1
+        cap2.release()
+        all_detections.append(frame_dets)
+
+    # Final pass: render all detections onto each frame
+    if save_path is None and no_display:
+        save_path = "inference_multi_result.mp4"
+
+    temp_path = "temp_multi_output.mp4"
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    out = cv2.VideoWriter(temp_path, fourcc, fps, (width, height))
+    if not out.isOpened():
+        raise ValueError("Failed to open video writer.")
+
+    cap3 = cv2.VideoCapture(video_path)
+    idx = 0
+    while cap3.isOpened():
+        ret, frame = cap3.read()
+        if not ret:
+            break
+        for model_idx, (_, label_prefix, color) in enumerate(models_info):
+            for (x1, y1, x2, y2, conf_val, label) in all_detections[model_idx].get(idx, []):
+                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+                cv2.putText(
+                    frame, f"{label} {conf_val:.2f}",
+                    (x1, max(y1 - 6, 0)),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA,
+                )
+        out.write(frame)
+        idx += 1
+
+    cap3.release()
+    out.release()
+
+    import subprocess
+    subprocess.run(
+        ["ffmpeg", "-y", "-i", temp_path,
+         "-vcodec", "libx264", "-acodec", "aac", "-strict", "experimental",
+         save_path],
+        check=True,
+    )
+    os.remove(temp_path)
+    logging.info(f"Multi-model annotated video saved to {save_path} ({idx} frames)")
+    return idx
+
+
 def infer_webcam(model, conf_thresh=0.5, no_display=False):
     """Perform real-time inference on webcam feed."""
     if no_display:

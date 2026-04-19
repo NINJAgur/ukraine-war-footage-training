@@ -114,6 +114,13 @@ class Dataset(Base):
 
 # ── TrainingRun ───────────────────────────────────────────────────────
 
+class ModelType(str, enum.Enum):
+    GENERAL  = "GENERAL"   # all classes — generalist baseline
+    SOLDIER  = "SOLDIER"   # infantry / combatants
+    VEHICLE  = "VEHICLE"   # tanks, APCs, artillery, military vehicles
+    AIRCRAFT = "AIRCRAFT"  # fixed-wing, helicopters, drones / UAVs
+
+
 class TrainingStage(str, enum.Enum):
     BASELINE = "BASELINE"   # Stage 1: Kaggle military datasets
     FINETUNE = "FINETUNE"   # Stage 2: custom auto-labeled data
@@ -131,6 +138,7 @@ class TrainingRun(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     stage = Column(Enum(TrainingStage, name="training_stage"), nullable=False)
+    model_type = Column(Enum(ModelType, name="model_type"), nullable=False, default=ModelType.GENERAL)
     status = Column(
         Enum(TrainingStatus, name="training_status"),
         nullable=False,
@@ -149,7 +157,8 @@ class TrainingRun(Base):
     __table_args__ = (
         Index("ix_training_runs_status", "status"),
         Index("ix_training_runs_stage", "stage"),
+        Index("ix_training_runs_model_type", "model_type"),
     )
 
     def __repr__(self) -> str:
-        return f"<TrainingRun id={self.id} stage={self.stage} status={self.status}>"
+        return f"<TrainingRun id={self.id} stage={self.stage} model_type={self.model_type} status={self.status}>"
