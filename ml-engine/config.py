@@ -39,48 +39,45 @@ class Settings(BaseSettings):
     YOLO_MODEL: str = "yolov8m.pt"      # base model for Stage 1 baseline
     YOLO_BATCH_SIZE: int = 8            # max for 8GB VRAM with yolov8m
     YOLO_IMG_SIZE: int = 640
-    YOLO_EPOCHS_BASELINE: int = 3
-    YOLO_EPOCHS_FINETUNE: int = 30
+    YOLO_EPOCHS_BASELINE: int = 10   # increase as model quality improves
+    YOLO_EPOCHS_FINETUNE: int = 10   # increase as model quality improves
 
     # ── Auto-labeling ─────────────────────────────────────────────────
     GDINO_CONFIG: str = "groundingdino/config/GroundingDINO_SwinT_OGC.py"
     GDINO_CHECKPOINT: str = "groundingdino_swint_ogc.pth"
     GDINO_BOX_THRESHOLD: float = 0.35
     GDINO_TEXT_THRESHOLD: float = 0.25
-    # Combined prompt — all 8 classes, order determines class index in .txt labels:
-    # 0=soldier, 1=tank, 2=armored vehicle, 3=military vehicle,
-    # 4=artillery, 5=aircraft, 6=helicopter, 7=drone
+    # 3-class prompt — order determines class index in .txt labels:
+    # 0=aircraft, 1=vehicle, 2=personnel
     GDINO_TEXT_PROMPT: str = (
-        "soldier, tank, armored vehicle, military vehicle, "
-        "artillery, aircraft, helicopter, drone"
+        "aircraft . drone . helicopter . missile . jet . "
+        "tank . armored vehicle . military vehicle . artillery . radar . apc . "
+        "soldier . fighter . personnel . combatant"
     )
     FRAME_INTERVAL: int = 30            # extract every Nth frame (30 = 1fps @ 30fps)
     MAX_FRAMES_PER_CLIP: int = 300      # cap per clip
 
     # ── Multi-model class definitions ─────────────────────────────────
-    # Maps ModelType → class names used for YOLO training and rendering.
-    # GENERAL uses all 8 GDINO classes; specialists use a subset.
+    # Universal 3-class vocabulary — all models share the same class IDs.
+    # 0=AIRCRAFT  1=VEHICLE  2=PERSONNEL
     MODEL_CLASSES: dict = {
-        "GENERAL":  ["soldier", "tank", "armored vehicle", "military vehicle",
-                     "artillery", "aircraft", "helicopter", "drone"],
-        "SOLDIER":  ["soldier"],
-        "VEHICLE":  ["tank", "armored vehicle", "military vehicle", "artillery"],
-        "AIRCRAFT": ["aircraft", "helicopter", "drone"],
+        "GENERAL":   ["aircraft", "vehicle", "personnel"],
+        "AIRCRAFT":  ["aircraft", "vehicle", "personnel"],
+        "VEHICLE":   ["aircraft", "vehicle", "personnel"],
+        "PERSONNEL": ["aircraft", "vehicle", "personnel"],
     }
-    # Maps GDINO class index → ModelType string (for label filtering in fine-tune)
+    # Maps GDINO prompt-term index → ModelType (used by auto_label to tag datasets)
     GDINO_CLASS_TO_MODEL: dict = {
-        0: "SOLDIER",                          # soldier
-        1: "VEHICLE", 2: "VEHICLE",            # tank, armored vehicle
-        3: "VEHICLE", 4: "VEHICLE",            # military vehicle, artillery
-        5: "AIRCRAFT", 6: "AIRCRAFT",          # aircraft, helicopter
-        7: "AIRCRAFT",                         # drone
+        0: "AIRCRAFT", 1: "AIRCRAFT", 2: "AIRCRAFT", 3: "AIRCRAFT", 4: "AIRCRAFT",
+        5: "VEHICLE",  6: "VEHICLE",  7: "VEHICLE",  8: "VEHICLE",  9: "VEHICLE",  10: "VEHICLE",
+        11: "PERSONNEL", 12: "PERSONNEL", 13: "PERSONNEL", 14: "PERSONNEL",
     }
     # Render colours per model type (BGR for OpenCV)
     MODEL_COLORS: dict = {
-        "GENERAL":  (200, 200, 200),  # light grey
-        "SOLDIER":  (0,   80,  255),  # red-orange
-        "VEHICLE":  (0,   200,  60),  # green
-        "AIRCRAFT": (255, 160,   0),  # cyan-blue
+        "GENERAL":   (200, 200, 200),  # light grey
+        "AIRCRAFT":  (255, 160,   0),  # cyan-blue
+        "VEHICLE":   (0,   200,  60),  # green
+        "PERSONNEL": (0,   80,  255),  # red-orange
     }
 
     def model_post_init(self, __context):
