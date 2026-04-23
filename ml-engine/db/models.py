@@ -118,10 +118,10 @@ class Dataset(Base):
 # ── TrainingRun ───────────────────────────────────────────────────────
 
 class ModelType(str, enum.Enum):
-    GENERAL  = "GENERAL"   # all classes — generalist baseline
-    SOLDIER  = "SOLDIER"   # infantry / combatants
-    VEHICLE  = "VEHICLE"   # tanks, APCs, artillery, military vehicles
-    AIRCRAFT = "AIRCRAFT"  # fixed-wing, helicopters, drones / UAVs
+    GENERAL   = "GENERAL"    # all 3 classes — generalist (trains after specialists)
+    AIRCRAFT  = "AIRCRAFT"   # drones, helicopters, fixed-wing, missiles
+    VEHICLE   = "VEHICLE"    # tanks, APCs, artillery, radar, ground military vehicles
+    PERSONNEL = "PERSONNEL"  # soldiers, fighters, RPG/ATGM operators
 
 
 class TrainingStage(str, enum.Enum):

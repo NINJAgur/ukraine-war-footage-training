@@ -4,14 +4,13 @@ ml-engine/tasks/train_baseline.py
 Celery task: Stage 1 (cold-start) training on pre-labeled Kaggle datasets.
 No GDINO, no frame extraction — Kaggle data is already labeled.
 
-All datasets are remapped to our canonical 8-class vocabulary before merging:
-  0=soldier  1=tank  2=armored vehicle  3=military vehicle
-  4=artillery  5=aircraft  6=helicopter  7=drone
+All datasets are remapped to the canonical 3-class vocabulary before merging:
+  0=AIRCRAFT  1=VEHICLE  2=PERSONNEL
 
-  GENERAL  — kiit-mita + nzigulic/military-equipment
-  SOLDIER  — kiit-mita
-  VEHICLE  — kiit-mita + nzigulic/military-equipment
-  AIRCRAFT — mihprofi/drone-detect + shakedlevnat/military-aircraft-...
+  AIRCRAFT  — mihprofi/drone-detect + shakedlevnat/military-aircraft-...
+  VEHICLE   — kiit-mita
+  PERSONNEL — kiit-mita
+  GENERAL   — all three above combined (trains after specialists)
 
 Triggered by Admin "Train Baseline" in the web UI, which creates one
 TrainingRun per model type and dispatches this task four times.
@@ -34,75 +33,59 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "core"))
 
 logger = logging.getLogger(__name__)
 
-# ── Canonical class vocabulary ────────────────────────────────────────────────
-# Must match GDINO prompt order defined in config.py.
+# ── Canonical 3-class vocabulary ─────────────────────────────────────────────
+# Must align with GDINO_TEXT_PROMPT order in config.py.
 CANONICAL_CLASSES = [
-    "soldier",          # 0
-    "tank",             # 1
-    "armored vehicle",  # 2
-    "military vehicle", # 3
-    "artillery",        # 4
-    "aircraft",         # 5
-    "helicopter",       # 6
-    "drone",            # 7
+    "aircraft",   # 0 — drones, helicopters, fixed-wing, missiles
+    "vehicle",    # 1 — tanks, APCs, artillery, radar, ground military vehicles
+    "personnel",  # 2 — soldiers, fighters, RPG/ATGM operators
 ]
-CANONICAL_NC = len(CANONICAL_CLASSES)  # 8
+CANONICAL_NC = len(CANONICAL_CLASSES)  # 3
 
 # Per-dataset remapping: old_class_id → canonical_id  (-1 = drop annotation)
 #
 # kiit-mita (nc=7): Artilary(0) Missile(1) Radar(2) M.RocketLauncher(3)
 #                   Soldier(4) Tank(5) Vehicle(6)
-# nzigulic (nc=11): class_0..class_10 — original class names unknown;
-#                   all dropped until the mapping is researched.
-# mihprofi (nc=2):  Dron(0) Dron2(1) — both are drones
-# shakedlevnat (nc=83): 83 specific aircraft types;
-#                   helicopters→6, known drones→7, everything else→5
-_SHAKED_HELICOPTERS = {0, 1, 43, 44, 46, 60, 62, 66, 73, 76, 78, 82}
-_SHAKED_DRONES      = {41, 49, 56, 64, 72}
+# mihprofi (nc=2):  Dron(0) Dron2(1)
+# shakedlevnat (nc=83): 83 specific aircraft types (all map to AIRCRAFT)
+_SHAKED_AIRCRAFT = set(range(83))  # every type is an aircraft
 
 DATASET_CLASS_MAPS: Dict[str, Dict[int, int]] = {
     "sudipchakrabarty/kiit-mita": {
-        0: 4,   # Artilary      → artillery
-        1: -1,  # Missile       → drop
-        2: -1,  # Radar         → drop
-        3: 4,   # M.RocketLaun. → artillery
-        4: 0,   # Soldier       → soldier
-        5: 1,   # Tank          → tank
-        6: 3,   # Vehicle       → military vehicle
-    },
-    "nzigulic/military-equipment": {
-        # Class names unknown — drop all until mapping is established
-        **{i: -1 for i in range(11)},
+        0: 1,   # Artilary      → vehicle
+        1: 0,   # Missile       → aircraft
+        2: 1,   # Radar         → vehicle
+        3: 1,   # M.RocketLaun. → vehicle
+        4: 2,   # Soldier       → personnel
+        5: 1,   # Tank          → vehicle
+        6: 1,   # Vehicle       → vehicle
     },
     "mihprofi/drone-detect": {
-        0: 7,  # Dron  → drone
-        1: 7,  # Dron2 → drone
+        0: 0,  # Dron  → aircraft
+        1: 0,  # Dron2 → aircraft
     },
     "shakedlevnat/military-aircraft-database-prepared-for-yolo": {
-        **{i: 6 for i in _SHAKED_HELICOPTERS},
-        **{i: 7 for i in _SHAKED_DRONES},
-        **{i: 5 for i in range(83)
-           if i not in _SHAKED_HELICOPTERS and i not in _SHAKED_DRONES},
+        **{i: 0 for i in _SHAKED_AIRCRAFT},  # all 83 types → aircraft
     },
 }
 
 # Pre-labeled Kaggle datasets per model type.
-# Each entry: (dataset_handle,)  — class remapping applied via DATASET_CLASS_MAPS.
+# nzigulic and piterfm are NOT here — they go through GDINO auto-label.
 BASELINE_DATASETS: Dict[ModelType, List[str]] = {
-    ModelType.GENERAL: [
-        "sudipchakrabarty/kiit-mita",
-        "nzigulic/military-equipment",
-    ],
-    ModelType.SOLDIER: [
-        "sudipchakrabarty/kiit-mita",
-    ],
-    ModelType.VEHICLE: [
-        "sudipchakrabarty/kiit-mita",
-        "nzigulic/military-equipment",
-    ],
     ModelType.AIRCRAFT: [
         "mihprofi/drone-detect",
         "shakedlevnat/military-aircraft-database-prepared-for-yolo",
+    ],
+    ModelType.VEHICLE: [
+        "sudipchakrabarty/kiit-mita",
+    ],
+    ModelType.PERSONNEL: [
+        "sudipchakrabarty/kiit-mita",
+    ],
+    ModelType.GENERAL: [
+        "mihprofi/drone-detect",
+        "shakedlevnat/military-aircraft-database-prepared-for-yolo",
+        "sudipchakrabarty/kiit-mita",
     ],
 }
 

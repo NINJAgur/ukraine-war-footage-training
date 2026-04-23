@@ -26,7 +26,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "core"))
 
 logger = logging.getLogger(__name__)
 
-CLASSES = [c.strip() for c in settings.GDINO_TEXT_PROMPT.split(",") if c.strip()]
+CLASSES = [c.strip() for c in settings.GDINO_TEXT_PROMPT.replace(",", ".").split(".") if c.strip()]
 
 
 def extract_frames(video_path: Path, output_dir: Path) -> int:
