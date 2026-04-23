@@ -124,6 +124,22 @@ def auto_label_clip(self, clip_id: int) -> dict:
         f"frames with detections"
     )
 
+    # ── Tag which model types appear in the labels ────────────────────
+    detected_types: set[str] = set()
+    for lbl in labels_dir.glob("*.txt"):
+        try:
+            for line in lbl.read_text().splitlines():
+                parts = line.split()
+                if parts:
+                    cls_id = int(parts[0])
+                    mt = settings.GDINO_CLASS_TO_MODEL.get(cls_id)
+                    if mt:
+                        detected_types.add(mt)
+        except Exception:
+            pass
+    detected_model_types_list = sorted(detected_types)
+    logger.info(f"[{self.request.id}] Detected model types: {detected_model_types_list}")
+
     # ── Create Dataset record ─────────────────────────────────────────
     with get_session() as session:
         dataset = Dataset(
@@ -134,6 +150,7 @@ def auto_label_clip(self, clip_id: int) -> dict:
             status=DatasetStatus.LABELED,
             frame_count=frame_count,
             class_count=len(CLASSES),
+            detected_model_types=detected_model_types_list,
         )
         session.add(dataset)
         session.flush()

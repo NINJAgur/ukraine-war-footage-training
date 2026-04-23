@@ -93,7 +93,7 @@ def create_yaml(dataset_path, paths, nc, names):
         "nc": nc,
         "names": names,
     }
-    yaml_path = f"{os.path.basename(dataset_path)}.yaml"
+    yaml_path = os.path.join(dataset_path, f"{os.path.basename(dataset_path)}.yaml")
     with open(yaml_path, "w") as f:
         yaml.dump(data_yaml, f)
     logging.info(f"Created YAML config at: {yaml_path}")

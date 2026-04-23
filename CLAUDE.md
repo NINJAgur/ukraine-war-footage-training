@@ -21,18 +21,32 @@ Every response MUST end with:
 
 ## Architecture
 
+**Continuous production loop:**
 ```
-[Celery Beat] → [scraper-engine] → PostgreSQL + /media/raw/
-                       ↓
-         [ml-engine: poll_clips → auto_label → package_dataset]
-                       ↓                    ↓
-             [train_baseline]      [render_annotated] → Public Feed
-                       ↓
-             [train_finetune]
+[Celery Beat] → [scraper-engine] → Clip(DOWNLOADED) → [render_annotated] → annotated MP4 → Public Feed
+                                                               ↑
+                                              best .pt per model (FINETUNE > BASELINE > pretrained)
+                                                               ↑
+                        [train_finetune] ←── [auto_label + package_dataset] ←── accumulated clips
+                               ↑
+                        [train_baseline] ← Kaggle cold-start (once, in dev)
 ```
 
-**4 YOLO models:** GENERAL (all classes) + SOLDIER + VEHICLE + AIRCRAFT specialists.
-Specialists fine-tune from the GENERAL baseline.
+**3 universal classes (aligned with `_filter.py`):**
+- `0=AIRCRAFT` — drones, helicopters, fixed-wing, missiles
+- `1=VEHICLE` — tanks, APCs, artillery, radar, all ground military vehicles
+- `2=PERSONNEL` — soldiers, fighters, RPG/ATGM operators
+
+**Cold-start training order (Kaggle, pre-labeled — NO GDINO, NO frames):**
+1. Train AIRCRAFT, VEHICLE, PERSONNEL specialists in parallel (kiit-mita + mihprofi + shakedlevnat, remapped to 3 classes)
+2. Auto-label nzigulic + piterfm with GDINO → add to fine-tune corpus
+3. Train GENERAL only after all 3 specialists pass mAP50 > 0.4
+
+**Fine-tune loop (after enough scraped clips):**
+- Extract frames from scraped clips → GDINO auto-label (3 classes) → dataset → fine-tune from baseline
+- `media/frames/` is scratch space for GDINO only — always deleted after auto-labeling
+
+**4 YOLO models:** AIRCRAFT + VEHICLE + PERSONNEL (specialists) + GENERAL — specialists train first.
 
 | Service | Directory | Phase |
 |---------|-----------|-------|

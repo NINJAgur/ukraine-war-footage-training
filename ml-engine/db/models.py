@@ -98,6 +98,9 @@ class Dataset(Base):
     )
     frame_count = Column(Integer, default=0)
     class_count = Column(Integer, default=0)
+    # JSON list of ModelType values present in this dataset's labels,
+    # e.g. ["SOLDIER", "VEHICLE"] — set by auto_label, used by train_finetune
+    detected_model_types = Column(JSON)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 

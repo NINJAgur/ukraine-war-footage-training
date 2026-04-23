@@ -293,6 +293,9 @@ def _cleanup() -> None:
     from db.models import Clip
 
     with get_session() as session:
+        # Delete datasets first to avoid FK violation (datasets.clip_id → clips.id)
+        from sqlalchemy import text
+        session.execute(text("DELETE FROM datasets WHERE clip_id IN (SELECT id FROM clips)"))
         deleted = session.query(Clip).delete()
         logger.info(f"Cleanup: deleted {deleted} Clip rows from DB")
 

@@ -31,12 +31,15 @@ class Settings(BaseSettings):
     # ── Training Runs — under ml-engine/ ─────────────────────────────
     RUNS_DIR: Path = Path(__file__).parent / "runs"
 
+    # ── Kaggle dataset cache — kept inside the project ────────────────
+    KAGGLE_CACHE_DIR: Path = Path(__file__).parent / "media" / "kaggle_datasets"
+
     # ── GPU / Model ───────────────────────────────────────────────────
     GPU_DEVICE: str = "cuda:0"          # device for training and inference
     YOLO_MODEL: str = "yolov8m.pt"      # base model for Stage 1 baseline
     YOLO_BATCH_SIZE: int = 8            # max for 8GB VRAM with yolov8m
     YOLO_IMG_SIZE: int = 640
-    YOLO_EPOCHS_BASELINE: int = 50
+    YOLO_EPOCHS_BASELINE: int = 3
     YOLO_EPOCHS_FINETUNE: int = 30
 
     # ── Auto-labeling ─────────────────────────────────────────────────
@@ -86,6 +89,7 @@ class Settings(BaseSettings):
             self.FRAMES_DIR,
             self.DATASETS_DIR,
             self.RUNS_DIR,
+            self.KAGGLE_CACHE_DIR,
         ]:
             d.mkdir(parents=True, exist_ok=True)
 
