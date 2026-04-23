@@ -153,3 +153,4 @@ ml-engine/media/
 *.pt
 # YOLO data.yaml files are generated — don't commit
 data.yaml
+*.pth

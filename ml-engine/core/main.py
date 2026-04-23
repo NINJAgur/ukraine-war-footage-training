@@ -4,7 +4,6 @@ import os
 import yaml
 import kagglehub
 from ultralytics import YOLO
-from preprocessing import YOLODataPreprocessor
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -189,125 +188,43 @@ def main():
                              '(e.g., runs/train/yolo_train/weights/best.pt)')
     parser.add_argument('--resume', action='store_true',
                         help='Resume training from last checkpoint')
-    parser.add_argument('--preprocess', action='store_true',
-                        help='Run data preprocessing (cleaning and augmentation) '
-                             'before training')
-    parser.add_argument('--preprocess-config', type=str,
-                        default='preprocessing_config.yaml',
-                        help='Path to preprocessing config file')
-    parser.add_argument('--augment-only', action='store_true',
-                        help='Only run augmentation, skip training')
     parser.add_argument('--export-ncnn', action='store_true',
                         help='Export trained model to NCNN format')
 
     args = parser.parse_args()
     names = [n.strip() for n in args.names.split(',')]
 
-    # Check for conflicting arguments
     if args.resume and args.weights:
         logging.warning("Both --resume and --weights specified. Using --resume (ignoring --weights)")
         args.weights = None
 
     try:
-        # If resuming, we don't need to download dataset or create yaml
         if args.resume:
-            # Check if checkpoint exists and is complete before starting
-            checkpoint_path = os.path.join(args.project, args.name,
-                                         "weights", "last.pt")
+            checkpoint_path = os.path.join(args.project, args.name, "weights", "last.pt")
             if not os.path.exists(checkpoint_path):
                 logging.error(f"Checkpoint not found: {checkpoint_path}")
-                logging.info("Run training first before trying to resume.")
                 return
-
-            # Try to load checkpoint and check if training is complete
-            try:
-                from ultralytics import YOLO
-                test_model = YOLO(checkpoint_path)
-                # Check if this will fail on resume
-                ckpt = test_model.ckpt
-                if ckpt and 'epoch' in ckpt and 'train_args' in ckpt:
-                    current_epoch = ckpt['epoch']
-                    target_epochs = ckpt.get('train_args', {}).get('epochs', 0)
-                    if current_epoch >= target_epochs:
-                        print("\n" + "="*70)
-                        print("Training already completed for this run!")
-                        print("="*70)
-                        print(f"Checkpoint: {checkpoint_path}")
-                        print(f"Completed: {current_epoch}/{target_epochs} epochs\n")
-                        print("To train for MORE epochs, use --weights instead of --resume:\n")
-                        print("Note: --resume is only for recovering interrupted training.")
-                        print("      Use --weights to continue training with more epochs.")
-                        print("="*70 + "\n")
-                        return
-            except Exception:
-                pass  # If we can't check, let it proceed and fail naturally
-
             logging.info("Resume mode: skipping dataset download and yaml creation")
-            if not args.augment_only:
-                results = train_model(None, args.epochs, args.imgsz, args.batch,
-                                    args.device, args.project, args.name, weights=None,
-                                    resume=True)
+            results = train_model(None, args.epochs, args.imgsz, args.batch,
+                                  args.device, args.project, args.name, weights=None,
+                                  resume=True)
         else:
             dataset_path = download_dataset(args.dataset)
             logging.info(f"Dataset downloaded to: {dataset_path}")
             paths, dataset_path = detect_dataset_structure(dataset_path)
             if not paths:
                 raise ValueError("No standard train/val/test structure found in dataset")
+            yaml_path = create_yaml(dataset_path, paths, args.nc, names)
+            results = train_model(yaml_path, args.epochs, args.imgsz, args.batch,
+                                  args.device, args.project, args.name, weights=args.weights,
+                                  resume=False)
 
-            # Run preprocessing if requested
-            if args.preprocess or args.augment_only:
-                logging.info("Running data preprocessing...")
-                preprocessor = YOLODataPreprocessor(args.preprocess_config)
-
-                # Preprocess training data
-                if 'train_images' in paths and 'train_labels' in paths:
-                    train_images_dir = paths['train_images']
-                    train_labels_dir = paths['train_labels']
-
-                    if args.augment_only:
-                        # Only augmentation - create augmented versions
-                        output_images_dir = os.path.join(
-                            os.path.dirname(train_images_dir), "train_augmented", "images"
-                        )
-                        output_labels_dir = os.path.join(
-                            os.path.dirname(train_labels_dir), "train_augmented", "labels"
-                        )
-                        stats = preprocessor.preprocess_dataset(
-                            train_images_dir, train_labels_dir,
-                            output_images_dir, output_labels_dir
-                        )
-                        logging.info(f"Preprocessing stats: {stats}")
-
-                        # Update paths to use augmented data
-                        paths['train_images'] = output_images_dir
-                        paths['train_labels'] = output_labels_dir
-                        dataset_path = os.path.dirname(output_images_dir)
-                    else:
-                        # Full preprocessing (cleaning + augmentation in-place)
-                        stats = preprocessor.preprocess_dataset(train_images_dir, train_labels_dir)
-                        logging.info(f"Preprocessing stats: {stats}")
-                else:
-                    logging.warning("No training data found for preprocessing")
-
-            if not args.augment_only:
-                yaml_path = create_yaml(dataset_path, paths, args.nc, names)
-                results = train_model(yaml_path, args.epochs, args.imgsz, args.batch,
-                                    args.device, args.project, args.name, weights=args.weights,
-                                    resume=False)
-
-        if not args.augment_only:
-            logging.info("Training completed successfully")
-            if args.export_ncnn:
-                best_model_path = os.path.join(args.project, args.name,
-                                             "weights", "best.pt")
-                export_to_ncnn(best_model_path)
-        else:
-            logging.info("Augmentation completed successfully")
+        logging.info("Training completed successfully")
+        if args.export_ncnn:
+            best_model_path = os.path.join(args.project, args.name, "weights", "best.pt")
+            export_to_ncnn(best_model_path)
     except Exception as e:
-        if args.augment_only:
-            logging.error(f"Augmentation failed: {e}")
-        else:
-            logging.error(f"Training failed: {e}")
+        logging.error(f"Training failed: {e}")
         raise
 
 if __name__ == "__main__":
