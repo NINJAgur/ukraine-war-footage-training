@@ -34,23 +34,82 @@ You focus exclusively on the `ml-engine/` service.
 - `torch` + `torchvision` (cu121 build)
 - `albumentations` — data augmentation (already in repo)
 
-### Multi-Model Architecture (4 models)
-| Model | Classes | Kaggle Baseline | Fine-tune from |
-|-------|---------|-----------------|---------------|
-| GENERAL | soldier, tank, armored vehicle, military vehicle, artillery, aircraft, helicopter, drone | rawsi18/military-assets-dataset-12-classes-yolo8-format | — |
-| SOLDIER | soldier | hillsworld/human-detection-yolo | GENERAL |
-| VEHICLE | tank, armored vehicle, military vehicle, artillery | sudipchakrabarty/kiit-mita | GENERAL |
-| AIRCRAFT | aircraft, helicopter, drone | rookieengg/military-aircraft-detection-dataset-yolo-format + muki2003/yolo-drone-detection-dataset | GENERAL |
+### The Project Is One Continuous Loop
+```
+[Kaggle cold-start] → initial models
+        ↓
+Scrape → render with current models → annotated MP4 → public feed  (daily, forever)
+        ↓
+GDINO auto-label accumulated scraped clips → dataset → fine-tune → better models
+        ↓  (loop, models improve continuously)
+```
+Dev proves the loop works end-to-end. Then it runs in prod forever.
 
-GroundingDINO class→model mapping (GDINO_TEXT_PROMPT order):
-- idx 0 soldier → SOLDIER
-- idx 1 tank, 2 armored vehicle, 3 military vehicle, 4 artillery → VEHICLE
-- idx 5 aircraft, 6 helicopter, 7 drone → AIRCRAFT
+### Universal 3-Class Taxonomy
 
-### Two-Stage Training Strategy
-- **Stage 1 (Baseline):** Train GENERAL model on combined Kaggle data → `runs/baseline/GENERAL/weights/best.pt`
-- **Stage 1b (Specialist Baseline):** Train each specialist (SOLDIER/VEHICLE/AIRCRAFT) on domain Kaggle data → `runs/baseline/<model_type>/weights/best.pt`
-- **Stage 2 (Fine-Tune):** Load GENERAL baseline → fine-tune each model on class-filtered GroundingDINO auto-labeled data → `runs/finetune/<model_type>/weights/best.pt`
+All models use the same 3-class canonical vocabulary, aligned with `_filter.py` categories:
+
+| ID | Class | Covers |
+|----|-------|--------|
+| 0 | AIRCRAFT | drones, helicopters, fixed-wing jets, missiles, glide bombs |
+| 1 | VEHICLE | tanks, APCs, IFVs, artillery, MLRS, radar, all ground military vehicles |
+| 2 | PERSONNEL | soldiers, fighters, combatants, RPG/ATGM operators |
+
+**ModelType enum:** AIRCRAFT, VEHICLE, PERSONNEL, GENERAL  
+**Training order:** specialists first (AIRCRAFT, VEHICLE, PERSONNEL in parallel) → GENERAL only once all 3 pass mAP50 > 0.4
+
+### All 5 Kaggle Datasets
+
+| Dataset handle | nc | Actual classes | Pipeline role |
+|----------------|-----|---------------|---------------|
+| `sudipchakrabarty/kiit-mita` | 7 | Artillery, Missile, Radar, M.RocketLauncher, Soldier, Tank, Vehicle | YOLO labels → remap to 3 classes |
+| `nzigulic/military-equipment` | 11 | Unknown (no original yaml) | **GDINO auto-label** — ignore existing labels |
+| `mihprofi/drone-detect` | 2 | Dron, Dron2 | YOLO labels → remap: both → AIRCRAFT |
+| `shakedlevnat/military-aircraft-database-prepared-for-yolo` | 83 | Specific aircraft types (F16, Su25, TB2, Mi28, Ka52…) | YOLO labels → remap: helicopters→AIRCRAFT, drones→AIRCRAFT, rest→AIRCRAFT |
+| `piterfm/2022-ukraine-russia-war-equipment-losses-oryx` | — | Images only | **GDINO auto-label** |
+
+**Wrong datasets (do not use):** `rawsi18/military-assets-dataset-12-classes-yolo8-format`, `muki2003/yolo-drone-detection-dataset`
+
+### Cold-Start Kaggle Training (3-class canonical labels)
+| Model | Kaggle datasets used | Notes |
+|-------|---------------------|-------|
+| AIRCRAFT | mihprofi + shakedlevnat | All map to class 0 |
+| VEHICLE | kiit-mita | Artillery/tank/vehicle/radar → class 1; soldier/missile dropped |
+| PERSONNEL | kiit-mita | Soldier → class 2; everything else dropped |
+| GENERAL | all 3 above combined | Runs last, after specialists verified |
+
+nzigulic and piterfm are NOT in Kaggle cold-start — they go through GDINO auto-label first, then enter the fine-tune corpus.
+Weights land at: `runs/baseline/<MODEL_TYPE>/weights/best.pt`
+
+### kiit-mita Class Remapping
+- 0 Artillery → 1 (VEHICLE)
+- 1 Missile → 0 (AIRCRAFT)
+- 2 Radar → 1 (VEHICLE)
+- 3 M.RocketLauncher → 1 (VEHICLE)
+- 4 Soldier → 2 (PERSONNEL)
+- 5 Tank → 1 (VEHICLE)
+- 6 Vehicle → 1 (VEHICLE)
+
+### nzigulic + piterfm GDINO Auto-Label Pipeline
+- Run GDINO on raw image folders with 3-class prompt
+- Output: YOLO .txt labels alongside images
+- Add to fine-tune corpus (same flow as scraped clips)
+- Never used in Kaggle cold-start baseline
+
+### Fine-Tune Loop (scraped clips, GDINO auto-labeling)
+- Bootstrap: scrape 60 days of historical clips to get initial dataset fast
+- Extract frames → GDINO auto-label → filter by detected_model_types → fine-tune per model
+- `media/frames/` is scratch ONLY for this step — always cleaned after use
+- Weights land at: `runs/finetune/<MODEL_TYPE>/weights/best.pt`
+
+### Render (per clip, uses best available weights)
+- FINETUNE weights > BASELINE weights > pretrained YOLOv8m fallback
+- No GDINO, no frame extraction — pure YOLO inference on raw video
+
+### GroundingDINO 3-class prompt (auto-label)
+- "aircraft . drone . helicopter . missile . jet" → class 0 (AIRCRAFT)
+- "tank . armored vehicle . military vehicle . artillery . radar . apc" → class 1 (VEHICLE)
+- "soldier . fighter . personnel . combatant" → class 2 (PERSONNEL)
 
 ### Database Schema
 ```
@@ -65,9 +124,10 @@ Dataset
   id, name, clip_id (FK→clips), yolo_dir_path, yaml_path
   status: LABELED|PACKAGED|TRAINED
   frame_count, class_count, created_at, updated_at
+  detected_model_types: JSON (list of ModelType values present in labels)
 
 TrainingRun
-  id, stage (BASELINE|FINETUNE), model_type (GENERAL|SOLDIER|VEHICLE|AIRCRAFT)
+  id, stage (BASELINE|FINETUNE), model_type (GENERAL|AIRCRAFT|VEHICLE|PERSONNEL)
   status (QUEUED|RUNNING|DONE|ERROR)
   dataset_ids (JSON array of Dataset.id)
   weights_path, baseline_weights, metrics (JSON), error_message

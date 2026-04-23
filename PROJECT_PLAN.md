@@ -1,6 +1,6 @@
 # PROJECT_PLAN.md — Ukraine Combat Footage Web Application
 > **Source of Truth** — All phases, structure, and decisions are tracked here.
-> Last updated: 2026-04-18
+> Last updated: 2026-04-19
 
 ---
 
@@ -385,23 +385,72 @@ yolo-training-template/                  ← monorepo root
 - [x] **2.12** Add `ClipStatus.QUEUED` to both `scraper-engine/db/models.py` and `ml-engine/db/models.py`
 
 #### 2b — Multi-Model Architecture ✅
-- [x] **2.13** Add `ModelType` enum (GENERAL, SOLDIER, VEHICLE, AIRCRAFT) to `ml-engine/db/models.py`; add `model_type` column to `TrainingRun`
-- [x] **2.14** Update `ml-engine/config.py` — `MODEL_CLASSES`, `GDINO_CLASS_TO_MODEL`, `MODEL_COLORS` dicts; clean 8-class GDINO prompt
-- [x] **2.15** Update `ml-engine/tasks/train_baseline.py` — per-model Kaggle dataset config; auto-detects nc/names from dataset YAML when not supplied
-- [x] **2.16** Update `ml-engine/tasks/train_finetune.py` — per-model class filtering + ID remapping when building merged dataset
+- [x] **2.13** Add `ModelType` enum to `ml-engine/db/models.py`; add `model_type` column to `TrainingRun`
+- [x] **2.14** Update `ml-engine/config.py` — GDINO prompt, model config dicts
+- [x] **2.15** Update `ml-engine/tasks/train_baseline.py` — per-model Kaggle dataset config; `_merge_datasets()` with canonical class remapping
+- [x] **2.16** Update `ml-engine/tasks/train_finetune.py` — per-model class filtering + ID remapping
 - [x] **2.17** Add `infer_video_multi_model()` to `ml-engine/core/inference.py` — sequential multi-model rendering with per-type colour-coded bboxes
-- [x] **2.18** Update `ml-engine/tasks/render_annotated.py` — `_best_weights_per_model()` + 4-model rendering via `infer_video_multi_model()`
-- [x] **2.19** Verified Kaggle baseline datasets:
-  - GENERAL/SOLDIER/VEHICLE: `sudipchakrabarty/kiit-mita` — 1700 imgs, nc=7 (Artilary, Missile, Radar, M. Rocket Launcher, Soldier, Tank, Vehicle) ✅
-  - AIRCRAFT: `mihprofi/drone-detect` — 37900 imgs, nc=2 (Dron, Dron2) ✅
-  - Dropped: `rookieengg` (9.5GB impractical), `nzigulic` (broken cache), `hillsworld` (pedestrian not soldier)
-  - Future: `piterfm/2022-ukraine-russia-war-equipment-losses-oryx` — Oryx Ukraine war equipment photos → run GroundingDINO auto-labeling → fine-tuning corpus (task 2.21)
+- [x] **2.18** Update `ml-engine/tasks/render_annotated.py` — `_best_weights_per_model()` + multi-model rendering
+- [x] **2.19** Kaggle datasets downloaded and verified:
+  - `sudipchakrabarty/kiit-mita` — 1360 train imgs, nc=7 ✅
+  - `nzigulic/military-equipment` — 11768 train imgs, nc=11, **class names unknown → GDINO auto-label** ✅ on disk
+  - `mihprofi/drone-detect` — 32125 train imgs, nc=2 ✅
+  - `shakedlevnat/military-aircraft-database-prepared-for-yolo` — 15966 train imgs, nc=83 ✅
+  - `piterfm/2022-ukraine-russia-war-equipment-losses-oryx` — images only, C:/kd (11GB) ✅ + project path partial
 
 #### 2c — Testing ✅
-- [x] **2.20** `ml-engine/tests/test_pipeline_e2e.py` — E2E: fixture → auto_label → package_dataset → verify → self-cleaning teardown; `--skip-gdino` flag
-- [x] **2.21** `ml-engine/tests/test_baseline_train.py` — smoke test: creates TrainingRun → train_baseline() → verifies best.pt; `--model-type`, `--epochs`, `--keep` flags
-- [x] **2.22** DB tables created via `Base.metadata.create_all()` (clips, datasets, training_runs)
-- [x] **2.23** Smoke test passed: VEHICLE model, 2 epochs, kiit-mita — mAP50=0.405, best.pt=52MB in ~2 min
+- [x] **2.20** `ml-engine/tests/test_pipeline_e2e.py` — requires real DOWNLOADED clip; render_annotated → verify annotated MP4; `--keep`, `--purge-outputs` flags
+- [x] **2.21** `ml-engine/tests/test_baseline_train.py` — smoke test: creates TrainingRun → train_baseline() → verifies best.pt; `--model-type`, `--epochs`, `--keep`, `--purge-outputs` flags
+- [x] **2.22** DB tables created via `Base.metadata.create_all()`
+- [x] **2.23** E2E render test passed: real clip annotated (22.8MB MP4, 1838 frames, pretrained weights)
+- [x] **2.24** `_remap_label_file()` + `DATASET_CLASS_MAPS` implemented; pipeline merge verified clean (nc=8, no out-of-range IDs)
+
+#### 2e — Taxonomy Redesign + Auto-Label Pipeline 🔄
+**Decision:** Simplify to 3 universal classes aligned with `_filter.py` categories.
+
+**New canonical taxonomy:**
+| ID | Class | Covers |
+|----|-------|--------|
+| 0 | AIRCRAFT | drones, helicopters, fixed-wing, missiles, glide bombs |
+| 1 | VEHICLE | tanks, APCs, artillery, radar, MLRS, all ground military vehicles |
+| 2 | PERSONNEL | soldiers, fighters, RPG/ATGM operators |
+
+**Dataset routing (new):**
+| Dataset | Approach |
+|---------|---------|
+| kiit-mita | YOLO labels remapped → 3 classes |
+| mihprofi/drone-detect | YOLO labels remapped → AIRCRAFT |
+| shakedlevnat | YOLO labels remapped → AIRCRAFT |
+| nzigulic | GDINO auto-label (ignore existing labels — class names unknown) |
+| piterfm | GDINO auto-label (images only) |
+
+**ModelType (new):** AIRCRAFT, VEHICLE, PERSONNEL, GENERAL  
+**Training order:** specialists first (AIRCRAFT, VEHICLE, PERSONNEL) → GENERAL once all 3 are satisfactory
+
+- [ ] **2.25** Update `ModelType` enum: rename SOLDIER→PERSONNEL; DB migration (ALTER TYPE)
+- [ ] **2.26** Update `config.py` — 3-class GDINO prompt; `YOLO_EPOCHS_BASELINE` back to 50
+- [ ] **2.27** Update `train_baseline.py` — `CANONICAL_CLASSES` = 3; `DATASET_CLASS_MAPS` for 3-class remap; remove nzigulic from `BASELINE_DATASETS`
+- [ ] **2.28** Update `auto_label.py` — 3-class GDINO prompt for nzigulic + piterfm labeling
+- [ ] **2.29** Update `inference.py` + `render_annotated.py` — 3-class colour map
+- [ ] **2.30** Implement `tasks/autolabel_kaggle.py` (or extend `auto_label.py`) — batch GDINO on nzigulic + piterfm image folders → YOLO .txt labels per image
+
+#### Step 1 — Auto-label nzigulic + piterfm
+- [ ] **2.31** Run GDINO auto-label on `nzigulic/military-equipment` images → `nzigulic_labeled/` YOLO dataset
+- [ ] **2.32** Run GDINO auto-label on `piterfm/oryx` images (C:/kd) → `piterfm_labeled/` YOLO dataset
+- [ ] **2.33** Verify label quality: spot-check 20 images per dataset
+
+#### Step 2 — Train specialists
+- [ ] **2.34** Run `test_baseline_train.py --model-type AIRCRAFT --epochs 50 --keep`
+- [ ] **2.35** Run `test_baseline_train.py --model-type VEHICLE --epochs 50 --keep`
+- [ ] **2.36** Run `test_baseline_train.py --model-type PERSONNEL --epochs 50 --keep`
+- [ ] **2.37** Evaluate each: mAP50 > 0.4 = acceptable baseline
+
+#### Step 3 — Train generalist
+- [ ] **2.38** Once all 3 specialists pass evaluation, run `test_baseline_train.py --model-type GENERAL --epochs 50 --keep`
+
+#### Step 4 — Tests
+- [ ] **2.39** Run `test_pipeline_e2e.py` with trained weights → verify improved detections vs pretrained
+- [ ] **2.40** Run `test_scrape_live.py` → verify full Phase 1→2 workflow (scrape → download → render → annotated MP4)
 
 ---
 
@@ -441,23 +490,49 @@ yolo-training-template/                  ← monorepo root
 
 ## 5. Next Steps
 
-Phase 0 ✅, Phase 1 ✅, Phase 2a ✅ (core ML tasks + Dockerfile + Beat polling bridge) are complete.
+Phase 0 ✅, Phase 1 ✅, Phase 2a–2c ✅. Phase 2d (pipeline correctness) is in progress.
 
-**Phase 2 complete.** Next: Phase 3 — Web Application (FastAPI backend + Vue 3 frontend).
-
+**Immediate next (start of next session — Phase 2d cleanup + first real training run):**
 ```bash
-# Phase 3 kick-off:
-# 3.1  scaffold web-app/backend/ — FastAPI + SQLAlchemy async + Alembic
-# 3.2  ORM models (Clip, Dataset, TrainingRun) + first Alembic migration
-# 3.3  Pydantic v2 schemas
-# 3.4  Public API: GET /api/feed, GET /api/archive, POST /api/submit
-# 3.5  Admin API: GET /api/admin/datasets, POST /api/admin/train + JWT auth
-# 3.6  WebSocket training progress endpoint
-# 3.7  Vue 3 frontend scaffold (Vite + Tailwind dark theme)
+# 1. Clean wrong datasets
+rm -rf ml-engine/media/kaggle_datasets/datasets/rawsi18
+rm -rf ml-engine/media/kaggle_datasets/datasets/muki2003
 
-# Future Phase 2 additions (non-blocking for Phase 3):
-# 2.21  tasks/label_oryx_dataset.py — run GroundingDINO on Oryx Ukraine war photos
-#        → fine-tuning corpus (piterfm/2022-ukraine-russia-war-equipment-losses-oryx)
+# 2. Download correct missing datasets
+cd ml-engine
+python -c "
+import os; os.environ['KAGGLEHUB_CACHE']='media/kaggle_datasets'
+import kagglehub
+kagglehub.dataset_download('nzigulic/military-equipment')
+kagglehub.dataset_download('shakedlevnat/military-aircraft-database-prepared-for-yolo')
+kagglehub.dataset_download('piterfm/2022-ukraine-russia-war-equipment-losses-oryx')
+"
+
+# 3. Download real footage (need DOWNLOADED clip for E2E render test)
+cd scraper-engine && python tests/test_scrape_live.py
+
+# 4. Run render E2E on the real downloaded clip
+cd ml-engine && python tests/test_pipeline_e2e.py --keep
+
+# 5. Run full baseline training — GENERAL first, then specialists in parallel
+python tests/test_baseline_train.py --model-type GENERAL --epochs 50 --keep
+# after GENERAL finishes, run in parallel:
+python tests/test_baseline_train.py --model-type SOLDIER  --epochs 50 --keep
+python tests/test_baseline_train.py --model-type VEHICLE  --epochs 50 --keep
+python tests/test_baseline_train.py --model-type AIRCRAFT --epochs 50 --keep
+
+# 6. Re-run render E2E — detections should now be meaningful with baseline weights
+python tests/test_pipeline_e2e.py --keep
+```
+
+**After Phase 2d is complete → Phase 3: Web Application (FastAPI + Vue 3)**
+```bash
+# 3.1  scaffold web-app/backend/ — FastAPI + SQLAlchemy async + Alembic
+# 3.2  ORM models + first Alembic migration
+# 3.3  Public API: GET /api/feed, GET /api/archive, POST /api/submit
+# 3.4  Admin API: GET /api/admin/datasets, POST /api/admin/train + JWT auth
+# 3.5  WebSocket training progress endpoint
+# 3.6  Vue 3 + Vite + Tailwind dark theme scaffold
 ```
 
 ---

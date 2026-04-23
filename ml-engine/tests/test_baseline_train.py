@@ -7,8 +7,8 @@ verifies best.pt is produced, then optionally cleans up.
 
 Run from ml-engine/:
     python tests/test_baseline_train.py --model-type VEHICLE --epochs 2
-    python tests/test_baseline_train.py --model-type AIRCRAFT --epochs 2
-    python tests/test_baseline_train.py --model-type GENERAL --epochs 2 --keep
+    python tests/test_baseline_train.py --model-type GENERAL --epochs 50 --keep
+    python tests/test_baseline_train.py --model-type GENERAL --purge-outputs
 """
 import argparse
 import logging
@@ -36,7 +36,9 @@ def main():
                         choices=[m.value for m in ModelType])
     parser.add_argument("--epochs", type=int, default=2)
     parser.add_argument("--keep", action="store_true",
-                        help="Keep weights after test")
+                        help="Keep weights and DB row after test")
+    parser.add_argument("--purge-outputs", action="store_true",
+                        help="Delete weights dir AND DB row after test")
     args = parser.parse_args()
 
     model_type = ModelType(args.model_type)
@@ -80,14 +82,19 @@ def main():
         sys.exit(1)
     finally:
         settings.YOLO_EPOCHS_BASELINE = original_epochs
-        if not args.keep and run_id is not None:
-            # Clean up DB row and weights dir
+        cleanup = args.purge_outputs or (not args.keep and not args.purge_outputs)
+        if cleanup and run_id is not None:
             with get_session() as session:
                 run = session.get(TrainingRun, run_id)
                 if run:
                     session.delete(run)
-            if weights_path:
-                run_dir = weights_path.parent.parent.parent  # .../baseline/VEHICLE/baseline_VEHICLE_N/
+            if args.purge_outputs and weights_path:
+                run_dir = weights_path.parent.parent.parent
+                if run_dir.exists():
+                    shutil.rmtree(run_dir, ignore_errors=True)
+                    logger.info(f"Removed weights dir: {run_dir}  (--purge-outputs)")
+            elif not args.keep and weights_path:
+                run_dir = weights_path.parent.parent.parent
                 if run_dir.exists():
                     shutil.rmtree(run_dir, ignore_errors=True)
                     logger.info(f"Cleaned up run dir: {run_dir}")
