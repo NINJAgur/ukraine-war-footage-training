@@ -26,7 +26,7 @@ def create_yolo_dataset(
         box_threshold (float): Confidence threshold for bounding boxes
         text_threshold (float): Confidence threshold for text phrases
     """
-    classes = [cls.strip() for cls in text_prompt.split(",")]
+    classes = [cls.strip() for cls in text_prompt.replace(",", ".").split(".") if cls.strip()]
     class_dict = {cls.lower(): idx for idx, cls in enumerate(classes)}
 
     train_images_dir = os.path.join(output_path, "train", "images")

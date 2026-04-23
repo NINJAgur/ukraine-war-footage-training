@@ -12,8 +12,10 @@ Pipeline:
 import logging
 import sys
 from pathlib import Path
+from typing import Dict
 
 import cv2
+import yaml as _yaml
 
 from celery_app import celery_app
 from config import settings
@@ -27,6 +29,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "core"))
 logger = logging.getLogger(__name__)
 
 CLASSES = [c.strip() for c in settings.GDINO_TEXT_PROMPT.replace(",", ".").split(".") if c.strip()]
+
+# GDINO prompt-term index → canonical class ID (0=aircraft, 1=vehicle, 2=personnel)
+_MT_TO_CANONICAL: Dict[str, int] = {"AIRCRAFT": 0, "VEHICLE": 1, "PERSONNEL": 2}
+_GDINO_TO_CANONICAL: Dict[int, int] = {
+    term_idx: _MT_TO_CANONICAL[mt]
+    for term_idx, mt in settings.GDINO_CLASS_TO_MODEL.items()
+}
 
 
 def extract_frames(video_path: Path, output_dir: Path) -> int:
@@ -114,25 +123,55 @@ def auto_label_clip(self, clip_id: int) -> dict:
     )
 
     labels_dir = dataset_dir / "train" / "labels"
+    yaml_path = dataset_dir / "data.yaml"
+
+    # ── Remap GDINO term indices → canonical 3-class IDs ─────────────
+    for lbl_path in labels_dir.glob("*.txt"):
+        lines_out = []
+        try:
+            for line in lbl_path.read_text().splitlines():
+                parts = line.strip().split()
+                if not parts:
+                    continue
+                canonical_id = _GDINO_TO_CANONICAL.get(int(parts[0]), -1)
+                if canonical_id >= 0:
+                    lines_out.append(f"{canonical_id} {' '.join(parts[1:])}")
+        except Exception:
+            pass
+        lbl_path.write_text("\n".join(lines_out) + ("\n" if lines_out else ""))
+
+    with open(yaml_path, "w") as _f:
+        _yaml.dump(
+            {
+                "path": str(dataset_dir),
+                "train": "train/images",
+                "val": "train/images",
+                "nc": 3,
+                "names": ["aircraft", "vehicle", "personnel"],
+            },
+            _f,
+            default_flow_style=False,
+        )
+
     labeled_frames = sum(
         1 for f in labels_dir.glob("*.txt") if f.stat().st_size > 0
     )
-    yaml_path = dataset_dir / "data.yaml"
 
     logger.info(
         f"[{self.request.id}] GroundingDINO: {labeled_frames}/{frame_count} "
-        f"frames with detections"
+        f"frames with detections (remapped to canonical nc=3)"
     )
 
     # ── Tag which model types appear in the labels ────────────────────
+    # Labels are now canonical IDs: 0=AIRCRAFT, 1=VEHICLE, 2=PERSONNEL
+    _CANONICAL_TO_MT = {0: "AIRCRAFT", 1: "VEHICLE", 2: "PERSONNEL"}
     detected_types: set[str] = set()
     for lbl in labels_dir.glob("*.txt"):
         try:
             for line in lbl.read_text().splitlines():
                 parts = line.split()
                 if parts:
-                    cls_id = int(parts[0])
-                    mt = settings.GDINO_CLASS_TO_MODEL.get(cls_id)
+                    mt = _CANONICAL_TO_MT.get(int(parts[0]))
                     if mt:
                         detected_types.add(mt)
         except Exception:
