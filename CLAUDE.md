@@ -102,7 +102,7 @@ Run Phase 2 test: `cd ml-engine && python tests/test_pipeline_e2e.py`
 |-------|-------|--------|
 | 0 | Agentic workspace | ✅ Complete |
 | 1 | Scraper engine | ✅ Complete |
-| 2 | ML pipeline — baseline training | 🔄 In progress (2.35 next) |
+| 2 | ML pipeline — GDINO auto-label | 🔄 In progress (2.31 next: install GDINO) |
 | 3 | Web application | ⏳ Pending |
 | 4 | Cloud & DevOps | ⏳ Pending |
 
