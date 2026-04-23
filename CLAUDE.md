@@ -38,9 +38,14 @@ Every response MUST end with:
 - `2=PERSONNEL` — soldiers, fighters, RPG/ATGM operators
 
 **Cold-start training order (Kaggle, pre-labeled — NO GDINO, NO frames):**
-1. Train AIRCRAFT, VEHICLE, PERSONNEL specialists in parallel (kiit-mita + mihprofi + shakedlevnat, remapped to 3 classes)
-2. Auto-label nzigulic + piterfm with GDINO → add to fine-tune corpus
+1. Train AIRCRAFT, VEHICLE, PERSONNEL specialists (kiit-mita + mihprofi + shakedlevnat, remapped to canonical nc=3)
+2. Auto-label nzigulic + piterfm with GDINO → add to fine-tune corpus *(needs GroundingDINO install)*
 3. Train GENERAL only after all 3 specialists pass mAP50 > 0.4
+
+**GDINO auto-label pipeline (15-term "." prompt → post-remap → canonical nc=3):**
+- Core script (`core/autolabeling/auto_label.py`) uses "." separator; outputs GDINO term indices 0-14
+- `tasks/auto_label.py` remaps indices 0-14 → canonical 0-2 via `GDINO_CLASS_TO_MODEL`; overwrites data.yaml with nc=3
+- All on-disk LABELED datasets are always nc=3 with canonical IDs
 
 **Fine-tune loop (after enough scraped clips):**
 - Extract frames from scraped clips → GDINO auto-label (3 classes) → dataset → fine-tune from baseline
@@ -97,7 +102,7 @@ Run Phase 2 test: `cd ml-engine && python tests/test_pipeline_e2e.py`
 |-------|-------|--------|
 | 0 | Agentic workspace | ✅ Complete |
 | 1 | Scraper engine | ✅ Complete |
-| 2 | ML pipeline | 🔄 In progress |
+| 2 | ML pipeline — baseline training | 🔄 In progress (2.35 next) |
 | 3 | Web application | ⏳ Pending |
 | 4 | Cloud & DevOps | ⏳ Pending |
 

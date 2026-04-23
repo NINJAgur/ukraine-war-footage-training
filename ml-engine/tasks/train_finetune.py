@@ -7,7 +7,7 @@ starting from GENERAL baseline weights, save best.pt.
 
 Expects a TrainingRun with:
   - stage      = FINETUNE
-  - model_type = GENERAL | SOLDIER | VEHICLE | AIRCRAFT
+  - model_type = GENERAL | AIRCRAFT | VEHICLE | PERSONNEL
   - dataset_ids = [list of Dataset.id, all status=PACKAGED]
   - baseline_weights = path to GENERAL best.pt (or None → yolov8m.pt)
 """
@@ -28,25 +28,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "core"))
 
 logger = logging.getLogger(__name__)
 
-# Full GDINO class list (order must match GDINO_TEXT_PROMPT)
-_ALL_CLASSES = [c.strip() for c in settings.GDINO_TEXT_PROMPT.split(",") if c.strip()]
-
-
 def _class_remap(model_type: ModelType) -> dict[int, int]:
-    """
-    Build old_class_id → new_class_id mapping for the given model_type.
-    Returns -1 for classes not belonging to this model.
-    """
-    target = settings.MODEL_CLASSES[model_type.value]
-    remap: dict[int, int] = {}
-    new_id = 0
-    for old_id, cls in enumerate(_ALL_CLASSES):
-        if cls in target:
-            remap[old_id] = new_id
-            new_id += 1
-        else:
-            remap[old_id] = -1
-    return remap
+    # All 4 models share the same 3-class canonical vocab (nc=3).
+    # Auto-labeled datasets already have canonical IDs 0-2 on disk.
+    # Identity mapping; anything outside 0-2 is dropped by _filter_label_file.
+    return {0: 0, 1: 1, 2: 2}
 
 
 def _filter_label_file(src: Path, dst: Path, remap: dict[int, int]) -> int:
