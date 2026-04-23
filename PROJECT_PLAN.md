@@ -405,54 +405,61 @@ yolo-training-template/                  ← monorepo root
 - [x] **2.23** E2E render test passed: real clip annotated (22.8MB MP4, 1838 frames, pretrained weights)
 - [x] **2.24** `_remap_label_file()` + `DATASET_CLASS_MAPS` implemented; pipeline merge verified clean (nc=8, no out-of-range IDs)
 
-#### 2e — Taxonomy Redesign + Auto-Label Pipeline 🔄
-**Decision:** Simplify to 3 universal classes aligned with `_filter.py` categories.
+#### 2e — Taxonomy Redesign ✅
+**Decision:** 3 universal classes aligned with `_filter.py`.
 
-**New canonical taxonomy:**
 | ID | Class | Covers |
 |----|-------|--------|
 | 0 | AIRCRAFT | drones, helicopters, fixed-wing, missiles, glide bombs |
 | 1 | VEHICLE | tanks, APCs, artillery, radar, MLRS, all ground military vehicles |
 | 2 | PERSONNEL | soldiers, fighters, RPG/ATGM operators |
 
-**Dataset routing (new):**
-| Dataset | Approach |
-|---------|---------|
-| kiit-mita | YOLO labels remapped → 3 classes |
-| mihprofi/drone-detect | YOLO labels remapped → AIRCRAFT |
-| shakedlevnat | YOLO labels remapped → AIRCRAFT |
-| nzigulic | GDINO auto-label (ignore existing labels — class names unknown) |
-| piterfm | GDINO auto-label (images only) |
+| Dataset | Pipeline role |
+|---------|--------------|
+| kiit-mita | YOLO labels remapped → nc=3 (baseline) |
+| mihprofi/drone-detect | YOLO labels remapped → AIRCRAFT (baseline) |
+| shakedlevnat | YOLO labels remapped → AIRCRAFT (baseline) |
+| nzigulic | GDINO auto-label → nc=3 (fine-tune corpus) |
+| piterfm | GDINO auto-label → nc=3 (fine-tune corpus) |
 
-**ModelType (new):** AIRCRAFT, VEHICLE, PERSONNEL, GENERAL  
-**Training order:** specialists first (AIRCRAFT, VEHICLE, PERSONNEL) → GENERAL once all 3 are satisfactory
+- [x] **2.25** `ModelType` SOLDIER→PERSONNEL; DB migration applied
+- [x] **2.26** `config.py` — 15-term "." GDINO prompt; `YOLO_EPOCHS_BASELINE=10` (incremental)
+- [x] **2.27** `train_baseline.py` — nc=3 canonical remap; nzigulic/piterfm removed from baseline datasets
+- [x] **2.28** `auto_label.py` — "." separator; post-GDINO 15→3 canonical remap; data.yaml nc=3
+- [x] **2.29** `render_annotated.py` + `inference.py` — 3-class colour map (PERSONNEL replaces SOLDIER)
+- [x] **2.30** `train_finetune.py` — identity `_class_remap` (nc=3 pre-remapped on disk); SOLDIER→PERSONNEL
 
-- [x] **2.25** Update `ModelType` enum: rename SOLDIER→PERSONNEL; DB migration (`ALTER TYPE model_type ADD VALUE 'PERSONNEL'`) applied
-- [x] **2.26** Update `config.py` — 3-class GDINO 15-term prompt ("." separator); `YOLO_EPOCHS_BASELINE=10` (incremental; raise as quality improves)
-- [x] **2.27** Update `train_baseline.py` — `CANONICAL_CLASSES`=3; `DATASET_CLASS_MAPS` for 3-class remap; nzigulic removed from `BASELINE_DATASETS`; `_remap_label_file()` rewrites labels on merge
-- [x] **2.28** Update `auto_label.py` — "." separator fix; post-GDINO canonical remapping (15 term indices → 0-2); data.yaml overwritten with nc=3
-- [x] **2.29** Update `inference.py` + `render_annotated.py` — 3-class colour map via settings.MODEL_COLORS (PERSONNEL key, reads dynamically)
-- [x] **2.30** Update `train_finetune.py` — remove broken `_ALL_CLASSES`/string-match remap; identity `_class_remap` (nc=3 datasets are pre-remapped on disk); fix SOLDIER→PERSONNEL in docstring
-- [ ] **2.30b** Implement `tasks/autolabel_kaggle.py` — batch GDINO on nzigulic + piterfm image folders → YOLO .txt labels per image *(blocked: GroundingDINO not yet installed)*
+#### Step 1 — Install GDINO + auto-label nzigulic + piterfm ← **CURRENT BLOCKER**
 
-#### Step 1 — Auto-label nzigulic + piterfm *(blocked: install GroundingDINO first)*
-- [ ] **2.31** Install GroundingDINO: `pip install groundingdino-py` or build from source; download `groundingdino_swint_ogc.pth` checkpoint
-- [ ] **2.32** Run GDINO auto-label on `nzigulic/military-equipment` images → `nzigulic_labeled/` YOLO dataset (nc=3)
-- [ ] **2.33** Run GDINO auto-label on `piterfm/oryx` images (C:/kd) → `piterfm_labeled/` YOLO dataset (nc=3)
-- [ ] **2.34** Verify label quality: spot-check 20 images per dataset; confirm nc=3 in data.yaml
+> nzigulic and piterfm are image folders, not videos. Need `autolabel_kaggle.py`  
+> (separate from `auto_label.py` which handles video clips).
 
-#### Step 2 — Train specialists *(can proceed without GDINO — Kaggle datasets already downloaded)*
-- [ ] **2.35** Run `test_baseline_train.py --model-type AIRCRAFT --epochs 10 --keep`
-- [ ] **2.36** Run `test_baseline_train.py --model-type VEHICLE --epochs 10 --keep`
-- [ ] **2.37** Run `test_baseline_train.py --model-type PERSONNEL --epochs 10 --keep`
-- [ ] **2.38** Evaluate each: mAP50 > 0.4 = acceptable; increase epochs if below threshold
+- [ ] **2.31** Install GroundingDINO:
+  ```bash
+  pip install groundingdino-py
+  # download checkpoint:
+  # wget https://github.com/IDEA-Research/GroundingDINO/releases/download/v0.1.0-alpha/groundingdino_swint_ogc.pth
+  ```
+- [ ] **2.32** Implement `tasks/autolabel_kaggle.py` — GDINO batch labeling on image folders (no frame extraction); outputs nc=3 YOLO dataset with canonical remapping; reuses `_GDINO_TO_CANONICAL` from `auto_label.py`
+- [ ] **2.33** Run auto-label on `nzigulic/military-equipment` images → nc=3 YOLO dataset
+- [ ] **2.34** Run auto-label on `piterfm/oryx` images (C:/kd) → nc=3 YOLO dataset
+- [ ] **2.35** Spot-check label quality: open 20 images per dataset with bboxes overlaid
+
+#### Step 2 — Train specialists (all 5 Kaggle datasets as corpus)
+
+- [ ] **2.36** Run `test_baseline_train.py --model-type AIRCRAFT --epochs 10 --keep`
+- [ ] **2.37** Run `test_baseline_train.py --model-type VEHICLE --epochs 10 --keep`
+- [ ] **2.38** Run `test_baseline_train.py --model-type PERSONNEL --epochs 10 --keep`
+- [ ] **2.39** Evaluate each: mAP50 > 0.4 = acceptable; increase epochs if below
 
 #### Step 3 — Train generalist
-- [ ] **2.39** Once all 3 specialists pass evaluation, run `test_baseline_train.py --model-type GENERAL --epochs 10 --keep`
+
+- [ ] **2.40** All 3 specialists pass → run `test_baseline_train.py --model-type GENERAL --epochs 10 --keep`
 
 #### Step 4 — Tests
-- [ ] **2.40** Run `test_pipeline_e2e.py` with trained weights → verify improved detections vs pretrained
-- [ ] **2.41** Run `test_scrape_live.py` → verify full Phase 1→2 workflow (scrape → download → render → annotated MP4)
+
+- [ ] **2.41** `test_pipeline_e2e.py` with trained weights → verify annotated MP4 quality improved
+- [ ] **2.42** `test_scrape_live.py` → full Phase 1→2 flow (scrape → download → render → annotated MP4)
 
 ---
 
@@ -492,30 +499,29 @@ yolo-training-template/                  ← monorepo root
 
 ## 5. Next Steps
 
-Phase 0 ✅, Phase 1 ✅, Phase 2a–2e (taxonomy + code) ✅. Step 2 (specialist training) is next.
+Phase 0 ✅, Phase 1 ✅, Phase 2a–2e (code) ✅. **Blocked on GDINO install (task 2.31).**
 
-**Immediate next — start specialist training (no GDINO needed):**
-```bash
-# Train AIRCRAFT specialist (mihprofi + shakedlevnat → nc=3)
-cd ml-engine && python tests/test_baseline_train.py --model-type AIRCRAFT --epochs 10 --keep
-
-# Train VEHICLE specialist (kiit-mita → nc=3)
-cd ml-engine && python tests/test_baseline_train.py --model-type VEHICLE --epochs 10 --keep
-
-# Train PERSONNEL specialist (kiit-mita → nc=3)
-cd ml-engine && python tests/test_baseline_train.py --model-type PERSONNEL --epochs 10 --keep
-```
-
-**After specialists pass mAP50 > 0.4, train GENERAL:**
-```bash
-cd ml-engine && python tests/test_baseline_train.py --model-type GENERAL --epochs 10 --keep
-```
-
-**GDINO pipeline (when ready — install groundingdino first):**
+**Immediate next — unblock GDINO:**
 ```bash
 pip install groundingdino-py
-# Download checkpoint: groundingdino_swint_ogc.pth
-# Run auto-label on nzigulic + piterfm image folders
+# Download checkpoint (~694MB):
+wget https://github.com/IDEA-Research/GroundingDINO/releases/download/v0.1.0-alpha/groundingdino_swint_ogc.pth -O ml-engine/groundingdino_swint_ogc.pth
+# Verify:
+cd ml-engine && python -c "from groundingdino.util.inference import load_model; print('GDINO ok')"
+```
+
+**Then implement + run autolabel_kaggle.py (task 2.32–2.35):**
+```bash
+# After implementing tasks/autolabel_kaggle.py:
+cd ml-engine && python tasks/autolabel_kaggle.py --dataset nzigulic
+cd ml-engine && python tasks/autolabel_kaggle.py --dataset piterfm
+```
+
+**Then specialist training (tasks 2.36–2.39) — GPU, no Docker needed:**
+```bash
+cd ml-engine && python tests/test_baseline_train.py --model-type AIRCRAFT --epochs 10 --keep
+cd ml-engine && python tests/test_baseline_train.py --model-type VEHICLE --epochs 10 --keep
+cd ml-engine && python tests/test_baseline_train.py --model-type PERSONNEL --epochs 10 --keep
 
 # 2. Download correct missing datasets
 cd ml-engine
