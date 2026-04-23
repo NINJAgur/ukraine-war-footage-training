@@ -385,25 +385,20 @@ yolo-training-template/                  ← monorepo root
 - [x] **2.12** Add `ClipStatus.QUEUED` to both `scraper-engine/db/models.py` and `ml-engine/db/models.py`
 
 #### 2b — Multi-Model Architecture ✅
-- [x] **2.13** Add `ModelType` enum to `ml-engine/db/models.py`; add `model_type` column to `TrainingRun`
-- [x] **2.14** Update `ml-engine/config.py` — GDINO prompt, model config dicts
-- [x] **2.15** Update `ml-engine/tasks/train_baseline.py` — per-model Kaggle dataset config; `_merge_datasets()` with canonical class remapping
-- [x] **2.16** Update `ml-engine/tasks/train_finetune.py` — per-model class filtering + ID remapping
-- [x] **2.17** Add `infer_video_multi_model()` to `ml-engine/core/inference.py` — sequential multi-model rendering with per-type colour-coded bboxes
-- [x] **2.18** Update `ml-engine/tasks/render_annotated.py` — `_best_weights_per_model()` + multi-model rendering
-- [x] **2.19** Kaggle datasets downloaded and verified:
-  - `sudipchakrabarty/kiit-mita` — 1360 train imgs, nc=7 ✅
-  - `nzigulic/military-equipment` — 11768 train imgs, nc=11, **class names unknown → GDINO auto-label** ✅ on disk
-  - `mihprofi/drone-detect` — 32125 train imgs, nc=2 ✅
-  - `shakedlevnat/military-aircraft-database-prepared-for-yolo` — 15966 train imgs, nc=83 ✅
-  - `piterfm/2022-ukraine-russia-war-equipment-losses-oryx` — images only, C:/kd (11GB) ✅ + project path partial
+- [x] **2.13** `ModelType` enum (GENERAL, AIRCRAFT, VEHICLE, PERSONNEL) + `model_type` column on `TrainingRun`
+- [x] **2.14** `config.py` multi-model setup — superseded by 2.26 (3-class redesign)
+- [x] **2.15** `train_baseline.py` per-model datasets + `_merge_datasets()` — superseded by 2.27
+- [x] **2.16** `train_finetune.py` per-model class filtering — superseded by 2.30
+- [x] **2.17** `infer_video_multi_model()` in `core/inference.py` — 4-model sequential rendering, colour-coded bboxes
+- [x] **2.18** `render_annotated.py` `_best_weights_per_model()` — superseded by 2.29
+- [x] **2.19** All 5 Kaggle datasets on disk: kiit-mita (1360 train), mihprofi (32125), shakedlevnat (15966), nzigulic (11768, images only → GDINO), piterfm (C:/kd 11GB, images only → GDINO)
 
-#### 2c — Testing ✅
-- [x] **2.20** `ml-engine/tests/test_pipeline_e2e.py` — requires real DOWNLOADED clip; render_annotated → verify annotated MP4; `--keep`, `--purge-outputs` flags
-- [x] **2.21** `ml-engine/tests/test_baseline_train.py` — smoke test: creates TrainingRun → train_baseline() → verifies best.pt; `--model-type`, `--epochs`, `--keep`, `--purge-outputs` flags
-- [x] **2.22** DB tables created via `Base.metadata.create_all()`
-- [x] **2.23** E2E render test passed: real clip annotated (22.8MB MP4, 1838 frames, pretrained weights)
-- [x] **2.24** `_remap_label_file()` + `DATASET_CLASS_MAPS` implemented; pipeline merge verified clean (nc=8, no out-of-range IDs)
+#### 2c — Infrastructure + First Test ✅
+- [x] **2.20** `test_pipeline_e2e.py` — real clip required; render → annotated MP4; `--keep`/`--purge-outputs`
+- [x] **2.21** `test_baseline_train.py` — smoke test with `--model-type`, `--epochs`, `--keep`, `--purge-outputs`
+- [x] **2.22** DB tables bootstrapped via `Base.metadata.create_all()`
+- [x] **2.23** E2E render test passed: 22.8MB annotated MP4, 1838 frames, pretrained weights
+- [x] **2.24** VEHICLE baseline smoke test passed: nc=3, mAP50=0.405 @ 2 epochs
 
 #### 2e — Taxonomy Redesign ✅
 **Decision:** 3 universal classes aligned with `_filter.py`.
