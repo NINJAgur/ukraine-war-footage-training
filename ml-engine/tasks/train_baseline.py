@@ -83,8 +83,6 @@ DATASET_CLASS_MAPS: Dict[str, Dict[int, int]] = {
     },
 }
 
-# Pre-labeled Kaggle datasets per model type.
-# nzigulic and piterfm are NOT here — they go through GDINO auto-label.
 BASELINE_DATASETS: Dict[ModelType, List[str]] = {
     ModelType.AIRCRAFT: [
         "mihprofi/drone-detect",
