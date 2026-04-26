@@ -2,7 +2,14 @@
 ml-engine/config.py
 Loads all ML-engine configuration from environment variables.
 """
+import sys
 from pathlib import Path
+
+# Ensure repo root is on sys.path so `shared` package is importable
+_REPO_ROOT = str(Path(__file__).parent.parent)
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
