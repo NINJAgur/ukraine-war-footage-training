@@ -493,20 +493,18 @@ yolo-training-template/                  ← monorepo root
 
 ## 5. Next Steps
 
-Phase 0 ✅, Phase 1 ✅, Phase 2a–2e (code) ✅, GDINO installed ✅.
+Phase 0 ✅, Phase 1 ✅, Phase 2a–2e (code) ✅, GDINO installed ✅, datasets prepped ✅.
 
-**Immediate next — Step 1: Prep nzigulic + piterfm (tasks 2.33–2.35)**
+**Immediate next — complete piterfm relabeling + add to train_baseline.py (task 2.34)**
 
-nzigulic already has YOLO labels on disk but nc=11 with anonymous class names:
-1. Visually inspect sample images per class ID to determine the mapping
-2. Add `"nzigulic/military-equipment"` to `DATASET_CLASS_MAPS` + `BASELINE_DATASETS` in `ml-engine/tasks/train_baseline.py`
+piterfm labeling history:
+- Initial run (5k images, generic 15-term prompt): 4168/5000 with detections (84%)
+- Targeted re-label of 796 no-detections (category-aware prompts): +683 recovered → 97% coverage
+- Full re-run in progress: `tasks/relabel_piterfm.py` on all 27,714 images with category-aware prompts
+- 117 images undetectable (destroyed/satellite) → `kaggle_datasets/to_annotate_manually/`
 
-piterfm has zero labels — run GDINO (~2–3 hrs):
-```bash
-cd ml-engine && python tasks/autolabel_kaggle.py --dataset piterfm --max-images 5000
-# output: media/kaggle_datasets/labeled/piterfm_labeled/
-```
-Then spot-check 20 images per dataset with bboxes (task 2.35).
+On completion: move `labeled/piterfm_labeled/` → `piterfm/labeled/versions/1/`, then add
+`"piterfm/labeled"` identity map to `DATASET_CLASS_MAPS` + `BASELINE_DATASETS`.
 
 **Then — Step 2: Train specialists (tasks 2.36–2.39)**
 ```bash
@@ -525,17 +523,20 @@ python tests/test_baseline_train.py --model-type GENERAL --epochs 10 --keep
 
 **Then — Step 4: E2E validation (tasks 2.41–2.42)**
 ```bash
-python tests/test_pipeline_e2e.py --keep        # render with trained weights
-cd ../scraper-engine && python tests/test_scrape_live.py   # full Phase 1→2 flow
+python tests/test_pipeline_e2e.py --keep
+cd ../scraper-engine && python tests/test_scrape_live.py
 ```
 
 **After Phase 2 complete → Phase 3: Web Application (FastAPI + Vue 3)**
+
+Skeleton exists: `web-app/backend/main.py` (bare FastAPI app) + empty dirs for api/, db/, schemas/, frontend/src/.
+DB models (`Clip`, `Dataset`, `TrainingRun`) already defined in `ml-engine/db/models.py` — Phase 3 reuses these via shared DB.
 ```
-3.1  scaffold web-app/backend/ — FastAPI + SQLAlchemy async + Alembic
-3.2  ORM models + first Alembic migration
+3.1  requirements.txt + Alembic setup
+3.2  Reuse/extend ml-engine DB models, write first Alembic migration
 3.3  Public API: GET /api/feed, GET /api/archive, POST /api/submit
 3.4  Admin API: GET /api/admin/datasets, POST /api/admin/train + JWT auth
-3.5  WebSocket training progress endpoint
+3.5  WebSocket training progress (Celery task → broadcast)
 3.6  Vue 3 + Vite + Tailwind dark theme scaffold
 ```
 
