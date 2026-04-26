@@ -1,17 +1,18 @@
 """
 ml-engine/tasks/autolabel_kaggle.py
 
-CLI script: run GroundingDINO on nzigulic or piterfm Kaggle image folders,
-output a canonical nc=3 YOLO dataset ready for the fine-tune corpus.
+CLI script: run GroundingDINO on any image folder, output a canonical nc=3
+YOLO dataset ready for the fine-tune corpus.
 
 Unlike auto_label.py (which handles video clips), this operates directly on
 pre-existing image folders — no frame extraction needed.
 
 Usage:
     cd ml-engine
-    python tasks/autolabel_kaggle.py --dataset nzigulic
-    python tasks/autolabel_kaggle.py --dataset piterfm --max-images 5000
-    python tasks/autolabel_kaggle.py --dataset piterfm --max-images 0   # all images
+    python tasks/autolabel_kaggle.py --path /path/to/images --output-dir /path/to/output
+    python tasks/autolabel_kaggle.py --path media/kaggle_datasets/nzigulic/.../train/images
+    python tasks/autolabel_kaggle.py --path media/kaggle_datasets/some_dataset --max-images 5000
+    python tasks/autolabel_kaggle.py --path ... --prompt "tank . drone . soldier"
 """
 import argparse
 import logging
@@ -33,6 +34,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger("autolabel-kaggle")
 
+_IMG_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
+
 # ── Canonical remapping ───────────────────────────────────────────────────────
 _MT_TO_CANONICAL: Dict[str, int] = {"AIRCRAFT": 0, "VEHICLE": 1, "PERSONNEL": 2}
 _GDINO_TO_CANONICAL: Dict[int, int] = {
@@ -51,14 +54,12 @@ def _build_classes(prompt: str) -> Tuple[List[str], Dict[str, int]]:
 def _phrase_to_canonical(phrase: str, class_dict: Dict[str, int]) -> int:
     """
     Map a GDINO-returned phrase to a canonical class ID.
-    GDINO sometimes merges adjacent tokens (e.g. "armored vehicle military vehicle"),
-    so we fall back to substring matching when an exact match fails.
+    Falls back to substring matching when an exact match fails (GDINO sometimes
+    merges adjacent tokens, e.g. "armored vehicle military vehicle").
     """
     phrase = phrase.strip().lower()
-    # 1. Exact match
     if phrase in class_dict:
         return _GDINO_TO_CANONICAL.get(class_dict[phrase], -1)
-    # 2. Substring match — collect all canonical IDs of terms found in the phrase
     matched: set[int] = set()
     for term, idx in class_dict.items():
         if term in phrase:
@@ -68,46 +69,22 @@ def _phrase_to_canonical(phrase: str, class_dict: Dict[str, int]) -> int:
     if len(matched) == 1:
         return matched.pop()
     if len(matched) > 1:
-        # Multiple classes in one phrase — take the most common one by priority
-        # Priority: VEHICLE > AIRCRAFT > PERSONNEL (vehicle terms dominate combined phrases)
-        for priority in (1, 0, 2):
+        for priority in (1, 0, 2):  # VEHICLE > AIRCRAFT > PERSONNEL
             if priority in matched:
                 return priority
     return -1
 
 
-# ── Dataset image-folder discovery ───────────────────────────────────────────
+# ── Image collection ──────────────────────────────────────────────────────────
 
-def _nzigulic_images(base: Path) -> List[Path]:
-    """Collect all train+val images from nzigulic (standard YOLO layout)."""
-    dataset_root = base / "Dataset military equipment"
-    images: List[Path] = []
-    for split in ("train", "val"):
-        d = dataset_root / split / "images"
-        if d.exists():
-            images.extend(sorted(d.glob("*.jpg")) + sorted(d.glob("*.jpeg")) + sorted(d.glob("*.png")))
+def _collect_images(root: Path, max_images: int) -> List[Path]:
+    """Recursively collect all images under root."""
+    images = sorted(p for p in root.rglob("*") if p.suffix.lower() in _IMG_EXTS)
     if not images:
-        raise FileNotFoundError(f"nzigulic: no images found under {dataset_root}")
-    return images
-
-
-def _piterfm_images(base: Path) -> List[Path]:
-    """
-    Collect images from piterfm category folders.
-    Structure: <snapshot>/img_russia|img_ukraine/<Category>/*.jpg
-    """
-    images: List[Path] = []
-    for snapshot in sorted(base.iterdir()):
-        if not snapshot.is_dir():
-            continue
-        for side in sorted(snapshot.iterdir()):
-            if not side.is_dir():
-                continue
-            for cat in sorted(side.iterdir()):
-                if cat.is_dir():
-                    images.extend(sorted(cat.glob("*.jpg")) + sorted(cat.glob("*.jpeg")) + sorted(cat.glob("*.png")))
-    if not images:
-        raise FileNotFoundError(f"piterfm: no images found under {base}")
+        raise FileNotFoundError(f"No images found under {root}")
+    if max_images > 0 and len(images) > max_images:
+        logger.info(f"Capping {len(images)} -> {max_images} images (--max-images)")
+        images = images[:max_images]
     return images
 
 
@@ -135,7 +112,6 @@ def _label_images(
         if i > 0 and i % log_every == 0:
             logger.info(f"  Progress: {i}/{len(images)}  ({labeled} with detections)")
 
-        # Avoid filename collisions from different source dirs
         stem = f"{img_path.parent.name}__{img_path.stem}"
         dst_img = out_images / (stem + img_path.suffix)
         shutil.copy2(img_path, dst_img)
@@ -173,43 +149,24 @@ def _label_images(
 # ── Main entry point ──────────────────────────────────────────────────────────
 
 def run_autolabel(
-    dataset: str,
+    input_path: Path,
     output_dir: Optional[Path] = None,
-    max_images: int = 5000,
+    max_images: int = 0,
+    prompt: Optional[str] = None,
 ) -> Path:
     from groundingdino.util.inference import load_model
     import groundingdino
 
-    kaggle_base = settings.KAGGLE_CACHE_DIR / "datasets"
-
-    if dataset == "nzigulic":
-        ds_base = kaggle_base / "nzigulic" / "military-equipment" / "versions" / "1"
-        images = _nzigulic_images(ds_base)
-        out_name = "nzigulic_labeled"
-    elif dataset == "piterfm":
-        ds_base = (
-            kaggle_base / "piterfm" /
-            "2022-ukraine-russia-war-equipment-losses-oryx" / "versions" / "55"
-        )
-        images = _piterfm_images(ds_base)
-        out_name = "piterfm_labeled"
-    else:
-        raise ValueError(f"Unknown dataset '{dataset}'. Choose: nzigulic | piterfm")
-
-    if max_images > 0 and len(images) > max_images:
-        logger.info(f"Capping {len(images)} → {max_images} images (--max-images)")
-        images = images[:max_images]
-
-    logger.info(f"Dataset: {dataset}  images to label: {len(images)}")
+    images = _collect_images(input_path, max_images)
+    logger.info(f"Source: {input_path}  images to label: {len(images)}")
 
     if output_dir is None:
-        output_dir = settings.KAGGLE_CACHE_DIR / "labeled" / out_name
+        output_dir = settings.KAGGLE_CACHE_DIR / "labeled" / input_path.name
     output_dir = Path(output_dir)
     if output_dir.exists():
         logger.info(f"Removing existing: {output_dir}")
         shutil.rmtree(output_dir)
 
-    # ── Load GDINO ────────────────────────────────────────────────────
     config_path = str(
         Path(groundingdino.__file__).parent / "config" / "GroundingDINO_SwinT_OGC.py"
     )
@@ -220,25 +177,23 @@ def run_autolabel(
             "Download from: https://github.com/IDEA-Research/GroundingDINO/releases/tag/v0.1.0-alpha"
         )
 
-    logger.info(f"Loading GDINO model...")
+    logger.info("Loading GDINO model...")
     model = load_model(config_path, checkpoint_path)
 
-    prompt = settings.GDINO_TEXT_PROMPT
-    classes, class_dict = _build_classes(prompt)
+    active_prompt = prompt or settings.GDINO_TEXT_PROMPT
+    classes, class_dict = _build_classes(active_prompt)
     logger.info(f"Prompt terms ({len(classes)}): {classes}")
 
-    # ── Label ─────────────────────────────────────────────────────────
     out_train_images = output_dir / "train" / "images"
     out_train_labels = output_dir / "train" / "labels"
 
     labeled = _label_images(
         images, out_train_labels, out_train_images,
-        model, prompt,
+        model, active_prompt,
         settings.GDINO_BOX_THRESHOLD, settings.GDINO_TEXT_THRESHOLD,
         class_dict,
     )
 
-    # ── Write data.yaml ───────────────────────────────────────────────
     yaml_path = output_dir / "data.yaml"
     with open(yaml_path, "w") as f:
         _yaml.dump(
@@ -262,26 +217,31 @@ def run_autolabel(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="GDINO auto-label Kaggle image datasets → nc=3 YOLO dataset"
+        description="GDINO auto-label any image folder -> nc=3 YOLO dataset"
     )
     parser.add_argument(
-        "--dataset", required=True, choices=["nzigulic", "piterfm"],
-        help="Which Kaggle dataset to label",
+        "--path", required=True,
+        help="Path to folder containing images (searched recursively)",
     )
     parser.add_argument(
         "--output-dir", default=None,
-        help="Output directory (default: media/kaggle_datasets/labeled/<name>)",
+        help="Output directory (default: media/kaggle_datasets/labeled/<folder-name>)",
     )
     parser.add_argument(
-        "--max-images", type=int, default=5000,
-        help="Max images to process per dataset (0 = all, default 5000)",
+        "--max-images", type=int, default=0,
+        help="Max images to process (0 = all, default 0)",
+    )
+    parser.add_argument(
+        "--prompt", default=None,
+        help="Override GDINO prompt (default: settings.GDINO_TEXT_PROMPT)",
     )
     args = parser.parse_args()
 
     out = run_autolabel(
-        dataset=args.dataset,
+        input_path=Path(args.path),
         output_dir=Path(args.output_dir) if args.output_dir else None,
         max_images=args.max_images,
+        prompt=args.prompt,
     )
     print(f"\nOutput dataset: {out}")
 

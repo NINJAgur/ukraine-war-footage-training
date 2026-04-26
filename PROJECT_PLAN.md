@@ -1,6 +1,6 @@
 # PROJECT_PLAN.md — Ukraine Combat Footage Web Application
 > **Source of Truth** — All phases, structure, and decisions are tracked here.
-> Last updated: 2026-04-19
+> Last updated: 2026-04-23
 
 ---
 
@@ -248,20 +248,19 @@ yolo-training-template/                  ← monorepo root
 │   ├── config.py
 │   ├── runs/                            ← YOLO training output (gitignored)
 │   ├── media/                           ← frames, annotated, datasets (gitignored)
-│   ├── tasks/                           ← Phase 2 (not yet implemented)
-│   │   ├── auto_label.py
+│   ├── tasks/
+│   │   ├── auto_label.py                ← GDINO on video clips (Celery pipeline)
+│   │   ├── autolabel_kaggle.py          ← GDINO on image folders (nzigulic, piterfm)
 │   │   ├── package_dataset.py
 │   │   ├── render_annotated.py
-│   │   ├── train_baseline.py
-│   │   └── train_finetune.py
+│   │   ├── train_baseline.py            ← Stage 1: Kaggle datasets → specialist .pt files
+│   │   └── train_finetune.py            ← Stage 2: baseline + custom data → fine_tuned.pt
 │   ├── tests/
 │   ├── core/                            ← migrated from original repo
-│   │   ├── main.py                      ← from scripts/main.py
-│   │   ├── inference.py                 ← from scripts/inference.py
-│   │   ├── preprocessing.py             ← from scripts/preprocessing.py
-│   │   ├── dataset_explorer.py          ← from scripts/dataset_explorer.py
+│   │   ├── main.py                      ← YOLO training entry point
+│   │   ├── inference.py                 ← multi-model video inference → annotated MP4
 │   │   └── autolabeling/
-│   │       └── auto_label.py            ← from autolabeling/auto-label.py
+│   │       └── auto_label.py            ← GroundingDINO labeling (video clips → frames)
 │   └── db/
 │       ├── session.py
 │       └── models.py
@@ -391,7 +390,7 @@ yolo-training-template/                  ← monorepo root
 - [x] **2.16** `train_finetune.py` per-model class filtering — superseded by 2.30
 - [x] **2.17** `infer_video_multi_model()` in `core/inference.py` — 4-model sequential rendering, colour-coded bboxes
 - [x] **2.18** `render_annotated.py` `_best_weights_per_model()` — superseded by 2.29
-- [x] **2.19** All 5 Kaggle datasets on disk: kiit-mita (1360 train), mihprofi (32125), shakedlevnat (15966), nzigulic (11768, images only → GDINO), piterfm (C:/kd 11GB, images only → GDINO)
+- [x] **2.19** All 5 Kaggle datasets on disk and verified: kiit-mita (1700 total, nc=7 → remap), mihprofi (37900 total, nc=2 → remap), shakedlevnat (19958 total, nc=83 → remap), nzigulic (16809 total, nc=11 anonymous labels unusable → GDINO), piterfm (31041 images, no labels → GDINO)
 
 #### 2c — Infrastructure + First Test ✅
 - [x] **2.20** `test_pipeline_e2e.py` — real clip required; render → annotated MP4; `--keep`/`--purge-outputs`
@@ -424,21 +423,21 @@ yolo-training-template/                  ← monorepo root
 - [x] **2.29** `render_annotated.py` + `inference.py` — 3-class colour map (PERSONNEL replaces SOLDIER)
 - [x] **2.30** `train_finetune.py` — identity `_class_remap` (nc=3 pre-remapped on disk); SOLDIER→PERSONNEL
 
-#### Step 1 — Install GDINO + auto-label nzigulic + piterfm ← **CURRENT BLOCKER**
+#### Step 1 — Install GDINO + auto-label nzigulic + piterfm
 
-> nzigulic and piterfm are image folders, not videos. Need `autolabel_kaggle.py`  
-> (separate from `auto_label.py` which handles video clips).
+> nzigulic already has YOLO-format labels on disk (kagglehub reorganized `images_test/labels_test/` → standard `test/images/test/labels/`). Class names are anonymous (`class_0`–`class_10`, nc=11) — identify via visual inspection, add remap to `train_baseline.py`.  
+> piterfm has zero labels — GDINO required.
 
-- [ ] **2.31** Install GroundingDINO:
-  ```bash
-  pip install groundingdino-py
-  # download checkpoint:
-  # wget https://github.com/IDEA-Research/GroundingDINO/releases/download/v0.1.0-alpha/groundingdino_swint_ogc.pth
-  ```
-- [ ] **2.32** Implement `tasks/autolabel_kaggle.py` — GDINO batch labeling on image folders (no frame extraction); outputs nc=3 YOLO dataset with canonical remapping; reuses `_GDINO_TO_CANONICAL` from `auto_label.py`
-- [ ] **2.33** Run auto-label on `nzigulic/military-equipment` images → nc=3 YOLO dataset
-- [ ] **2.34** Run auto-label on `piterfm/oryx` images (C:/kd) → nc=3 YOLO dataset
-- [ ] **2.35** Spot-check label quality: open 20 images per dataset with bboxes overlaid
+- [x] **2.31** Install GroundingDINO: `pip install groundingdino-py` + checkpoint `groundingdino_swint_ogc.pth` (661MB, gitignored)
+- [x] **2.32** Implement `tasks/autolabel_kaggle.py` — GDINO batch labeling on image folders; canonical nc=3 remap; substring fallback for merged GDINO phrases; outputs to `media/kaggle_datasets/labeled/<name>/`
+- [x] **2.33** nzigulic: identify nc=11 anonymous class mapping via bbox visualization on sample images → add `"nzigulic/military-equipment"` entry to `DATASET_CLASS_MAPS` + `BASELINE_DATASETS` in `train_baseline.py`
+- [ ] **2.34** piterfm: GDINO auto-label all ~27k images → nc=3 YOLO dataset
+  - Initial run (5k, generic prompt): 4168/5000 labeled (84%); 796 no-detections
+  - Targeted re-label of no-detections (category-aware prompts): +683 recovered → 97% coverage
+  - Full re-run in progress: `tasks/relabel_piterfm.py` on all 27,714 images with category-aware prompts
+  - 117 undetectable images moved to `kaggle_datasets/to_annotate_manually/` (destroyed/satellite imagery)
+  - On completion: raw piterfm source replaced by labeled YOLO dataset
+- [ ] **2.35** Spot-check label quality: review sample images from piterfm_labeled and nzigulic with bboxes overlaid
 
 #### Step 2 — Train specialists (all 5 Kaggle datasets as corpus)
 
@@ -494,65 +493,50 @@ yolo-training-template/                  ← monorepo root
 
 ## 5. Next Steps
 
-Phase 0 ✅, Phase 1 ✅, Phase 2a–2e (code) ✅. **Blocked on GDINO install (task 2.31).**
+Phase 0 ✅, Phase 1 ✅, Phase 2a–2e (code) ✅, GDINO installed ✅.
 
-**Immediate next — unblock GDINO:**
+**Immediate next — Step 1: Prep nzigulic + piterfm (tasks 2.33–2.35)**
+
+nzigulic already has YOLO labels on disk but nc=11 with anonymous class names:
+1. Visually inspect sample images per class ID to determine the mapping
+2. Add `"nzigulic/military-equipment"` to `DATASET_CLASS_MAPS` + `BASELINE_DATASETS` in `ml-engine/tasks/train_baseline.py`
+
+piterfm has zero labels — run GDINO (~2–3 hrs):
 ```bash
-pip install groundingdino-py
-# Download checkpoint (~694MB):
-wget https://github.com/IDEA-Research/GroundingDINO/releases/download/v0.1.0-alpha/groundingdino_swint_ogc.pth -O ml-engine/groundingdino_swint_ogc.pth
-# Verify:
-cd ml-engine && python -c "from groundingdino.util.inference import load_model; print('GDINO ok')"
+cd ml-engine && python tasks/autolabel_kaggle.py --dataset piterfm --max-images 5000
+# output: media/kaggle_datasets/labeled/piterfm_labeled/
 ```
+Then spot-check 20 images per dataset with bboxes (task 2.35).
 
-**Then implement + run autolabel_kaggle.py (task 2.32–2.35):**
+**Then — Step 2: Train specialists (tasks 2.36–2.39)**
 ```bash
-# After implementing tasks/autolabel_kaggle.py:
-cd ml-engine && python tasks/autolabel_kaggle.py --dataset nzigulic
-cd ml-engine && python tasks/autolabel_kaggle.py --dataset piterfm
-```
-
-**Then specialist training (tasks 2.36–2.39) — GPU, no Docker needed:**
-```bash
-cd ml-engine && python tests/test_baseline_train.py --model-type AIRCRAFT --epochs 10 --keep
-cd ml-engine && python tests/test_baseline_train.py --model-type VEHICLE --epochs 10 --keep
-cd ml-engine && python tests/test_baseline_train.py --model-type PERSONNEL --epochs 10 --keep
-
-# 2. Download correct missing datasets
 cd ml-engine
-python -c "
-import os; os.environ['KAGGLEHUB_CACHE']='media/kaggle_datasets'
-import kagglehub
-kagglehub.dataset_download('nzigulic/military-equipment')
-kagglehub.dataset_download('shakedlevnat/military-aircraft-database-prepared-for-yolo')
-kagglehub.dataset_download('piterfm/2022-ukraine-russia-war-equipment-losses-oryx')
-"
-
-# 3. Download real footage (need DOWNLOADED clip for E2E render test)
-cd scraper-engine && python tests/test_scrape_live.py
-
-# 4. Run render E2E on the real downloaded clip
-cd ml-engine && python tests/test_pipeline_e2e.py --keep
-
-# 5. Run full baseline training — GENERAL first, then specialists in parallel
-python tests/test_baseline_train.py --model-type GENERAL --epochs 50 --keep
-# after GENERAL finishes, run in parallel:
-python tests/test_baseline_train.py --model-type SOLDIER  --epochs 50 --keep
-python tests/test_baseline_train.py --model-type VEHICLE  --epochs 50 --keep
-python tests/test_baseline_train.py --model-type AIRCRAFT --epochs 50 --keep
-
-# 6. Re-run render E2E — detections should now be meaningful with baseline weights
-python tests/test_pipeline_e2e.py --keep
+python tests/test_baseline_train.py --model-type AIRCRAFT  --epochs 10 --keep
+python tests/test_baseline_train.py --model-type VEHICLE   --epochs 10 --keep
+python tests/test_baseline_train.py --model-type PERSONNEL --epochs 10 --keep
+# Each run produces: runs/baseline/<TYPE>/baseline_<TYPE>_<id>/weights/best.pt
+# Target: mAP50 > 0.4 per specialist before proceeding
 ```
 
-**After Phase 2d is complete → Phase 3: Web Application (FastAPI + Vue 3)**
+**Then — Step 3: Train generalist (task 2.40)**
 ```bash
-# 3.1  scaffold web-app/backend/ — FastAPI + SQLAlchemy async + Alembic
-# 3.2  ORM models + first Alembic migration
-# 3.3  Public API: GET /api/feed, GET /api/archive, POST /api/submit
-# 3.4  Admin API: GET /api/admin/datasets, POST /api/admin/train + JWT auth
-# 3.5  WebSocket training progress endpoint
-# 3.6  Vue 3 + Vite + Tailwind dark theme scaffold
+python tests/test_baseline_train.py --model-type GENERAL --epochs 10 --keep
+```
+
+**Then — Step 4: E2E validation (tasks 2.41–2.42)**
+```bash
+python tests/test_pipeline_e2e.py --keep        # render with trained weights
+cd ../scraper-engine && python tests/test_scrape_live.py   # full Phase 1→2 flow
+```
+
+**After Phase 2 complete → Phase 3: Web Application (FastAPI + Vue 3)**
+```
+3.1  scaffold web-app/backend/ — FastAPI + SQLAlchemy async + Alembic
+3.2  ORM models + first Alembic migration
+3.3  Public API: GET /api/feed, GET /api/archive, POST /api/submit
+3.4  Admin API: GET /api/admin/datasets, POST /api/admin/train + JWT auth
+3.5  WebSocket training progress endpoint
+3.6  Vue 3 + Vite + Tailwind dark theme scaffold
 ```
 
 ---

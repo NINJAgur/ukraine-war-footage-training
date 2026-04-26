@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     RAW_VIDEO_DIR: Path = Path(__file__).parent.parent / "media" / "raw"
     ANNOTATED_VIDEO_DIR: Path = Path(__file__).parent / "media" / "annotated"
     FRAMES_DIR: Path = Path(__file__).parent / "media" / "frames"
-    DATASETS_DIR: Path = Path(__file__).parent / "media" / "datasets"
+    DATASETS_DIR: Path = Path(__file__).parent / "media" / "scraped_datasets"
 
     # ── Training Runs — under ml-engine/ ─────────────────────────────
     RUNS_DIR: Path = Path(__file__).parent / "runs"

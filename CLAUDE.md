@@ -3,14 +3,6 @@
 
 ---
 
-## Response Format Rules
-
-Every response MUST end with:
-1. **What changed:** One sentence on what was implemented or fixed.
-2. **Session status:** `[session: ~Xk tokens used / Yk remaining]` — warn if < 20k remaining.
-
----
-
 ## Project Identity
 
 **Name:** Ukraine Combat Footage Archival System
@@ -37,10 +29,10 @@ Every response MUST end with:
 - `1=VEHICLE` — tanks, APCs, artillery, radar, all ground military vehicles
 - `2=PERSONNEL` — soldiers, fighters, RPG/ATGM operators
 
-**Cold-start training order (Kaggle, pre-labeled — NO GDINO, NO frames):**
-1. Train AIRCRAFT, VEHICLE, PERSONNEL specialists (kiit-mita + mihprofi + shakedlevnat, remapped to canonical nc=3)
-2. Auto-label nzigulic + piterfm with GDINO → add to fine-tune corpus *(needs GroundingDINO install)*
-3. Train GENERAL only after all 3 specialists pass mAP50 > 0.4
+**Cold-start training order:**
+1. GDINO auto-label nzigulic + piterfm → nc=3 datasets in `media/kaggle_datasets/labeled/` (tasks 2.33–2.34)
+2. Train AIRCRAFT, VEHICLE, PERSONNEL specialists: kiit-mita + mihprofi + shakedlevnat remapped to nc=3 (tasks 2.36–2.38)
+3. Train GENERAL only after all 3 specialists pass mAP50 > 0.4 (task 2.40)
 
 **GDINO auto-label pipeline (15-term "." prompt → post-remap → canonical nc=3):**
 - Core script (`core/autolabeling/auto_label.py`) uses "." separator; outputs GDINO term indices 0-14
@@ -82,7 +74,8 @@ Every response MUST end with:
 |------|-------|
 | Training entry point | `ml-engine/core/main.py` |
 | Inference + multi-model | `ml-engine/core/inference.py` |
-| Auto-label script | `ml-engine/core/autolabeling/auto_label.py` |
+| Auto-label (video clips) | `ml-engine/core/autolabeling/auto_label.py` |
+| Auto-label (image folders) | `ml-engine/tasks/autolabel_kaggle.py` |
 | ML tasks | `ml-engine/tasks/` |
 | Funker530 scraper | `scraper-engine/tasks/scrape_funker530.py` |
 | GeoConfirmed scraper | `scraper-engine/tasks/scrape_geoconfirmed.py` |
@@ -102,7 +95,7 @@ Run Phase 2 test: `cd ml-engine && python tests/test_pipeline_e2e.py`
 |-------|-------|--------|
 | 0 | Agentic workspace | ✅ Complete |
 | 1 | Scraper engine | ✅ Complete |
-| 2 | ML pipeline — GDINO auto-label | 🔄 In progress (2.31 next: install GDINO) |
+| 2 | ML pipeline — GDINO auto-label | 🔄 In progress (2.33 next: run nzigulic GDINO labeling) |
 | 3 | Web application | ⏳ Pending |
 | 4 | Cloud & DevOps | ⏳ Pending |
 
