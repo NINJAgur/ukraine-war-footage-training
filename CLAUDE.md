@@ -6,7 +6,7 @@
 ## Project Identity
 
 **Name:** Ukraine Combat Footage Archival System
-**Repo:** `yolo-training-template` (monorepo)
+**Repo:** `ukraine-war-footage-training` (monorepo, GitHub: NINJAgur/ukraine-war-footage-training)
 **Purpose:** Scrape combat footage → auto-label with GroundingDINO → public display + Admin YOLO retraining panel.
 
 ---
@@ -30,14 +30,19 @@
 - `2=PERSONNEL` — soldiers, fighters, RPG/ATGM operators
 
 **Cold-start training order:**
-1. GDINO auto-label nzigulic + piterfm → nc=3 datasets in `media/kaggle_datasets/labeled/` (tasks 2.33–2.34)
-2. Train AIRCRAFT, VEHICLE, PERSONNEL specialists: kiit-mita + mihprofi + shakedlevnat remapped to nc=3 (tasks 2.36–2.38)
-3. Train GENERAL only after all 3 specialists pass mAP50 > 0.4 (task 2.40)
+1. nzigulic: human-labeled nc=11 → remapped to nc=3 via `DATASET_CLASS_MAPS` in `train_baseline.py` (done ✅)
+2. piterfm: GDINO-labeled with category-aware prompts → nc=3 at `kaggle_datasets/piterfm/labeled/versions/1/` (in progress)
+3. Train AIRCRAFT, VEHICLE, PERSONNEL specialists on all 5 Kaggle datasets (tasks 2.36–2.38)
+4. Train GENERAL only after all 3 specialists pass mAP50 > 0.4 (task 2.40)
 
-**GDINO auto-label pipeline (15-term "." prompt → post-remap → canonical nc=3):**
-- Core script (`core/autolabeling/auto_label.py`) uses "." separator; outputs GDINO term indices 0-14
-- `tasks/auto_label.py` remaps indices 0-14 → canonical 0-2 via `GDINO_CLASS_TO_MODEL`; overwrites data.yaml with nc=3
-- All on-disk LABELED datasets are always nc=3 with canonical IDs
+**GDINO auto-label pipeline (category-aware "." prompt → canonical nc=3):**
+- Video clips: `core/autolabeling/auto_label.py` — extracts frames, runs GDINO, remaps via `GDINO_CLASS_TO_MODEL`
+- Any image folder: `tasks/autolabel_kaggle.py --path <dir> [--prompt <terms>]` — universal, recursive
+- piterfm specifically: `tasks/relabel_piterfm.py` — category-aware per-image prompts (Aircraft→"aircraft", Tanks→"tank" etc.)
+- All on-disk labeled datasets are nc=3 with canonical IDs baked in
+
+**Shared DB models:** `shared/db/models.py` — single source of truth for all ORM models.
+All services import via re-export stubs (`ml-engine/db/models.py`, `scraper-engine/db/models.py`, `web-app/backend/db/models.py`).
 
 **Fine-tune loop (after enough scraped clips):**
 - Extract frames from scraped clips → GDINO auto-label (3 classes) → dataset → fine-tune from baseline
@@ -72,15 +77,19 @@
 
 | What | Where |
 |------|-------|
+| Shared ORM models | `shared/db/models.py` |
 | Training entry point | `ml-engine/core/main.py` |
 | Inference + multi-model | `ml-engine/core/inference.py` |
 | Auto-label (video clips) | `ml-engine/core/autolabeling/auto_label.py` |
-| Auto-label (image folders) | `ml-engine/tasks/autolabel_kaggle.py` |
+| Auto-label (any image folder) | `ml-engine/tasks/autolabel_kaggle.py` |
+| piterfm category-aware labeler | `ml-engine/tasks/relabel_piterfm.py` |
+| Baseline training task | `ml-engine/tasks/train_baseline.py` |
 | ML tasks | `ml-engine/tasks/` |
 | Funker530 scraper | `scraper-engine/tasks/scrape_funker530.py` |
 | GeoConfirmed scraper | `scraper-engine/tasks/scrape_geoconfirmed.py` |
 | Content filter | `scraper-engine/tasks/_filter.py` |
 | Phase 1 test | `scraper-engine/tests/test_scrape_live.py` |
+| Phase 2 baseline test | `ml-engine/tests/test_baseline_train.py` |
 | Phase 2 E2E test | `ml-engine/tests/test_pipeline_e2e.py` |
 | Project plan | `PROJECT_PLAN.md` |
 
@@ -95,7 +104,7 @@ Run Phase 2 test: `cd ml-engine && python tests/test_pipeline_e2e.py`
 |-------|-------|--------|
 | 0 | Agentic workspace | ✅ Complete |
 | 1 | Scraper engine | ✅ Complete |
-| 2 | ML pipeline — GDINO auto-label | 🔄 In progress (2.33 next: run nzigulic GDINO labeling) |
+| 2 | ML pipeline — baseline training | 🔄 In progress (2.34 piterfm labeling running, next: 2.36–2.38 specialist training) |
 | 3 | Web application | ⏳ Pending |
 | 4 | Cloud & DevOps | ⏳ Pending |
 
