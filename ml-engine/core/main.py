@@ -22,7 +22,7 @@ def detect_dataset_structure(dataset_path):
     paths = {}
     subdirs = [d for d in os.listdir(dataset_path) if os.path.isdir(os.path.join(dataset_path, d))]
     logging.info(f"Detected subdirs in dataset: {subdirs}")
-    splits = ['train', 'valid', 'test']
+    splits = ['train', 'valid', 'val', 'test']
     for split in splits:
         key_split = 'val' if split == 'valid' else split
         if split in subdirs:

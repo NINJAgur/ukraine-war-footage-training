@@ -16,7 +16,6 @@ Triggered by Admin "Train Baseline" in the web UI, which creates one
 TrainingRun per model type and dispatches this task four times.
 """
 import logging
-import os
 import shutil
 import sys
 import yaml as _yaml
@@ -67,6 +66,21 @@ DATASET_CLASS_MAPS: Dict[str, Dict[int, int]] = {
     "shakedlevnat/military-aircraft-database-prepared-for-yolo": {
         **{i: 0 for i in _SHAKED_AIRCRAFT},  # all 83 types → aircraft
     },
+    # nzigulic/military-equipment (nc=11): visually identified via contact sheets
+    # classes 0-3, 8-10 are ground vehicles; 4-7 are aircraft; no personnel
+    "nzigulic/military-equipment": {
+        0: 1,   # tanks/APCs (aerial + parade)     → vehicle
+        1: 1,   # trucks/vehicles (top-down)        → vehicle
+        2: 1,   # wheeled APC                       → vehicle
+        3: 1,   # tanks (top-down)                  → vehicle
+        4: 0,   # attack helicopters                → aircraft
+        5: 0,   # transport helicopters (Chinook)   → aircraft
+        6: 0,   # drones / small aircraft           → aircraft
+        7: 0,   # fixed-wing transport              → aircraft
+        8: 1,   # wheeled SPAA / armored vehicle    → vehicle
+        9: 1,   # towed artillery                   → vehicle
+        10: 1,  # vehicles (thermal/night-vision)   → vehicle
+    },
 }
 
 # Pre-labeled Kaggle datasets per model type.
@@ -75,9 +89,11 @@ BASELINE_DATASETS: Dict[ModelType, List[str]] = {
     ModelType.AIRCRAFT: [
         "mihprofi/drone-detect",
         "shakedlevnat/military-aircraft-database-prepared-for-yolo",
+        "nzigulic/military-equipment",
     ],
     ModelType.VEHICLE: [
         "sudipchakrabarty/kiit-mita",
+        "nzigulic/military-equipment",
     ],
     ModelType.PERSONNEL: [
         "sudipchakrabarty/kiit-mita",
@@ -86,6 +102,7 @@ BASELINE_DATASETS: Dict[ModelType, List[str]] = {
         "mihprofi/drone-detect",
         "shakedlevnat/military-aircraft-database-prepared-for-yolo",
         "sudipchakrabarty/kiit-mita",
+        "nzigulic/military-equipment",
     ],
 }
 
@@ -124,18 +141,34 @@ def _remap_label_file(src: Path, dst: Path, class_map: Dict[int, int]) -> int:
     return written
 
 
+def _local_dataset_path(handle: str) -> Path:
+    """Return the on-disk root for a pre-downloaded Kaggle dataset handle."""
+    owner, name = handle.split("/")
+    # Datasets live at: KAGGLE_CACHE_DIR/<owner>/<name>/versions/<latest>/
+    base = settings.KAGGLE_CACHE_DIR / owner / name / "versions"
+    if not base.exists():
+        raise FileNotFoundError(
+            f"Dataset not found locally: {base}\n"
+            f"Download it first: kagglehub.dataset_download('{handle}')"
+        )
+    versions = sorted(base.iterdir(), key=lambda p: int(p.name) if p.name.isdigit() else 0)
+    if not versions:
+        raise FileNotFoundError(f"No version directories found under {base}")
+    return versions[-1]
+
+
 def _merge_datasets(
     dataset_handles: List[str],
     combined_dir: Path,
     task_id: str,
 ) -> Tuple[Path, int, list]:
     """
-    Download and merge multiple Kaggle datasets into one combined YOLO directory.
+    Merge pre-downloaded Kaggle datasets into one combined YOLO directory.
     Each dataset's labels are remapped to CANONICAL_CLASSES before copying.
 
     Returns (yaml_path, CANONICAL_NC, CANONICAL_CLASSES).
     """
-    from main import download_dataset, detect_dataset_structure
+    from main import detect_dataset_structure
 
     combined_dir.mkdir(parents=True, exist_ok=True)
     train_img = combined_dir / "train" / "images"
@@ -153,7 +186,7 @@ def _merge_datasets(
             raise ValueError(f"No DATASET_CLASS_MAPS entry for '{handle}' — add one before training")
 
         logger.info(f"[{task_id}] Merging {handle}")
-        dataset_path = download_dataset(handle)
+        dataset_path = str(_local_dataset_path(handle))
         paths, dataset_path = detect_dataset_structure(dataset_path)
         if not paths:
             raise ValueError(f"No train/val structure found in {handle}")
@@ -240,9 +273,6 @@ def train_baseline(self, training_run_id: int) -> dict:
     datasets = BASELINE_DATASETS.get(model_type)
     if not datasets:
         raise ValueError(f"No baseline datasets configured for model_type={model_type}")
-
-    os.environ["KAGGLEHUB_CACHE"] = str(settings.KAGGLE_CACHE_DIR)
-    logger.info(f"[{self.request.id}] Kaggle cache → {settings.KAGGLE_CACHE_DIR}")
 
     from main import train_model
 
