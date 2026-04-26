@@ -460,7 +460,7 @@ yolo-training-template/                  ← monorepo root
 ### Phase 3 — Web Application
 
 - [ ] **3.1** Scaffold `web-app/backend/` + `requirements.txt`
-- [ ] **3.2** ORM models + Alembic migration
+- [x] **3.2** ORM models → `shared/db/models.py` (single source of truth); re-export stubs in ml-engine, scraper-engine, web-app
 - [ ] **3.3** Pydantic v2 schemas
 - [ ] **3.4** Public API endpoints
 - [ ] **3.5** Admin API endpoints + WebSocket
