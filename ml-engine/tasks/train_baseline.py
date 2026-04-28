@@ -7,17 +7,16 @@ No GDINO, no frame extraction — Kaggle data is already labeled.
 All datasets are remapped to the canonical 3-class vocabulary before merging:
   0=AIRCRAFT  1=VEHICLE  2=PERSONNEL
 
-  AIRCRAFT  — mihprofi/drone-detect + shakedlevnat/military-aircraft-...
-  VEHICLE   — kiit-mita
+  AIRCRAFT  — mihprofi/drone-detect + shakedlevnat/military-aircraft-... + nzigulic + piterfm
+  VEHICLE   — kiit-mita + nzigulic + piterfm
   PERSONNEL — kiit-mita
-  GENERAL   — all three above combined (trains after specialists)
+  GENERAL   — all five datasets combined (trains after specialists)
 
 Triggered by Admin "Train Baseline" in the web UI, which creates one
 TrainingRun per model type and dispatches this task four times.
 """
 import logging
 import shutil
-import sys
 import yaml as _yaml
 from datetime import datetime
 from pathlib import Path
@@ -27,8 +26,6 @@ from celery_app import celery_app
 from config import settings
 from db.models import ModelType, TrainingRun, TrainingStage, TrainingStatus
 from db.session import get_session
-
-sys.path.insert(0, str(Path(__file__).parent.parent / "core"))
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +78,9 @@ DATASET_CLASS_MAPS: Dict[str, Dict[int, int]] = {
         9: 1,   # towed artillery                   → vehicle
         10: 1,  # vehicles (thermal/night-vision)   → vehicle
     },
+    # piterfm/2022-ukraine-russia-war-equipment-losses-oryx: already nc=3 canonical — GDINO-labeled with category-aware prompts
+    # no personnel (Oryx tracks equipment losses only)
+    "piterfm/2022-ukraine-russia-war-equipment-losses-oryx": {0: 0, 1: 1, 2: 2},
 }
 
 BASELINE_DATASETS: Dict[ModelType, List[str]] = {
@@ -88,10 +88,12 @@ BASELINE_DATASETS: Dict[ModelType, List[str]] = {
         "mihprofi/drone-detect",
         "shakedlevnat/military-aircraft-database-prepared-for-yolo",
         "nzigulic/military-equipment",
+        "piterfm/2022-ukraine-russia-war-equipment-losses-oryx",
     ],
     ModelType.VEHICLE: [
         "sudipchakrabarty/kiit-mita",
         "nzigulic/military-equipment",
+        "piterfm/2022-ukraine-russia-war-equipment-losses-oryx",
     ],
     ModelType.PERSONNEL: [
         "sudipchakrabarty/kiit-mita",
@@ -101,6 +103,7 @@ BASELINE_DATASETS: Dict[ModelType, List[str]] = {
         "shakedlevnat/military-aircraft-database-prepared-for-yolo",
         "sudipchakrabarty/kiit-mita",
         "nzigulic/military-equipment",
+        "piterfm/2022-ukraine-russia-war-equipment-losses-oryx",
     ],
 }
 
@@ -166,7 +169,7 @@ def _merge_datasets(
 
     Returns (yaml_path, CANONICAL_NC, CANONICAL_CLASSES).
     """
-    from main import detect_dataset_structure
+    from core.main import detect_dataset_structure
 
     combined_dir.mkdir(parents=True, exist_ok=True)
     train_img = combined_dir / "train" / "images"
@@ -272,7 +275,7 @@ def train_baseline(self, training_run_id: int) -> dict:
     if not datasets:
         raise ValueError(f"No baseline datasets configured for model_type={model_type}")
 
-    from main import train_model
+    from core.main import train_model
 
     run_dir      = settings.RUNS_DIR / "baseline" / model_type.value
     run_name     = f"baseline_{model_type.value}_{training_run_id}"

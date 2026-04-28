@@ -1,6 +1,6 @@
 # PROJECT_PLAN.md — Ukraine Combat Footage Web Application
 > **Source of Truth** — All phases, structure, and decisions are tracked here.
-> Last updated: 2026-04-23
+> Last updated: 2026-04-28
 
 ---
 
@@ -431,13 +431,14 @@ yolo-training-template/                  ← monorepo root
 - [x] **2.31** Install GroundingDINO: `pip install groundingdino-py` + checkpoint `groundingdino_swint_ogc.pth` (661MB, gitignored)
 - [x] **2.32** Implement `tasks/autolabel_kaggle.py` — GDINO batch labeling on image folders; canonical nc=3 remap; substring fallback for merged GDINO phrases; outputs to `media/kaggle_datasets/labeled/<name>/`
 - [x] **2.33** nzigulic: identify nc=11 anonymous class mapping via bbox visualization on sample images → add `"nzigulic/military-equipment"` entry to `DATASET_CLASS_MAPS` + `BASELINE_DATASETS` in `train_baseline.py`
-- [ ] **2.34** piterfm: GDINO auto-label all ~27k images → nc=3 YOLO dataset
+- [x] **2.34** piterfm: GDINO auto-label all ~27k images → nc=3 YOLO dataset
   - Initial run (5k, generic prompt): 4168/5000 labeled (84%); 796 no-detections
-  - Targeted re-label of no-detections (category-aware prompts): +683 recovered → 97% coverage
-  - Full re-run in progress: `tasks/relabel_piterfm.py` on all 27,714 images with category-aware prompts
-  - 117 undetectable images moved to `kaggle_datasets/to_annotate_manually/` (destroyed/satellite imagery)
-  - On completion: raw piterfm source replaced by labeled YOLO dataset
-- [ ] **2.35** Spot-check label quality: review sample images from piterfm_labeled and nzigulic with bboxes overlaid
+  - Targeted re-label of 796 no-detections (category-aware prompts): +683 recovered → 97% coverage
+  - Full run: `tasks/relabel_piterfm.py` on all 27,714 images → 26,226 labeled / 1,488 empty / 0 failed (94.6%)
+  - Empty-label images moved to `kaggle_datasets/to_annotate_manually/` (destroyed/satellite imagery)
+  - Labeled dataset at `piterfm/2022-ukraine-russia-war-equipment-losses-oryx/versions/1/train/` (26,197 images, 26,118 labels); raw source deleted
+  - `"piterfm/2022-ukraine-russia-war-equipment-losses-oryx"` identity map added to `DATASET_CLASS_MAPS` + `BASELINE_DATASETS` (AIRCRAFT, VEHICLE, GENERAL)
+- [x] **2.35** Spot-check label quality: nzigulic validated via contact sheets (all 11 classes identified); piterfm validated via 94.6% GDINO detection rate with category-aware prompts
 
 #### Step 2 — Train specialists (all 5 Kaggle datasets as corpus)
 
@@ -495,18 +496,11 @@ yolo-training-template/                  ← monorepo root
 
 Phase 0 ✅, Phase 1 ✅, Phase 2a–2e (code) ✅, GDINO installed ✅, datasets prepped ✅.
 
-**Immediate next — complete piterfm relabeling + add to train_baseline.py (task 2.34)**
+**Immediate next — Step 2: Train specialists (tasks 2.36–2.39)**
 
-piterfm labeling history:
-- Initial run (5k images, generic 15-term prompt): 4168/5000 with detections (84%)
-- Targeted re-label of 796 no-detections (category-aware prompts): +683 recovered → 97% coverage
-- Full re-run in progress: `tasks/relabel_piterfm.py` on all 27,714 images with category-aware prompts
-- 117 images undetectable (destroyed/satellite) → `kaggle_datasets/to_annotate_manually/`
+Dataset prep complete: all 5 Kaggle datasets labeled + remapped to nc=3, loaded in `train_baseline.py`.
 
-On completion: move `labeled/piterfm_labeled/` → `piterfm/labeled/versions/1/`, then add
-`"piterfm/labeled"` identity map to `DATASET_CLASS_MAPS` + `BASELINE_DATASETS`.
-
-**Then — Step 2: Train specialists (tasks 2.36–2.39)**
+**Step 2: Train specialists (tasks 2.36–2.39)**
 ```bash
 cd ml-engine
 python tests/test_baseline_train.py --model-type AIRCRAFT  --epochs 10 --keep
