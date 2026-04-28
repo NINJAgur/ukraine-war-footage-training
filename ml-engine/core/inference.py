@@ -50,7 +50,9 @@ def infer_video(model, video_path, conf_thresh=0.5, save_path=None, no_display=F
     if save_path is None and no_display:
         save_path = "inference_result.mp4"
 
-    temp_path = "temp_output.mp4"
+    import tempfile
+    tmp_fd, temp_path = tempfile.mkstemp(suffix=".mp4")
+    os.close(tmp_fd)
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     fps = cap.get(cv2.CAP_PROP_FPS) or 30
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -152,7 +154,9 @@ def infer_video_multi_model(
     if save_path is None and no_display:
         save_path = "inference_multi_result.mp4"
 
-    temp_path = "temp_multi_output.mp4"
+    import tempfile
+    tmp_fd, temp_path = tempfile.mkstemp(suffix=".mp4")
+    os.close(tmp_fd)
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     out = cv2.VideoWriter(temp_path, fourcc, fps, (width, height))
     if not out.isOpened():
