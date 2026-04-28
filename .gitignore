@@ -154,3 +154,7 @@ ml-engine/media/
 # YOLO data.yaml files are generated — don't commit
 data.yaml
 *.pth
+# Claude Code internals
+.claude/scheduled_tasks.lock
+# Windows crash dumps
+*.stackdump
