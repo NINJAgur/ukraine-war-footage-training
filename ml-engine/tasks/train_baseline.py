@@ -83,6 +83,13 @@ DATASET_CLASS_MAPS: Dict[str, Dict[int, int]] = {
     "piterfm/2022-ukraine-russia-war-equipment-losses-oryx": {0: 0, 1: 1, 2: 2},
 }
 
+SPECIALIST_CLASS: Dict[ModelType, Optional[int]] = {
+    ModelType.AIRCRAFT:  0,
+    ModelType.VEHICLE:   1,
+    ModelType.PERSONNEL: 2,
+    ModelType.GENERAL:   None,
+}
+
 BASELINE_DATASETS: Dict[ModelType, List[str]] = {
     ModelType.AIRCRAFT: [
         "mihprofi/drone-detect",
@@ -162,12 +169,17 @@ def _merge_datasets(
     dataset_handles: List[str],
     combined_dir: Path,
     task_id: str,
+    specialist_class: Optional[int] = None,
 ) -> Tuple[Path, int, list]:
     """
     Merge pre-downloaded Kaggle datasets into one combined YOLO directory.
     Each dataset's labels are remapped to CANONICAL_CLASSES before copying.
 
-    Returns (yaml_path, CANONICAL_NC, CANONICAL_CLASSES).
+    specialist_class: when set (0/1/2), only annotations mapping to that
+    canonical ID are kept and remapped to 0 — producing a true nc=1
+    specialist.  None → nc=3 GENERAL model (all classes kept as-is).
+
+    Returns (yaml_path, nc, class_names).
     """
     from core.main import detect_dataset_structure
 
@@ -185,6 +197,14 @@ def _merge_datasets(
         class_map = DATASET_CLASS_MAPS.get(handle)
         if class_map is None:
             raise ValueError(f"No DATASET_CLASS_MAPS entry for '{handle}' — add one before training")
+
+        # For specialist models: drop all annotations except the target class,
+        # then remap that class to 0 (nc=1).
+        if specialist_class is not None:
+            class_map = {
+                k: (0 if v == specialist_class else -1)
+                for k, v in class_map.items()
+            }
 
         logger.info(f"[{task_id}] Merging {handle}")
         dataset_path = str(_local_dataset_path(handle))
@@ -221,9 +241,16 @@ def _merge_datasets(
 
         logger.info(f"[{task_id}] Done merging {handle}")
 
+    if specialist_class is not None:
+        nc    = 1
+        names = [CANONICAL_CLASSES[specialist_class]]
+    else:
+        nc    = CANONICAL_NC
+        names = CANONICAL_CLASSES
+
     logger.info(
         f"[{task_id}] Combined: {total_train} train  {total_val} val  "
-        f"nc={CANONICAL_NC}  names={CANONICAL_CLASSES}"
+        f"nc={nc}  names={names}"
     )
 
     yaml_path = combined_dir / "data.yaml"
@@ -233,14 +260,14 @@ def _merge_datasets(
                 "path":  str(combined_dir),
                 "train": "train/images",
                 "val":   "val/images",
-                "nc":    CANONICAL_NC,
-                "names": CANONICAL_CLASSES,
+                "nc":    nc,
+                "names": names,
             },
             f,
             default_flow_style=False,
         )
 
-    return yaml_path, CANONICAL_NC, CANONICAL_CLASSES
+    return yaml_path, nc, names
 
 
 @celery_app.task(
@@ -251,7 +278,7 @@ def _merge_datasets(
     max_retries=1,
     default_retry_delay=300,
 )
-def train_baseline(self, training_run_id: int) -> dict:
+def train_baseline(self, training_run_id: int, weights: str = None) -> dict:
     """
     Stage 1: download Kaggle dataset(s) for this run's model_type,
     remap to canonical 8 classes, train YOLOv8m, save best.pt.
@@ -275,6 +302,8 @@ def train_baseline(self, training_run_id: int) -> dict:
     if not datasets:
         raise ValueError(f"No baseline datasets configured for model_type={model_type}")
 
+    specialist_class = SPECIALIST_CLASS[model_type]
+
     from core.main import train_model
 
     run_dir      = settings.RUNS_DIR / "baseline" / model_type.value
@@ -287,7 +316,8 @@ def train_baseline(self, training_run_id: int) -> dict:
 
     try:
         yaml_path, nc, class_names = _merge_datasets(
-            datasets, combined_dir, self.request.id
+            datasets, combined_dir, self.request.id,
+            specialist_class=specialist_class,
         )
         logger.info(
             f"[{self.request.id}] [{model_type.value}] "
@@ -301,7 +331,7 @@ def train_baseline(self, training_run_id: int) -> dict:
             device=settings.GPU_DEVICE,
             project=str(run_dir),
             name=run_name,
-            weights=None,
+            weights=weights,
             resume=False,
         )
         all_metrics = _extract_metrics(results)
