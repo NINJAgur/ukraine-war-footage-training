@@ -1,6 +1,6 @@
 # PROJECT_PLAN.md — Ukraine Combat Footage Web Application
 > **Source of Truth** — All phases, structure, and decisions are tracked here.
-> Last updated: 2026-04-28
+> Last updated: 2026-05-02
 
 ---
 
@@ -442,7 +442,7 @@ yolo-training-template/                  ← monorepo root
 
 #### Step 2 — Train specialists (all 5 Kaggle datasets as corpus)
 
-- [ ] **2.36** Run `test_baseline_train.py --model-type AIRCRAFT --epochs 10 --keep`
+- [x] **2.36** Run `test_baseline_train.py --model-type AIRCRAFT --epochs 10 --keep` — mAP50=0.9269 @ epoch 10 ✅
 - [ ] **2.37** Run `test_baseline_train.py --model-type VEHICLE --epochs 10 --keep`
 - [ ] **2.38** Run `test_baseline_train.py --model-type PERSONNEL --epochs 10 --keep`
 - [ ] **2.39** Evaluate each: mAP50 > 0.4 = acceptable; increase epochs if below
@@ -460,20 +460,34 @@ yolo-training-template/                  ← monorepo root
 
 ### Phase 3 — Web Application
 
-- [ ] **3.1** Scaffold `web-app/backend/` + `requirements.txt`
+- [x] **3.1** Scaffold `web-app/backend/` + `requirements.txt`
 - [x] **3.2** ORM models → `shared/db/models.py` (single source of truth); re-export stubs in ml-engine, scraper-engine, web-app
-- [ ] **3.3** Pydantic v2 schemas
-- [ ] **3.4** Public API endpoints
-- [ ] **3.5** Admin API endpoints + WebSocket
-- [ ] **3.6** JWT authentication
-- [ ] **3.7** Scaffold Vue 3 frontend
-- [ ] **3.8** Dark tactical Tailwind theme
-- [ ] **3.9** `PublicFeed.vue`
-- [ ] **3.10** `Archive.vue`
-- [ ] **3.11** `Submit.vue`
-- [ ] **3.12** `AdminLogin.vue`
-- [ ] **3.13** `AdminInbox.vue`
-- [ ] **3.14** `TrainModel.vue`
+- [x] **3.3** Pydantic v2 schemas
+- [x] **3.4** Public API endpoints
+- [x] **3.5** Admin API endpoints (WebSocket TBD)
+- [x] **3.6** JWT authentication
+- [x] **3.7** Scaffold Vue 3 + Vite + Tailwind + Pinia + vue-router frontend
+- [x] **3.8** Full dark tactical design — Space Grotesk + IBM Plex Mono; `#080a0b` base; amber `oklch(0.65 0.18 55deg)` accent; scanline + noise overlays; crosshair cursor
+- [x] **3.9** `PublicFeed.vue` — full public homepage (assembled from components below)
+  - `AppNav.vue` — fixed nav; logo mark; scroll-spy active section; "Admin Login" CTA
+  - `HeroSection.vue` — full-bleed generalist ML canvas bg + `hero.mp4` video; hero headline + stats
+  - `TickerBar.vue` — scrolling LIVE ticker with live status items
+  - `MissionSection.vue` — 3-col mission statement grid
+  - `DataStrip.vue` — 4-stat number strip (147K clips, 38+ countries, 2.4TB, 12K events)
+  - `MLDetectionSection.vue` — 3 specialist ML detection cards with video backgrounds
+  - `MLCard.vue` — expanding parallelogram/trapezoid card; IntersectionObserver scroll trigger; animated canvas bounding-box overlay (different style per category: generalist=boxes, aircraft=radar sweep+diamonds, personnel=skeleton, vehicles=tank detail)
+  - `RadarCanvas.vue` — reusable animated SIGINT-node radar background
+  - `ArchiveSection.vue` — footage grid; filter by detection class (Aircraft/Vehicle/Personnel) + source (Funker530/GeoConfirmed); search; click-to-open modal with Teleport
+  - `FootageCard.vue` — card with meta overlay, play button hover, status tag
+  - `FootageModal.vue` — fixed modal via `<Teleport to="body">`; video placeholder; metadata grid
+  - `CapabilitiesSection.vue` — 2×2 grid: Automated Ingestion / YOLO Detection / GDINO Labeling / Open Archive
+  - `AboutSection.vue` — project info + tech stack list
+  - `SiteFooter.vue` — 4-col footer
+- [ ] **3.10** `Archive.vue` — dedicated archive page (pagination, expanded filters)
+- [ ] **3.11** `Submit.vue` — footage submission form
+- [x] **3.12** `AdminLogin.vue` — JWT login form (UI complete, backend not connected)
+- [x] **3.13** `AdminPanel.vue` — clips table + training run history + model training controls (UI complete, backend not connected; consolidates planned AdminInbox + TrainModel)
+- [ ] **3.14** WebSocket live epoch/loss feed in AdminPanel (pending backend)
 - [ ] **3.15** Integration test
 
 ---
@@ -496,14 +510,11 @@ yolo-training-template/                  ← monorepo root
 
 Phase 0 ✅, Phase 1 ✅, Phase 2a–2e (code) ✅, GDINO installed ✅, datasets prepped ✅.
 
-**Immediate next — Step 2: Train specialists (tasks 2.36–2.39)**
+**AIRCRAFT complete (mAP50=0.9269). Frontend UI (Phase 3.9–3.13) complete — not yet connected to backend.**
 
-Dataset prep complete: all 5 Kaggle datasets labeled + remapped to nc=3, loaded in `train_baseline.py`.
-
-**Step 2: Train specialists (tasks 2.36–2.39)**
+**Immediate next — Step 2 continued: VEHICLE + PERSONNEL specialists (2.37–2.38)**
 ```bash
 cd ml-engine
-python tests/test_baseline_train.py --model-type AIRCRAFT  --epochs 10 --keep
 python tests/test_baseline_train.py --model-type VEHICLE   --epochs 10 --keep
 python tests/test_baseline_train.py --model-type PERSONNEL --epochs 10 --keep
 # Each run produces: runs/baseline/<TYPE>/baseline_<TYPE>_<id>/weights/best.pt
