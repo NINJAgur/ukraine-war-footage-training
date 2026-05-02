@@ -955,6 +955,7 @@ footer { background: var(--bg-1); border-top: 1px solid var(--fg-3); padding: cl
   background: repeating-linear-gradient(-45deg, transparent, transparent 18px, rgba(255,255,255,0.012) 18px, rgba(255,255,255,0.012) 19px);
 }
 .modal-video-label { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--fg-3); text-align: center; line-height: 2; z-index: 1; }
+.modal-video { width: 100%; height: 100%; object-fit: contain; display: block; }
 .modal-meta-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--fg-3); margin-bottom: 24px; }
 .modal-meta-cell { background: var(--bg-2); padding: 16px; }
 .modal-meta-key { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--fg-2); margin-bottom: 4px; }

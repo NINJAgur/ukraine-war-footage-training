@@ -14,7 +14,16 @@
       </div>
       <div class="modal-body">
         <div class="modal-video-placeholder">
-          <div class="modal-video-label">
+          <video
+            v-if="item.videoUrl"
+            :src="item.videoUrl"
+            class="modal-video"
+            controls
+            autoplay
+            muted
+            playsinline
+          />
+          <div v-else class="modal-video-label">
             ANNOTATED FOOTAGE<br>{{ item.detClass }} — {{ item.source }}
           </div>
         </div>
