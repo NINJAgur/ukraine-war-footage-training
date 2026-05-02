@@ -97,6 +97,62 @@ def infer_video(model, video_path, conf_thresh=0.5, save_path=None, no_display=F
 
 
 
+def _draw_tactical_box(frame, x1, y1, x2, y2, conf, label, color):
+    """Draw a tactical HUD-style bounding box matching the frontend canvas aesthetic."""
+    import numpy as np
+
+    h_img, w_img = frame.shape[:2]
+    alpha_overlay = np.zeros_like(frame, dtype=np.uint8)
+
+    # Translucent fill
+    cv2.rectangle(alpha_overlay, (x1, y1), (x2, y2), color, -1)
+    cv2.addWeighted(alpha_overlay, 0.08, frame, 1.0, 0, frame)
+
+    # Outer box
+    cv2.rectangle(frame, (x1, y1), (x2, y2), color, 1)
+
+    # Corner tick marks (tactical HUD style)
+    tk = max(8, int(min(x2 - x1, y2 - y1) * 0.15))
+    thick = 2
+    # top-left
+    cv2.line(frame, (x1, y1 + tk), (x1, y1), color, thick)
+    cv2.line(frame, (x1, y1), (x1 + tk, y1), color, thick)
+    # top-right
+    cv2.line(frame, (x2 - tk, y1), (x2, y1), color, thick)
+    cv2.line(frame, (x2, y1), (x2, y1 + tk), color, thick)
+    # bottom-left
+    cv2.line(frame, (x1, y2 - tk), (x1, y2), color, thick)
+    cv2.line(frame, (x1, y2), (x1 + tk, y2), color, thick)
+    # bottom-right
+    cv2.line(frame, (x2 - tk, y2), (x2, y2), color, thick)
+    cv2.line(frame, (x2, y2), (x2, y2 - tk), color, thick)
+
+    # Label bar (filled background)
+    tag = f"{label}  {int(conf * 100)}%"
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    scale, lthick = 0.38, 1
+    (tw, th), _ = cv2.getTextSize(tag, font, scale, lthick)
+    pad = 4
+    bar_y1 = max(y1 - th - pad * 2, 0)
+    bar_y2 = max(y1, th + pad * 2)
+    cv2.rectangle(frame, (x1, bar_y1), (x1 + tw + pad * 2, bar_y2), color, -1)
+    # Dark text on colored bar
+    dark = (int(color[0] * 0.15), int(color[1] * 0.15), int(color[2] * 0.15))
+    cv2.putText(frame, tag, (x1 + pad, bar_y2 - pad), font, scale, dark, lthick, cv2.LINE_AA)
+
+    # Confidence bar on right edge (vertical)
+    bw = 3
+    box_h = y2 - y1
+    bar_h = int(box_h * conf)
+    cv2.rectangle(frame, (x2 + 2, y2 - bar_h), (x2 + 2 + bw, y2), color, -1)
+
+    # ID tag bottom-right (dim)
+    id_tag = label.split(":")[-1] if ":" in label else ""
+    if id_tag:
+        dim = tuple(max(0, int(c * 0.55)) for c in color)
+        cv2.putText(frame, id_tag, (max(x2 - 60, x1), y2 - 4), font, 0.32, dim, 1, cv2.LINE_AA)
+
+
 def infer_video_multi_model(
     models_info: list,
     video_path: str,
@@ -170,12 +226,7 @@ def infer_video_multi_model(
             break
         for model_idx, (_, label_prefix, color) in enumerate(models_info):
             for (x1, y1, x2, y2, conf_val, label) in all_detections[model_idx].get(idx, []):
-                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-                cv2.putText(
-                    frame, f"{label} {conf_val:.2f}",
-                    (x1, max(y1 - 6, 0)),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA,
-                )
+                _draw_tactical_box(frame, x1, y1, x2, y2, conf_val, label, color)
         out.write(frame)
         idx += 1
 
