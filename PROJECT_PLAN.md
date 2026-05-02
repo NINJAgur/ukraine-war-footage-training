@@ -484,13 +484,36 @@ yolo-training-template/                  ← monorepo root
   - `CapabilitiesSection.vue` — 2×2 grid: Automated Ingestion / YOLO Detection / GDINO Labeling / Open Archive
   - `AboutSection.vue` — project info + tech stack list
   - `SiteFooter.vue` — 4-col footer
-- [ ] **3.10** `Archive.vue` — dedicated archive page (pagination, expanded filters)
-- [ ] **3.11** `Submit.vue` — footage submission form
-- [x] **3.12** `AdminLogin.vue` — JWT login form (UI complete, backend not connected)
-- [x] **3.13** `AdminPanel.vue` — clips table + training run history + model training controls (UI complete, backend not connected; consolidates planned AdminInbox + TrainModel)
-- [x] **3.13b** Backend StaticFiles mount for `ml-engine/media/annotated/` → `/media/annotated`; `ClipOut` extended with `det_class` (keyword-derived) + `video_url`; `FootageModal.vue` plays real annotated MP4s; `FOOTAGE_DATA` wired to 4 real clips with `videoUrl`
-- [ ] **3.14** WebSocket live epoch/loss feed in AdminPanel (pending backend)
-- [ ] **3.15** Integration test
+- [ ] **3.10** `Archive.vue` — dedicated `/archive` page
+  - Paginated grid (20/page) with page controls
+  - Filters: detection class pill buttons + source buttons + search input (mirrors `ArchiveSection` controls)
+  - Folder/category sidebar: group by `source` (Funker530 / GeoConfirmed) and `det_class` (AIRCRAFT / VEHICLE / PERSONNEL); click to filter
+  - URL query params (`?class=AIRCRAFT&source=funker530&q=drone`) so links are shareable
+  - Data from `GET /api/archive?page=N&per_page=20&det_class=X&source=Y`
+  - Backend: extend `/api/archive` to accept `det_class` + `source` query filters; return `det_class` + `video_url` in response (already in `ClipOut`)
+  - `ArchiveSection.vue` "View All" button routes to `/archive`
+- [ ] **3.11** `Submit.vue` — footage submission form (URL input → `POST /api/submit`)
+
+#### Frontend ↔ Backend Integration
+
+- [ ] **3.16** Replace hardcoded `FOOTAGE_DATA` in `ArchiveSection.vue` + `Archive.vue` with live `GET /api/annotated-clips`; fix backend process management so hot-reload works reliably (move `sys.path` setup to `main.py` before any router imports)
+- [ ] **3.17** `AdminPanel.vue` — wire clips table to `GET /api/admin/clips` (replace stub data); infinite scroll or pagination
+- [ ] **3.18** `AdminPanel.vue` — wire training runs table to `GET /api/admin/training-runs`; poll every 5s while any run is `RUNNING`
+- [ ] **3.19** `AdminPanel.vue` — wire "Queue Training" buttons to `POST /api/admin/train`; disable button while model has a `RUNNING` or `QUEUED` run; show queued badge
+- [ ] **3.20** End-to-end auth flow — `AdminLogin.vue` posts to `/api/auth/login`, stores JWT, router guard redirects on 401; test with real admin credentials from `.env`
+
+#### Backend ↔ ML Engine Integration
+
+- [ ] **3.21** `POST /api/admin/train` → create `TrainingRun(QUEUED)` in DB → dispatch Celery task `train_baseline` or `train_finetune` with `model_type` + `run_id`; task updates `status=RUNNING` on start, `status=DONE`/`ERROR` on finish, writes `weights_path` + `metrics` to DB
+- [ ] **3.22** Full Celery scrape→annotate pipeline wired end-to-end: `scrape_funker530` / `scrape_geoconfirmed` → `auto_label_clip` → `package_dataset` → `render_annotated` → sets `Clip.mp4_path` + `status=ANNOTATED` in DB → `/api/annotated-clips` serves real video to frontend
+- [ ] **3.23** `TickerBar.vue` items pulled from DB: total clip count, scrape status, model mAP50 scores — `GET /api/stats` endpoint returning live counts
+
+#### Training Progress (WebSocket)
+
+- [ ] **3.14** FastAPI WebSocket endpoint `ws://localhost:8000/ws/training/{run_id}` — Celery task writes epoch metrics to Redis pub/sub channel; backend subscribes and forwards to connected clients
+- [ ] **3.14b** `AdminPanel.vue` — open WebSocket on active `RUNNING` run; update progress bar + epoch/loss display in real time; close on `DONE`/`ERROR`
+
+- [ ] **3.15** Integration test — scrape 1 clip → full pipeline → clip appears in archive with playable video; train button queues a run → status updates in admin panel
 
 ---
 
@@ -512,40 +535,34 @@ yolo-training-template/                  ← monorepo root
 
 Phase 0 ✅, Phase 1 ✅, Phase 2a–2e (code) ✅, GDINO installed ✅, datasets prepped ✅.
 
-**AIRCRAFT complete (mAP50=0.9269). 4 annotated MP4s live in archive modal. Backend serving static files.**
+**AIRCRAFT complete (mAP50=0.9269). 4 annotated MP4s in archive modal. Backend static files + ClipOut live.**
 
-**Immediate next — Step 2 continued: VEHICLE + PERSONNEL specialists (2.37–2.38)**
+**Immediate: finish ML specialists (2.37–2.38), then wire backend↔frontend↔ml-engine (3.16–3.23)**
+
+**Step A — Finish specialist training (Phase 2)**
 ```bash
 cd ml-engine
 python tests/test_baseline_train.py --model-type VEHICLE   --epochs 10 --keep
 python tests/test_baseline_train.py --model-type PERSONNEL --epochs 10 --keep
-# Each run produces: runs/baseline/<TYPE>/baseline_<TYPE>_<id>/weights/best.pt
-# Target: mAP50 > 0.4 per specialist before proceeding
+python tests/test_baseline_train.py --model-type GENERAL   --epochs 10 --keep
+# Target: mAP50 > 0.4 per model
 ```
 
-**Then — Step 3: Train generalist (task 2.40)**
-```bash
-python tests/test_baseline_train.py --model-type GENERAL --epochs 10 --keep
-```
+**Step B — Archive page (3.10)**
+- `Archive.vue` with folder sidebar (group by source + class), pagination, shareable URL params
+- Extend `/api/archive` backend filter params
 
-**Then — Step 4: E2E validation (tasks 2.41–2.42)**
-```bash
-python tests/test_pipeline_e2e.py --keep
-cd ../scraper-engine && python tests/test_scrape_live.py
-```
+**Step C — Frontend ↔ Backend live wiring (3.16–3.20)**
+- Replace `FOOTAGE_DATA` with live API
+- Wire AdminPanel clips/runs tables + train button
+- End-to-end auth test
 
-**After Phase 2 complete → Phase 3: Web Application (FastAPI + Vue 3)**
+**Step D — Backend ↔ ML Engine Celery pipeline (3.21–3.22)**
+- `POST /api/admin/train` → Celery task → `TrainingRun` DB lifecycle
+- Full scrape→render_annotated pipeline → `Clip.mp4_path` in DB
 
-Skeleton exists: `web-app/backend/main.py` (bare FastAPI app) + empty dirs for api/, db/, schemas/, frontend/src/.
-DB models (`Clip`, `Dataset`, `TrainingRun`) already defined in `ml-engine/db/models.py` — Phase 3 reuses these via shared DB.
-```
-3.1  requirements.txt + Alembic setup
-3.2  Reuse/extend ml-engine DB models, write first Alembic migration
-3.3  Public API: GET /api/feed, GET /api/archive, POST /api/submit
-3.4  Admin API: GET /api/admin/datasets, POST /api/admin/train + JWT auth
-3.5  WebSocket training progress (Celery task → broadcast)
-3.6  Vue 3 + Vite + Tailwind dark theme scaffold
-```
+**Step E — WebSocket training progress (3.14–3.14b)**
+- Redis pub/sub → FastAPI WS → AdminPanel live epoch chart
 
 ---
 
