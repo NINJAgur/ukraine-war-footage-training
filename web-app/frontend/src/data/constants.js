@@ -87,15 +87,10 @@ export const CAT_RGB = {
 }
 
 export const FOOTAGE_DATA = [
-  { id: 1, title: 'FPV strike on armored column — T-72 confirmed', date: '2024-03-14', duration: '00:01:22', detClass: 'VEHICLE',   source: 'Funker530',    tag: 'annotated', src: 'FNK-2024-031422' },
-  { id: 2, title: 'UAV recon pass — vehicle concentration, treeline', date: '2024-02-28', duration: '00:03:07', detClass: 'AIRCRAFT',  source: 'GeoConfirmed', tag: 'annotated', src: 'GEO-2024-022807' },
-  { id: 3, title: 'Infantry advance — open field engagement', date: '2024-01-09', duration: '00:02:45', detClass: 'PERSONNEL', source: 'Funker530',    tag: 'annotated', src: 'FNK-2024-010945' },
-  { id: 4, title: 'Drone intercept — Lancet vs BMP', date: '2024-04-02', duration: '00:00:48', detClass: 'AIRCRAFT',  source: 'GeoConfirmed', tag: 'annotated', src: 'GEO-2024-040205' },
-  { id: 5, title: 'Artillery battery — self-propelled howitzer fire', date: '2024-05-17', duration: '00:04:33', detClass: 'VEHICLE',   source: 'Funker530',    tag: 'annotated', src: 'FNK-2024-051733' },
-  { id: 6, title: 'Trench assault — squad movement under fire', date: '2024-06-01', duration: '00:02:52', detClass: 'PERSONNEL', source: 'Funker530',    tag: 'annotated', src: 'FNK-2024-060101' },
-  { id: 7, title: 'Shahed-136 intercept — night engagement', date: '2024-03-29', duration: '00:01:14', detClass: 'AIRCRAFT',  source: 'GeoConfirmed', tag: 'processing', src: 'GEO-2024-032944' },
-  { id: 8, title: 'Tank convoy — highway route north', date: '2024-07-11', duration: '00:05:20', detClass: 'VEHICLE',   source: 'GeoConfirmed', tag: 'processing', src: 'GEO-2024-071100' },
-  { id: 9, title: 'FPV swarm — multi-drone attack sequence', date: '2024-05-04', duration: '00:02:41', detClass: 'AIRCRAFT',  source: 'Funker530',    tag: 'annotated', src: 'FNK-2024-050404' },
+  { id: 1, title: 'Close Encounters of the FPV Kind',            date: '2026-05-02', duration: '00:00:51', detClass: 'AIRCRAFT', source: 'Funker530',    tag: 'annotated', src: '50E23154', videoUrl: '/media/annotated/50e23154_funker_aircraft.mp4' },
+  { id: 2, title: 'Russian FPV Near-Miss — Ukrainian Vehicle',   date: '2026-05-02', duration: '00:00:42', detClass: 'AIRCRAFT', source: 'Funker530',    tag: 'annotated', src: '5488898D', videoUrl: '/media/annotated/5488898d_funker_aircraft.mp4' },
+  { id: 3, title: 'Mi-28 Hit by Ukrainian FPV Drone',            date: '2026-05-02', duration: '00:01:25', detClass: 'AIRCRAFT', source: 'GeoConfirmed', tag: 'annotated', src: '5B0D33CB', videoUrl: '/media/annotated/5b0d33cb_aircraft_annotated.mp4' },
+  { id: 4, title: 'Russian Shahed/Geran Drone Hits Building',    date: '2026-05-02', duration: '00:00:12', detClass: 'AIRCRAFT', source: 'GeoConfirmed', tag: 'annotated', src: 'DB04C53B', videoUrl: '/media/annotated/db04c53b_aircraft_annotated.mp4' },
 ]
 
 export const DET_CLASSES = ['All', 'Aircraft', 'Vehicle', 'Personnel']

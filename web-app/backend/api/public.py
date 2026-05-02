@@ -1,4 +1,7 @@
 import hashlib
+import re
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -10,6 +13,36 @@ from db.session import get_db
 from schemas.clips import ClipOut, ClipSubmit
 
 router = APIRouter(prefix="/api", tags=["public"])
+
+_ANNOTATED_DIR = Path(__file__).parent.parent.parent.parent / "ml-engine" / "media" / "annotated"
+
+_MODEL_RE  = re.compile(r'\b(aircraft|vehicle|personnel|general)\b', re.I)
+_SOURCE_RE = re.compile(r'\b(funker|geoconfirmed|geo)\b', re.I)
+
+
+@router.get("/annotated-clips")
+async def get_annotated_clips() -> list[dict]:
+    items = []
+    for f in sorted(_ANNOTATED_DIR.glob("*.mp4"), key=lambda p: p.stat().st_mtime, reverse=True):
+        stem  = f.stem
+        parts = stem.lower()
+        src_match   = _SOURCE_RE.search(parts)
+        model_match = _MODEL_RE.search(parts)
+        source   = "Funker530" if src_match and "funker" in src_match.group() else "GeoConfirmed"
+        det_class = (model_match.group().upper() if model_match else "AIRCRAFT")
+        mtime = datetime.fromtimestamp(f.stat().st_mtime, tz=timezone.utc)
+        items.append({
+            "id":       stem,
+            "title":    stem.replace("_", " ").replace("annotated", "").strip().upper(),
+            "date":     mtime.strftime("%Y-%m-%d"),
+            "duration": "--:--",
+            "detClass": det_class,
+            "source":   source,
+            "tag":      "annotated",
+            "src":      stem[:8].upper(),
+            "videoUrl": f"/media/annotated/{f.name}",
+        })
+    return items
 
 
 @router.get("/feed")

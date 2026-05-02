@@ -98,59 +98,42 @@ def infer_video(model, video_path, conf_thresh=0.5, save_path=None, no_display=F
 
 
 def _draw_tactical_box(frame, x1, y1, x2, y2, conf, label, color):
-    """Draw a tactical HUD-style bounding box matching the frontend canvas aesthetic."""
+    """Draw tactical HUD-style box matching frontend canvas aesthetic."""
     import numpy as np
 
-    h_img, w_img = frame.shape[:2]
-    alpha_overlay = np.zeros_like(frame, dtype=np.uint8)
+    # Translucent fill (very faint, matches canvas alpha*0.07)
+    overlay = np.zeros_like(frame, dtype=np.uint8)
+    cv2.rectangle(overlay, (x1, y1), (x2, y2), color, -1)
+    cv2.addWeighted(overlay, 0.07, frame, 1.0, 0, frame)
 
-    # Translucent fill
-    cv2.rectangle(alpha_overlay, (x1, y1), (x2, y2), color, -1)
-    cv2.addWeighted(alpha_overlay, 0.08, frame, 1.0, 0, frame)
+    # Faint full box (matches canvas strokeRect alpha*0.9)
+    dim = tuple(max(0, int(c * 0.55)) for c in color)
+    cv2.rectangle(frame, (x1, y1), (x2, y2), dim, 1)
 
-    # Outer box
-    cv2.rectangle(frame, (x1, y1), (x2, y2), color, 1)
-
-    # Corner tick marks (tactical HUD style)
+    # Corner ticks — solid, thicker (matches canvas corner draws)
     tk = max(8, int(min(x2 - x1, y2 - y1) * 0.15))
-    thick = 2
-    # top-left
-    cv2.line(frame, (x1, y1 + tk), (x1, y1), color, thick)
-    cv2.line(frame, (x1, y1), (x1 + tk, y1), color, thick)
-    # top-right
-    cv2.line(frame, (x2 - tk, y1), (x2, y1), color, thick)
-    cv2.line(frame, (x2, y1), (x2, y1 + tk), color, thick)
-    # bottom-left
-    cv2.line(frame, (x1, y2 - tk), (x1, y2), color, thick)
-    cv2.line(frame, (x1, y2), (x1 + tk, y2), color, thick)
-    # bottom-right
-    cv2.line(frame, (x2 - tk, y2), (x2, y2), color, thick)
-    cv2.line(frame, (x2, y2), (x2, y2 - tk), color, thick)
+    cv2.line(frame, (x1, y1 + tk), (x1, y1), color, 2)
+    cv2.line(frame, (x1, y1), (x1 + tk, y1), color, 2)
+    cv2.line(frame, (x2 - tk, y1), (x2, y1), color, 2)
+    cv2.line(frame, (x2, y1), (x2, y1 + tk), color, 2)
+    cv2.line(frame, (x1, y2 - tk), (x1, y2), color, 2)
+    cv2.line(frame, (x1, y2), (x1 + tk, y2), color, 2)
+    cv2.line(frame, (x2 - tk, y2), (x2, y2), color, 2)
+    cv2.line(frame, (x2, y2), (x2, y2 - tk), color, 2)
 
-    # Label bar (filled background)
+    # Label text above top-left (no filled bar — matches canvas fillText style)
     tag = f"{label}  {int(conf * 100)}%"
     font = cv2.FONT_HERSHEY_SIMPLEX
     scale, lthick = 0.38, 1
     (tw, th), _ = cv2.getTextSize(tag, font, scale, lthick)
-    pad = 4
-    bar_y1 = max(y1 - th - pad * 2, 0)
-    bar_y2 = max(y1, th + pad * 2)
-    cv2.rectangle(frame, (x1, bar_y1), (x1 + tw + pad * 2, bar_y2), color, -1)
-    # Dark text on colored bar
-    dark = (int(color[0] * 0.15), int(color[1] * 0.15), int(color[2] * 0.15))
-    cv2.putText(frame, tag, (x1 + pad, bar_y2 - pad), font, scale, dark, lthick, cv2.LINE_AA)
+    ty = max(y1 - 5, th + 2)
+    cv2.putText(frame, tag, (x1 + 2, ty), font, scale, color, lthick, cv2.LINE_AA)
 
-    # Confidence bar on right edge (vertical)
-    bw = 3
+    # Confidence bar on LEFT edge (vertical, matches canvas left-side bar)
     box_h = y2 - y1
     bar_h = int(box_h * conf)
-    cv2.rectangle(frame, (x2 + 2, y2 - bar_h), (x2 + 2 + bw, y2), color, -1)
-
-    # ID tag bottom-right (dim)
-    id_tag = label.split(":")[-1] if ":" in label else ""
-    if id_tag:
-        dim = tuple(max(0, int(c * 0.55)) for c in color)
-        cv2.putText(frame, id_tag, (max(x2 - 60, x1), y2 - 4), font, 0.32, dim, 1, cv2.LINE_AA)
+    cv2.rectangle(frame, (x1 - 4, y2 - bar_h), (x1 - 2, y2), dim, -1)
+    cv2.rectangle(frame, (x1 - 4, y2 - bar_h), (x1 - 2, y2 - bar_h + 2), color, -1)
 
 
 def infer_video_multi_model(
@@ -243,6 +226,44 @@ def infer_video_multi_model(
     os.remove(temp_path)
     logging.info(f"Multi-model annotated video saved to {save_path} ({idx} frames)")
     return idx
+
+
+def validate_clip(model, path, conf_thresh: float = 0.35,
+                  min_rate: float = 0.15, n_samples: int = 30) -> bool:
+    """Return True if ≥min_rate of sampled frames have at least one detection.
+    Deletes the file and returns False when the clip fails validation."""
+    import numpy as np
+
+    cap = cv2.VideoCapture(str(path))
+    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    if total == 0:
+        cap.release()
+        os.remove(path)
+        logging.warning(f"validate_clip REJECTED (empty): {path}")
+        return False
+
+    step = max(1, total // n_samples)
+    detected = sampled = 0
+    for i in range(0, total, step):
+        cap.set(cv2.CAP_PROP_POS_FRAMES, i)
+        ret, frame = cap.read()
+        if not ret:
+            continue
+        results = model(frame, conf=conf_thresh, verbose=False)
+        if len(results[0].boxes) > 0:
+            detected += 1
+        sampled += 1
+        if sampled >= n_samples:
+            break
+    cap.release()
+
+    rate = detected / sampled if sampled > 0 else 0.0
+    logging.info(f"validate_clip {detected}/{sampled} frames ({rate:.0%}): {path}")
+    if rate < min_rate:
+        logging.warning(f"validate_clip REJECTED ({rate:.0%} < {min_rate:.0%}): {path}")
+        os.remove(path)
+        return False
+    return True
 
 
 def infer_webcam(model, conf_thresh=0.5, no_display=False):

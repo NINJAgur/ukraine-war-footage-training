@@ -1,6 +1,6 @@
 # PROJECT_PLAN.md — Ukraine Combat Footage Web Application
 > **Source of Truth** — All phases, structure, and decisions are tracked here.
-> Last updated: 2026-05-02
+> Last updated: 2026-05-03
 
 ---
 
@@ -443,6 +443,7 @@ yolo-training-template/                  ← monorepo root
 #### Step 2 — Train specialists (all 5 Kaggle datasets as corpus)
 
 - [x] **2.36** Run `test_baseline_train.py --model-type AIRCRAFT --epochs 10 --keep` — mAP50=0.9269 @ epoch 10 ✅
+- [x] **2.36b** `ml-engine/scripts/aircraft_pipeline.py` — scrape→validate→annotate pipeline; `validate_clip()` in `core/inference.py` (generic, any model); detection-rate gate (≥15% frames with detections, 30 samples); 4 annotated MP4s produced (2 Funker530, 2 GeoConfirmed: Mi-28 hit 67%, Shahed building strike 17%)
 - [ ] **2.37** Run `test_baseline_train.py --model-type VEHICLE --epochs 10 --keep`
 - [ ] **2.38** Run `test_baseline_train.py --model-type PERSONNEL --epochs 10 --keep`
 - [ ] **2.39** Evaluate each: mAP50 > 0.4 = acceptable; increase epochs if below
@@ -487,6 +488,7 @@ yolo-training-template/                  ← monorepo root
 - [ ] **3.11** `Submit.vue` — footage submission form
 - [x] **3.12** `AdminLogin.vue` — JWT login form (UI complete, backend not connected)
 - [x] **3.13** `AdminPanel.vue` — clips table + training run history + model training controls (UI complete, backend not connected; consolidates planned AdminInbox + TrainModel)
+- [x] **3.13b** Backend StaticFiles mount for `ml-engine/media/annotated/` → `/media/annotated`; `ClipOut` extended with `det_class` (keyword-derived) + `video_url`; `FootageModal.vue` plays real annotated MP4s; `FOOTAGE_DATA` wired to 4 real clips with `videoUrl`
 - [ ] **3.14** WebSocket live epoch/loss feed in AdminPanel (pending backend)
 - [ ] **3.15** Integration test
 
@@ -510,7 +512,7 @@ yolo-training-template/                  ← monorepo root
 
 Phase 0 ✅, Phase 1 ✅, Phase 2a–2e (code) ✅, GDINO installed ✅, datasets prepped ✅.
 
-**AIRCRAFT complete (mAP50=0.9269). Frontend UI (Phase 3.9–3.13) complete — not yet connected to backend.**
+**AIRCRAFT complete (mAP50=0.9269). 4 annotated MP4s live in archive modal. Backend serving static files.**
 
 **Immediate next — Step 2 continued: VEHICLE + PERSONNEL specialists (2.37–2.38)**
 ```bash
