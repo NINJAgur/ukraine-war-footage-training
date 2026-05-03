@@ -1,13 +1,13 @@
 <template>
   <nav :style="{ boxShadow: scrolled ? '0 1px 0 rgba(255,255,255,0.04)' : 'none' }">
-    <div class="nav-logo">
+    <router-link to="/" class="nav-logo" style="text-decoration:none;cursor:pointer">
       <div class="nav-logo-mark"></div>
       UKRARCHIVE
       <span class="mono" style="color: var(--fg-3); font-size: 10px">v1.0.0</span>
-    </div>
+    </router-link>
     <ul class="nav-links">
       <li v-for="id in sections" :key="id">
-        <a :href="`#${id}`" :class="{ active: activeSection === id }">
+        <a :href="`/#${id}`" :class="{ active: activeSection === id }">
           {{ id.charAt(0).toUpperCase() + id.slice(1) }}
         </a>
       </li>

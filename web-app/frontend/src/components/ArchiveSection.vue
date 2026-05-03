@@ -48,20 +48,29 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { FOOTAGE_DATA, DET_CLASSES, SOURCES } from '../data/constants.js'
 import FootageCard from './FootageCard.vue'
 import FootageModal from './FootageModal.vue'
 import RadarCanvas from './RadarCanvas.vue'
 
+const items        = ref([])
 const activeClass  = ref('All')
 const activeSource = ref('All sources')
 const search       = ref('')
 const modalItem    = ref(null)
 
+onMounted(async () => {
+  try {
+    const res = await fetch('/api/annotated-clips')
+    if (res.ok) { items.value = await res.json(); return }
+  } catch {}
+  items.value = FOOTAGE_DATA
+})
+
 function openModal(item) { modalItem.value = item }
 
-const filtered = computed(() => FOOTAGE_DATA.filter(item => {
+const filtered = computed(() => items.value.filter(item => {
   const cm = activeClass.value === 'All' || item.detClass.toLowerCase() === activeClass.value.toLowerCase()
   const sm = activeSource.value === 'All sources' || item.source === activeSource.value
   const qm = !search.value || item.title.toLowerCase().includes(search.value.toLowerCase()) || item.src.toLowerCase().includes(search.value.toLowerCase())

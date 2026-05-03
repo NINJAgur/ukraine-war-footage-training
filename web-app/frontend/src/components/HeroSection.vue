@@ -52,11 +52,24 @@
 import MLCard from './MLCard.vue'
 import { GENERALIST_CAT } from '../data/constants.js'
 
-const stats = [
-  { num: '3',    label: 'YOLO specialists' },
-  { num: '26K+', label: 'Training images' },
-  { num: '0.91', label: 'AIRCRAFT mAP50' },
-]
+import { ref, onMounted } from 'vue'
+
+const stats = ref([
+  { num: '3',     label: 'YOLO specialists' },
+  { num: '102K+', label: 'Training images' },
+  { num: '0.91',  label: 'AIRCRAFT mAP50' },
+])
+
+onMounted(async () => {
+  try {
+    const res = await fetch('/api/stats')
+    if (!res.ok) return
+    const d = await res.json()
+    const k = d.images_labeled >= 1000 ? Math.round(d.images_labeled / 1000) + 'K+' : String(d.images_labeled)
+    stats.value[1] = { num: k, label: 'Training images' }
+    stats.value[0] = { num: String(d.clips_total), label: 'Clips archived' }
+  } catch {}
+})
 
 function scrollToArchive() {
   document.getElementById('archive')?.scrollIntoView({ behavior: 'smooth' })

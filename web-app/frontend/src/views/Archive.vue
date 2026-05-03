@@ -5,6 +5,7 @@
     <div class="arch-wrap">
       <!-- Sidebar -->
       <aside class="arch-sidebar">
+        <a href="/" class="sidebar-back mono">← HOME</a>
         <div class="sidebar-header">EVIDENCE ARCHIVE</div>
 
         <div class="sidebar-group">
@@ -88,6 +89,7 @@ const PER_PAGE     = 20
 const modalItem    = ref(null)
 
 onMounted(async () => {
+  window.scrollTo(0, 0)
   try {
     const res = await fetch('/api/annotated-clips')
     if (res.ok) { items.value = await res.json(); return }
@@ -167,6 +169,18 @@ const sourceNodes = computed(() =>
   height: calc(100vh - 64px);
   overflow-y: auto;
 }
+
+.sidebar-back {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--fg-3);
+  padding: 12px 20px 8px;
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.sidebar-back:hover { color: var(--amber); }
 
 .sidebar-header {
   font-family: var(--font-mono);

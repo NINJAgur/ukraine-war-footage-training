@@ -22,7 +22,7 @@
       <div class="ml-hud-corner br"></div>
       <div class="ml-hud-top">
         <span>{{ cat.id.toUpperCase() }}</span>
-        <span style="color:var(--fg-2)">{{ cat.modelInfo || 'YOLOv8' }}</span>
+        <span style="color:var(--fg-2)">{{ liveModelInfo }}</span>
       </div>
       <div class="ml-hud-bottom">
         <div v-if="cat.desc" style="text-align:right;max-width:100%;overflow:hidden">
@@ -46,6 +46,15 @@ import { useMLCanvas } from '../composables/useMLCanvas.js'
 const props = defineProps({
   cat:      { type: Object, required: true },
   heroMode: { type: Boolean, default: false },
+  stats:    { type: Object, default: null },
+})
+
+const liveModelInfo = computed(() => {
+  const s = props.stats
+  if (!s) return props.cat.modelInfo || 'YOLOv8m'
+  const imgs = s.images >= 1000 ? Math.round(s.images / 1000) + 'K' : (s.images || '—')
+  const map  = s.map50 != null ? `mAP50 ${s.map50.toFixed(3)}` : s.status ?? '—'
+  return `YOLOv8m · ${imgs} imgs · ${map}`
 })
 
 const cardEl   = ref(null)

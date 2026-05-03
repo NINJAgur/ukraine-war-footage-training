@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     ADMIN_USERNAME: str = "admin"
-    ADMIN_PASSWORD: str = "change-me-in-production"
+    ADMIN_PASSWORD: str = "admin123"
     CORS_ORIGINS: str = "http://localhost:5173"
 
     class Config:
