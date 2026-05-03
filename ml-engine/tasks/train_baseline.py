@@ -7,10 +7,10 @@ No GDINO, no frame extraction — Kaggle data is already labeled.
 All datasets are remapped to the canonical 3-class vocabulary before merging:
   0=AIRCRAFT  1=VEHICLE  2=PERSONNEL
 
-  AIRCRAFT  — mihprofi/drone-detect + shakedlevnat/military-aircraft-... + nzigulic + piterfm
-  VEHICLE   — kiit-mita + nzigulic + piterfm
-  PERSONNEL — kiit-mita
-  GENERAL   — all five datasets combined (trains after specialists)
+  AIRCRAFT  — mihprofi + shakedlevnat + nzigulic + piterfm + rookieengg + rawsi18
+  VEHICLE   — kiit-mita + nzigulic + piterfm + rawsi18 + amad-5
+  PERSONNEL — kiit-mita + rawsi18 + amad-5
+  GENERAL   — all eight datasets combined (trains after specialists)
 
 Triggered by Admin "Train Baseline" in the web UI, which creates one
 TrainingRun per model type and dispatches this task four times.
@@ -81,6 +81,31 @@ DATASET_CLASS_MAPS: Dict[str, Dict[int, int]] = {
     # piterfm/2022-ukraine-russia-war-equipment-losses-oryx: already nc=3 canonical — GDINO-labeled with category-aware prompts
     # no personnel (Oryx tracks equipment losses only)
     "piterfm/2022-ukraine-russia-war-equipment-losses-oryx": {0: 0, 1: 1, 2: 2},
+    # rookieengg/military-aircraft-detection-dataset-yolo-format (nc=73): 73 specific aircraft types, all → aircraft
+    "rookieengg/military-aircraft-detection-dataset-yolo-format": {i: 0 for i in range(73)},
+    # rawsi18/military-assets-dataset-12-classes-yolo8-format (nc=12): mixed military assets
+    "rawsi18/military-assets-dataset-12-classes-yolo8-format": {
+        0: 2,   # camouflage_soldier → personnel
+        1: -1,  # weapon             → drop
+        2: 1,   # military_tank      → vehicle
+        3: 1,   # military_truck     → vehicle
+        4: 1,   # military_vehicle   → vehicle
+        5: -1,  # civilian           → drop
+        6: 2,   # soldier            → personnel
+        7: -1,  # civilian_vehicle   → drop
+        8: 1,   # military_artillery → vehicle
+        9: -1,  # trench             → drop
+        10: 0,  # military_aircraft  → aircraft
+        11: -1, # military_warship   → drop
+    },
+    # rupankarmajumdar/amad-5-aerial-military-asset-detection-dataset (nc=5): aerial view, mixed
+    "rupankarmajumdar/amad-5-aerial-military-asset-detection-dataset": {
+        0: 1,   # military_tank    → vehicle
+        1: 1,   # military_vehicle → vehicle
+        2: 2,   # soldier          → personnel
+        3: -1,  # civilian         → drop
+        4: -1,  # civilian_vehicle → drop
+    },
 }
 
 SPECIALIST_CLASS: Dict[ModelType, Optional[int]] = {
@@ -96,14 +121,20 @@ BASELINE_DATASETS: Dict[ModelType, List[str]] = {
         "shakedlevnat/military-aircraft-database-prepared-for-yolo",
         "nzigulic/military-equipment",
         "piterfm/2022-ukraine-russia-war-equipment-losses-oryx",
+        "rookieengg/military-aircraft-detection-dataset-yolo-format",
+        "rawsi18/military-assets-dataset-12-classes-yolo8-format",
     ],
     ModelType.VEHICLE: [
         "sudipchakrabarty/kiit-mita",
         "nzigulic/military-equipment",
         "piterfm/2022-ukraine-russia-war-equipment-losses-oryx",
+        "rawsi18/military-assets-dataset-12-classes-yolo8-format",
+        "rupankarmajumdar/amad-5-aerial-military-asset-detection-dataset",
     ],
     ModelType.PERSONNEL: [
         "sudipchakrabarty/kiit-mita",
+        "rawsi18/military-assets-dataset-12-classes-yolo8-format",
+        "rupankarmajumdar/amad-5-aerial-military-asset-detection-dataset",
     ],
     ModelType.GENERAL: [
         "mihprofi/drone-detect",
@@ -111,6 +142,9 @@ BASELINE_DATASETS: Dict[ModelType, List[str]] = {
         "sudipchakrabarty/kiit-mita",
         "nzigulic/military-equipment",
         "piterfm/2022-ukraine-russia-war-equipment-losses-oryx",
+        "rookieengg/military-aircraft-detection-dataset-yolo-format",
+        "rawsi18/military-assets-dataset-12-classes-yolo8-format",
+        "rupankarmajumdar/amad-5-aerial-military-asset-detection-dataset",
     ],
 }
 
@@ -136,7 +170,7 @@ def _remap_label_file(src: Path, dst: Path, class_map: Dict[int, int]) -> int:
             if not line:
                 continue
             parts = line.split()
-            old_id = int(parts[0])
+            old_id = int(float(parts[0]))  # handles "0.0" style labels (e.g. amad-5)
             new_id = class_map.get(old_id, -1)
             if new_id == -1:
                 continue
@@ -150,19 +184,30 @@ def _remap_label_file(src: Path, dst: Path, class_map: Dict[int, int]) -> int:
 
 
 def _local_dataset_path(handle: str) -> Path:
-    """Return the on-disk root for a pre-downloaded Kaggle dataset handle."""
+    """Return the on-disk root for a pre-downloaded Kaggle dataset handle.
+
+    Checks KAGGLE_CACHE_DIR first, then falls back to the kagglehub system cache
+    (~/.cache/kagglehub/datasets/) so datasets downloaded via kagglehub CLI work
+    without needing a manual copy.
+    """
     owner, name = handle.split("/")
-    # Datasets live at: KAGGLE_CACHE_DIR/<owner>/<name>/versions/<latest>/
-    base = settings.KAGGLE_CACHE_DIR / owner / name / "versions"
-    if not base.exists():
-        raise FileNotFoundError(
-            f"Dataset not found locally: {base}\n"
-            f"Download it first: kagglehub.dataset_download('{handle}')"
+    _KAGGLEHUB_CACHE = Path.home() / ".cache" / "kagglehub" / "datasets"
+
+    for search_root in (settings.KAGGLE_CACHE_DIR, _KAGGLEHUB_CACHE):
+        base = search_root / owner / name / "versions"
+        if not base.exists():
+            continue
+        versions = sorted(
+            (d for d in base.iterdir() if d.is_dir()),
+            key=lambda p: int(p.name) if p.name.isdigit() else 0,
         )
-    versions = sorted(base.iterdir(), key=lambda p: int(p.name) if p.name.isdigit() else 0)
-    if not versions:
-        raise FileNotFoundError(f"No version directories found under {base}")
-    return versions[-1]
+        if versions:
+            return versions[-1]
+
+    raise FileNotFoundError(
+        f"Dataset not found locally: {handle}\n"
+        f"Download it with: kagglehub.dataset_download('{handle}')"
+    )
 
 
 def _merge_datasets(
@@ -267,7 +312,7 @@ def _merge_datasets(
             default_flow_style=False,
         )
 
-    return yaml_path, nc, names
+    return yaml_path, nc, names, total_train
 
 
 @celery_app.task(
@@ -315,13 +360,16 @@ def train_baseline(self, training_run_id: int, weights: str = None) -> dict:
         shutil.rmtree(combined_dir)
 
     try:
-        yaml_path, nc, class_names = _merge_datasets(
+        yaml_path, nc, class_names, total_train = _merge_datasets(
             datasets, combined_dir, self.request.id,
             specialist_class=specialist_class,
         )
+        with get_session() as session:
+            run = session.get(TrainingRun, training_run_id)
+            run.metrics = {"total_train_images": total_train}
         logger.info(
             f"[{self.request.id}] [{model_type.value}] "
-            f"Training: nc={nc}  epochs={settings.YOLO_EPOCHS_BASELINE}"
+            f"Training: nc={nc}  epochs={settings.YOLO_EPOCHS_BASELINE}  train_images={total_train}"
         )
         results = train_model(
             yaml_path=str(yaml_path),
@@ -335,6 +383,7 @@ def train_baseline(self, training_run_id: int, weights: str = None) -> dict:
             resume=False,
         )
         all_metrics = _extract_metrics(results)
+        all_metrics["total_train_images"] = total_train
 
         if not weights_path.exists():
             raise FileNotFoundError(f"Training finished but best.pt not found: {weights_path}")

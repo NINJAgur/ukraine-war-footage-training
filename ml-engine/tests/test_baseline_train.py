@@ -91,12 +91,12 @@ def main():
                 if run:
                     session.delete(run)
             if args.purge_outputs and weights_path:
-                run_dir = weights_path.parent.parent.parent
+                run_dir = weights_path.parent.parent  # .../baseline_MODEL_N/
                 if run_dir.exists():
                     shutil.rmtree(run_dir, ignore_errors=True)
                     logger.info(f"Removed weights dir: {run_dir}  (--purge-outputs)")
             elif not args.keep and weights_path:
-                run_dir = weights_path.parent.parent.parent
+                run_dir = weights_path.parent.parent  # .../baseline_MODEL_N/
                 if run_dir.exists():
                     shutil.rmtree(run_dir, ignore_errors=True)
                     logger.info(f"Cleaned up run dir: {run_dir}")

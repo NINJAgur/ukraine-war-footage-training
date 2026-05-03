@@ -13,6 +13,7 @@
           <div class="status-dot"></div>
           <span class="mono" style="font-size:11px">SYSTEM ONLINE</span>
         </div>
+        <a href="/" class="btn-back mono">← HOME</a>
         <button class="btn-access" @click="logout">LOGOUT</button>
       </div>
     </header>
@@ -31,8 +32,8 @@
                 {{ latestRun(m)?.status ?? 'NO RUNS' }}
               </div>
             </div>
-            <div v-if="latestRun(m)?.metrics?.map50" class="mono" style="font-size:16px;font-weight:300;color:var(--fg-0);letter-spacing:-0.02em;margin:2px 0">
-              {{ latestRun(m).metrics.map50.toFixed(3) }}
+            <div v-if="latestRun(m)?.map50 != null" class="mono" style="font-size:16px;font-weight:300;color:var(--fg-0);letter-spacing:-0.02em;margin:2px 0">
+              {{ latestRun(m).map50.toFixed(3) }}
               <span style="font-size:10px;color:var(--fg-3);letter-spacing:0.1em">mAP50</span>
             </div>
             <div v-else style="height:4px"></div>
@@ -66,7 +67,7 @@
               <td class="mono" :style="{ color: modelColor(r.model_type) }">{{ r.model_type }}</td>
               <td class="mono dim">{{ r.stage }}</td>
               <td><span :class="['run-status', r.status.toLowerCase()]" class="mono">{{ r.status }}</span></td>
-              <td class="mono">{{ r.metrics?.map50?.toFixed(3) ?? '—' }}</td>
+              <td class="mono">{{ r.map50 != null ? r.map50.toFixed(3) : '—' }}</td>
               <td class="mono dim">{{ fmtDate(r.started_at) }}</td>
               <td class="mono dim">{{ fmtDate(r.completed_at) }}</td>
             </tr>

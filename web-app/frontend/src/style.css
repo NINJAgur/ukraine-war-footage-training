@@ -171,6 +171,17 @@ nav {
   border-color: var(--amber);
 }
 
+.btn-back {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.btn-back:hover { color: var(--fg-1); }
+
 /* ─── HERO ─── */
 .hero {
   position: relative;
@@ -861,7 +872,7 @@ section { padding: clamp(60px, 8vw, 100px) clamp(20px, 5vw, 80px); }
 /* ─── CAPABILITIES ─── */
 .capabilities { background: var(--bg-1); border-top: 1px solid var(--fg-3); }
 .cap-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 2px; }
-.cap-card { background: var(--bg-2); padding: 40px; position: relative; overflow: hidden; }
+.cap-card { background: var(--bg-2); padding: 40px; position: relative; overflow: hidden; display: flex; flex-direction: column; }
 .cap-card::before {
   content: '';
   position: absolute;
@@ -874,7 +885,7 @@ section { padding: clamp(60px, 8vw, 100px) clamp(20px, 5vw, 80px); }
 .cap-num { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.2em; color: var(--amber); margin-bottom: 20px; }
 .cap-icon { width: 40px; height: 40px; margin-bottom: 20px; position: relative; }
 .cap-title { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; text-transform: uppercase; margin-bottom: 12px; }
-.cap-desc { font-size: 14px; color: var(--fg-1); line-height: 1.7; }
+.cap-desc { font-size: 14px; color: var(--fg-1); line-height: 1.7; flex: 1; }
 .cap-metric { margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--fg-3); display: flex; gap: 32px; }
 .cap-metric-val { font-family: var(--font-mono); font-size: 22px; font-weight: 500; color: var(--fg-0); }
 .cap-metric-label { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--fg-2); margin-top: 2px; }

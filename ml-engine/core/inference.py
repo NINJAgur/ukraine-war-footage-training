@@ -124,7 +124,7 @@ def _draw_tactical_box(frame, x1, y1, x2, y2, conf, label, color):
     # Label text above top-left (no filled bar — matches canvas fillText style)
     tag = f"{label}  {int(conf * 100)}%"
     font = cv2.FONT_HERSHEY_SIMPLEX
-    scale, lthick = 0.38, 1
+    scale, lthick = 0.55, 2
     (tw, th), _ = cv2.getTextSize(tag, font, scale, lthick)
     ty = max(y1 - 5, th + 2)
     cv2.putText(frame, tag, (x1 + 2, ty), font, scale, color, lthick, cv2.LINE_AA)

@@ -33,16 +33,32 @@
 </template>
 
 <script setup>
-import { h } from 'vue'
+import { h, ref, computed, onMounted } from 'vue'
 import RadarCanvas from './RadarCanvas.vue'
 
-const capabilities = [
+const stats = ref(null)
+
+onMounted(async () => {
+  try {
+    const res = await fetch('/api/stats')
+    if (res.ok) stats.value = await res.json()
+  } catch {}
+})
+
+function fmt(n) {
+  if (n == null) return '—'
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M'
+  if (n >= 1e3) return Math.round(n / 1e3) + 'K'
+  return String(n)
+}
+
+const capabilities = computed(() => [
   {
     num: '01',
     title: 'Continuous Scraping',
     desc: 'Celery beat task monitors Funker530 and GeoConfirmed REST APIs on an hourly schedule. New clips are deduplicated by SHA-256 URL hash and downloaded with yt-dlp.',
-    m1: '24/7', m1l: 'Monitoring',
-    m2: '2',    m2l: 'Active sources',
+    m1: stats.value ? String(stats.value.clips_total) : '—', m1l: 'Clips archived',
+    m2: stats.value ? `${stats.value.raw_gb}GB`         : '—', m2l: 'Raw footage stored',
     icon: 'geo',
   },
   {
@@ -57,19 +73,19 @@ const capabilities = [
     num: '03',
     title: 'GDINO Auto-Labeling',
     desc: 'GroundingDINO zero-shot model labels incoming footage before specialist weights are ready. 15-term prompt covers all military asset classes. No manual annotation.',
-    m1: 'Zero-shot', m1l: 'Label method',
-    m2: '26K+',      m2l: 'Training images',
+    m1: 'Zero-shot',                                                           m1l: 'Label method',
+    m2: stats.value ? fmt(stats.value.images_labeled) : '—',                  m2l: 'Training images',
     icon: 'chain',
   },
   {
     num: '04',
     title: 'Annotated Archive',
     desc: 'Every processed clip is re-encoded as H.264 MP4 with per-model colour-coded bounding boxes. Browse by detection class or source. Admin panel triggers retraining.',
-    m1: 'REST', m1l: 'API',
-    m2: '3',    m2l: 'Detection classes',
+    m1: stats.value ? String(stats.value.clips_annotated) : '—', m1l: 'Annotated clips',
+    m2: '3',                                                      m2l: 'Detection classes',
     icon: 'api',
   },
-]
+])
 
 const GeoIcon  = () => h('svg', { width: 40, height: 40, viewBox: '0 0 40 40', fill: 'none' }, [
   h('rect',   { x: 1, y: 1, width: 38, height: 38, stroke: 'currentColor', 'stroke-opacity': 0.2, 'stroke-width': 1 }),

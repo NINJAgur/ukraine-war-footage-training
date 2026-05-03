@@ -143,7 +143,9 @@ function drawPersonnel(ctx, dets, W, H, f, rgb) {
   dets.forEach((det, i) => {
     const appear = Math.max(0, Math.min(1, (f - i * 10) / 24))
     if (appear === 0) return
-    const bx = det.x * W, by = det.y * H, bw = det.w * W, bh = det.h * H
+    const ox = Math.sin(f * 0.013 + i * 1.7) * W * 0.03
+    const oy = Math.cos(f * 0.010 + i * 2.3) * H * 0.025
+    const bx = det.x * W + ox, by = det.y * H + oy, bw = det.w * W, bh = det.h * H
     const alpha = appear * (0.8 + 0.15 * Math.sin(f * 0.04 + i))
     const jitter = 1.2
     const grad = ctx.createRadialGradient(bx+bw/2, by+bh/2, 0, bx+bw/2, by+bh/2, bw*0.8)
@@ -176,8 +178,8 @@ function drawVehicles(ctx, dets, W, H, f, rgb, expanded) {
     const appear = Math.max(0, Math.min(1, (f - i * 10) / 28))
     if (appear === 0) return
     const x = det.x * W, y = det.y * H, w = det.w * W, h = det.h * H
-    const jx = expanded ? Math.sin(f * 0.015 + i) * 0.5 : 0
-    const jy = expanded ? Math.cos(f * 0.012 + i) * 0.5 : 0
+    const jx = Math.sin(f * 0.015 + i * 1.4) * W * 0.028
+    const jy = Math.cos(f * 0.011 + i * 1.9) * H * 0.022
     const rx = x+jx, ry = y+jy
     const alpha = appear * (0.8 + 0.1 * Math.sin(f * 0.03 + i))
     ctx.fillStyle = `rgba(${rgb},${alpha*0.10})`; ctx.fillRect(rx, ry, w, h)

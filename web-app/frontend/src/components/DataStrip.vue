@@ -9,9 +9,44 @@
 </template>
 
 <script setup>
-const items = [
-  { big: '9',   unit: '',   label: 'Total clips archived',  sub: 'As of May 2026' },
-  { big: '25',  unit: 'GB', label: 'Raw footage stored',    sub: 'From Russian, Ukranian and Independant sources' },
-  { big: '178', unit: 'K',  label: 'Images Analyzed',       sub: 'Labelled and Annotated' },
-]
+import { ref, computed, onMounted } from 'vue'
+
+const stats = ref(null)
+onMounted(async () => {
+  try {
+    const res = await fetch('/api/stats')
+    if (res.ok) stats.value = await res.json()
+  } catch {}
+})
+
+function fmtK(n) {
+  if (n == null) return '—'
+  if (n >= 1e6) return { big: (n / 1e6).toFixed(1), unit: 'M' }
+  if (n >= 1e3) return { big: Math.round(n / 1e3), unit: 'K' }
+  return { big: n, unit: '' }
+}
+
+const items = computed(() => {
+  const labeled = fmtK(stats.value?.images_labeled)
+  return [
+    {
+      big:  stats.value ? String(stats.value.clips_total) : '—',
+      unit: '',
+      label: 'Total clips archived',
+      sub: 'Raw footage downloaded',
+    },
+    {
+      big:  stats.value ? String(stats.value.raw_gb) : '—',
+      unit: 'GB',
+      label: 'Raw footage stored',
+      sub: 'From Russian, Ukrainian and Independent sources',
+    },
+    {
+      big:  stats.value ? labeled.big : '—',
+      unit: stats.value ? labeled.unit : '',
+      label: 'Training images',
+      sub: 'Labeled and annotated across 5 datasets',
+    },
+  ]
+})
 </script>

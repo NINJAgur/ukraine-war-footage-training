@@ -25,7 +25,7 @@
           <span>{{ row.val }}</span>
         </li>
       </ul>
-      <a href="https://github.com" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:10px;margin-top:32px;font-family:var(--font-mono);font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--amber);border-bottom:1px solid var(--amber-border);padding-bottom:4px">
+      <a href="https://github.com/NINJAgur/ukraine-war-footage-training" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:10px;margin-top:32px;font-family:var(--font-mono);font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--amber);border-bottom:1px solid var(--amber-border);padding-bottom:4px">
         View on GitHub →
       </a>
     </div>
@@ -34,8 +34,8 @@
 
 <script setup>
 const rows = [
-  { label: 'Source code',  val: 'github.com/ukrarchive' },
-  { label: 'Hosted on',    val: 'GitHub Pages' },
+  { label: 'Source code',  val: 'github.com/NINJAgur/ukraine-war-footage-training' },
+  { label: 'Hosted on',    val: 'Self-hosted (FastAPI + Vue 3)' },
   { label: 'License',      val: 'Open Evidence License' },
   { label: 'Started',      val: 'February 24, 2022' },
   { label: 'Maintained by', val: '1 person' },
