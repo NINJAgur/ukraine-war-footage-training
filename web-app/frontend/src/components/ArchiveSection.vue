@@ -9,6 +9,7 @@
         <h2 class="section-title">Browse footage</h2>
         <div class="section-count mono">{{ filtered.length }} results</div>
       </div>
+      <RouterLink to="/archive" class="view-all-link mono">VIEW ALL →</RouterLink>
     </div>
 
     <div class="archive-controls">
