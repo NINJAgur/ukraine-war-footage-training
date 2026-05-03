@@ -1,5 +1,11 @@
 import os
+import sys
 from pathlib import Path
+
+# Must be before any router imports so hot-reload picks up shared.db.models
+_REPO_ROOT = str(Path(__file__).parent.parent.parent)
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
