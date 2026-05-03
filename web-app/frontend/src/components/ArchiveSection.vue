@@ -49,10 +49,12 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { FOOTAGE_DATA, DET_CLASSES, SOURCES } from '../data/constants.js'
 import FootageCard from './FootageCard.vue'
 import FootageModal from './FootageModal.vue'
 import RadarCanvas from './RadarCanvas.vue'
+
+const DET_CLASSES = ['All', 'Aircraft', 'Vehicle', 'Personnel']
+const SOURCES     = ['All sources', 'Funker530', 'GeoConfirmed']
 
 const items        = ref([])
 const activeClass  = ref('All')
@@ -63,9 +65,8 @@ const modalItem    = ref(null)
 onMounted(async () => {
   try {
     const res = await fetch('/api/annotated-clips')
-    if (res.ok) { items.value = await res.json(); return }
+    if (res.ok) items.value = await res.json()
   } catch {}
-  items.value = FOOTAGE_DATA
 })
 
 function openModal(item) { modalItem.value = item }

@@ -3,11 +3,11 @@
 
     <!-- header -->
     <header class="panel-header">
-      <div class="nav-logo">
+      <a href="/" class="nav-logo" style="text-decoration:none;cursor:pointer">
         <div class="nav-logo-mark"></div>
         UKRARCHIVE
         <span class="mono" style="color:var(--fg-3);font-size:10px">ADMIN</span>
-      </div>
+      </a>
       <div style="display:flex;align-items:center;gap:24px">
         <div class="nav-status">
           <div class="status-dot"></div>

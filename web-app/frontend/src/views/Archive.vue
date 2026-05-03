@@ -69,13 +69,12 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppNav      from '../components/AppNav.vue'
 import FootageCard from '../components/FootageCard.vue'
 import FootageModal from '../components/FootageModal.vue'
 import SiteFooter  from '../components/SiteFooter.vue'
-import { FOOTAGE_DATA } from '../data/constants.js'
 
 const route  = useRoute()
 const router = useRouter()
@@ -89,12 +88,12 @@ const PER_PAGE     = 20
 const modalItem    = ref(null)
 
 onMounted(async () => {
-  window.scrollTo(0, 0)
   try {
     const res = await fetch('/api/annotated-clips')
-    if (res.ok) { items.value = await res.json(); return }
+    if (res.ok) items.value = await res.json()
   } catch {}
-  items.value = FOOTAGE_DATA // fallback
+  await nextTick()
+  window.scrollTo({ top: 0, behavior: 'instant' })
 })
 
 function openModal(item) { modalItem.value = item }

@@ -13,9 +13,16 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { TICKER_ITEMS } from '../data/constants.js'
 
-const BASE_ITEMS = TICKER_ITEMS.filter(t => !t.startsWith('AIRCRAFT MODEL') && !t.startsWith('VEHICLE MODEL') && !t.startsWith('PERSONNEL MODEL'))
+const BASE_ITEMS = [
+  'ARCHIVE ONLINE — ACTIVE COLLECTION',
+  'FUNKER530 — MONITORING ACTIVE',
+  'GEOCONFIRMED — MONITORING ACTIVE',
+  'GDINO LABELING — 26K IMAGES COMPLETE',
+  'LAST SCRAPE: AUTO',
+  'COLLECTION PERIOD: FEB 2022 — PRESENT',
+  '3 DETECTION CLASSES: AIRCRAFT · VEHICLE · PERSONNEL',
+]
 
 const models = ref({})
 onMounted(async () => {
