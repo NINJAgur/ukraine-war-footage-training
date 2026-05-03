@@ -27,7 +27,6 @@
               <div class="ml-spacer-meta">
                 <span class="ml-spacer-badge">MODEL v2.4</span>
                 <span class="ml-spacer-badge">{{ cat.detections.length }} CLASSES</span>
-                <span class="ml-spacer-badge">{{ cat.src }}</span>
               </div>
             </div>
             <div class="ml-spacer-right">

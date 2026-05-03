@@ -33,7 +33,7 @@
         from open-source channels. Aircraft · Vehicle · Personnel.
       </p>
       <div class="hero-actions">
-        <button class="btn-primary" @click="scrollToArchive">Browse Archive</button>
+        <router-link to="/archive" class="btn-primary">Browse Archive</router-link>
         <router-link to="/admin/login" class="btn-secondary">Admin Panel</router-link>
       </div>
     </div>
@@ -70,8 +70,4 @@ onMounted(async () => {
     stats.value[0] = { num: String(d.clips_total), label: 'Clips archived' }
   } catch {}
 })
-
-function scrollToArchive() {
-  document.getElementById('archive')?.scrollIntoView({ behavior: 'smooth' })
-}
 </script>

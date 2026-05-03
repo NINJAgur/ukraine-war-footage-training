@@ -97,6 +97,8 @@ nav {
   font-weight: 500;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+  color: var(--fg-0);
+  cursor: pointer;
 }
 
 .nav-logo-mark {
