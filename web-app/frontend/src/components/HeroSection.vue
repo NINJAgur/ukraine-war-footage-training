@@ -55,9 +55,9 @@ import { GENERALIST_CAT } from '../data/constants.js'
 import { ref, onMounted } from 'vue'
 
 const stats = ref([
-  { num: '3',     label: 'YOLO specialists' },
-  { num: '102K+', label: 'Training images' },
-  { num: '0.91',  label: 'AIRCRAFT mAP50' },
+  { num: '—', label: 'Clips archived' },
+  { num: '—', label: 'Training images' },
+  { num: '—', label: 'Best mAP50' },
 ])
 
 onMounted(async () => {
@@ -66,8 +66,10 @@ onMounted(async () => {
     if (!res.ok) return
     const d = await res.json()
     const k = d.images_labeled >= 1000 ? Math.round(d.images_labeled / 1000) + 'K+' : String(d.images_labeled)
-    stats.value[1] = { num: k, label: 'Training images' }
     stats.value[0] = { num: String(d.clips_total), label: 'Clips archived' }
+    stats.value[1] = { num: k, label: 'Training images' }
+    const maps = Object.values(d.models ?? {}).filter(m => m.map50 != null).map(m => m.map50)
+    if (maps.length) stats.value[2] = { num: Math.max(...maps).toFixed(3), label: 'Best mAP50' }
   } catch {}
 })
 </script>

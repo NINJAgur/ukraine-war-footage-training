@@ -53,21 +53,14 @@ correctness, security, UX, and performance requirements.
 - [ ] Search results update without full page reload
 - [ ] Empty search results show friendly message
 
-### Admin Inbox (`/admin/inbox`)
+### AdminPanel (`/admin`)
 - [ ] Unauthenticated users are redirected to `/admin/login`
-- [ ] Notification badge shows correct count of unlabeled datasets
-- [ ] Checkbox select-all works
-- [ ] "Train Model" button is disabled when no datasets selected
-- [ ] "Train Model" navigates to `/admin/train` with selected IDs in state
-
-### TrainModel (`/admin/train`)
-- [ ] Stage 1 / Stage 2 toggle is mutually exclusive
-- [ ] Selected datasets are listed with names and frame counts
-- [ ] "Start Training" button dispatches to API and shows task ID
-- [ ] WebSocket connects and displays live epoch/loss updates
-- [ ] Progress chart updates in real-time
-- [ ] "Training Complete" message shown when `status=DONE`
-- [ ] Error message shown when `status=ERROR`
+- [ ] Training runs table shows latest run per model with mAP50, status, timestamps
+- [ ] BASELINE / FINETUNE train buttons dispatch to `POST /api/admin/train`; success shows amber msg, error shows red bordered panel for 10s
+- [ ] Clips table paginated; filter tabs include REVIEW status
+- [ ] APPROVE button visible on REVIEW clips; calls `POST /api/admin/clips/{id}/approve`
+- [ ] Error: duplicate active run → red panel "ERROR: {model} already has a QUEUED run"
+- [ ] Error: FINETUNE without baseline → red panel "No completed baseline run found"
 
 ### Cross-Cutting
 - [ ] Dark mode renders correctly on all views (no white flash)

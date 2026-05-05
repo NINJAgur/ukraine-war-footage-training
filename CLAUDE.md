@@ -29,11 +29,12 @@
 - `1=VEHICLE` — tanks, APCs, artillery, radar, all ground military vehicles
 - `2=PERSONNEL` — soldiers, fighters, RPG/ATGM operators
 
-**Cold-start training order:**
-1. nzigulic: human-labeled nc=11 → visually mapped → remapped to nc=3 (done ✅)
-2. piterfm: GDINO category-aware labels → nc=3, 26k images at `kaggle_datasets/piterfm/2022-ukraine-russia-war-equipment-losses-oryx/versions/1/` (done ✅)
-3. Train AIRCRAFT, VEHICLE, PERSONNEL specialists on all 5 Kaggle datasets (tasks 2.36–2.38, in progress 🔄)
-4. Train GENERAL only after all 3 specialists pass mAP50 > 0.4 (task 2.40)
+**Cold-start training order (8 Kaggle datasets total):**
+1. Dataset prep: nzigulic mapped nc=11→nc=3 ✅; piterfm GDINO labeled ✅; rookieengg, rawsi18, amad-5 added ✅
+2. AIRCRAFT baseline: mAP50=0.929 @ 10 epochs, run 13 ✅
+3. VEHICLE baseline: mAP50=0.871 @ 10 epochs, run 25 ✅
+4. PERSONNEL baseline: ⏳ next (~25K images, kiit-mita + rawsi18 + amad-5)
+5. GENERAL: ⏳ after all 3 specialists pass mAP50 > 0.4 (~175K images, all 8 datasets)
 
 **GDINO auto-label pipeline (category-aware "." prompt → canonical nc=3):**
 - Video clips: `core/autolabeling/auto_label.py` — extracts frames, runs GDINO, remaps via `GDINO_CLASS_TO_MODEL`
@@ -53,9 +54,9 @@ All services import via re-export stubs (`ml-engine/db/models.py`, `scraper-engi
 | Service | Directory | Phase |
 |---------|-----------|-------|
 | Scraper Engine | `scraper-engine/` | 1 ✅ |
-| ML Engine | `ml-engine/` | 2 🔄 |
-| Backend API | `web-app/backend/` | 3 ⏳ |
-| Frontend | `web-app/frontend/` | 3 ⏳ |
+| ML Engine | `ml-engine/` | 2 🔄 (AIRCRAFT ✅ VEHICLE ✅ PERSONNEL ⏳ GENERAL ⏳) |
+| Backend API | `web-app/backend/` | 3 🔄 |
+| Frontend | `web-app/frontend/` | 3 🔄 |
 
 ---
 
@@ -104,8 +105,8 @@ Run Phase 2 test: `cd ml-engine && python tests/test_pipeline_e2e.py`
 |-------|-------|--------|
 | 0 | Agentic workspace | ✅ Complete |
 | 1 | Scraper engine | ✅ Complete |
-| 2 | ML pipeline — baseline training | 🔄 In progress (2.36 AIRCRAFT training running, next: 2.37 VEHICLE, 2.38 PERSONNEL) |
-| 3 | Web application | ⏳ Pending |
+| 2 | ML pipeline — baseline training | 🔄 In progress (AIRCRAFT ✅ 0.929, VEHICLE ✅ 0.871, PERSONNEL ⏳, GENERAL ⏳) |
+| 3 | Web application | 🔄 In progress (core wired; WebSocket + full Celery pipeline pending) |
 | 4 | Cloud & DevOps | ⏳ Pending |
 
 ---

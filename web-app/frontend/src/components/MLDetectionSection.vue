@@ -71,8 +71,9 @@ onMounted(async () => {
       const clips = await clipsRes.json()
       const CLASS_MAP = { aircraft: 'AIRCRAFT', personnel: 'PERSONNEL', vehicles: 'VEHICLE' }
       for (const [catId, detClass] of Object.entries(CLASS_MAP)) {
+        const modelDone = models.value[detClass]?.status === 'DONE'
         const clip = clips.find(c => c.detClass === detClass)
-        if (clip) videoUrls.value[catId] = clip.videoUrl
+        if (clip && modelDone) videoUrls.value[catId] = clip.videoUrl
       }
     }
   } catch {}

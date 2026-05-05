@@ -1,6 +1,6 @@
 # PROJECT_PLAN.md — Ukraine Combat Footage Web Application
 > **Source of Truth** — All phases, structure, and decisions are tracked here.
-> Last updated: 2026-05-03
+> Last updated: 2026-05-04
 
 ---
 
@@ -231,7 +231,7 @@ yolo-training-template/                  ← monorepo root
 │   ├── beat_schedule.py
 │   ├── config.py
 │   ├── tasks/
-│   │   ├── _filter.py                   ← shared content filter (equipment + impact/aftermath gate)
+│   │   ├── _filter.py                   ← shared content filter (equipment + negative gate)
 │   │   ├── scrape_funker530.py          ← Funker530 REST API + filter + yt-dlp
 │   │   ├── scrape_geoconfirmed.py       ← GeoConfirmed REST API + parallel fetch + filter + yt-dlp
 │   │   └── download_kaggle.py
@@ -298,12 +298,16 @@ yolo-training-template/                  ← monorepo root
 │           │   ├── Submit.vue
 │           │   └── admin/
 │           │       ├── AdminLogin.vue
-│           │       ├── AdminInbox.vue
-│           │       └── TrainModel.vue
+│           │       └── AdminPanel.vue
 │           └── components/
-│               ├── VideoCard.vue
-│               ├── DatasetRow.vue
-│               └── TrainingProgress.vue
+│               ├── AppNav.vue
+│               ├── HeroSection.vue
+│               ├── TickerBar.vue
+│               ├── MLDetectionSection.vue
+│               ├── MLCard.vue
+│               ├── ArchiveSection.vue
+│               ├── SiteFooter.vue
+│               └── ... (see 3.9 for full list)
 │
 ├── infra/                               ← PHASE 4: Cloud & DevOps ⏳ Pending
 │   ├── gcp/
@@ -362,7 +366,7 @@ yolo-training-template/                  ← monorepo root
 - [x] **1.6** Implement `tasks/download_kaggle.py` (Kaggle API)
 - [x] **1.7** Configure `beat_schedule.py` (hourly scrape, nightly Kaggle)
 - [x] **1.8** Write `scraper-engine/Dockerfile`
-- [x] **1.9** Implement `tasks/_filter.py` — shared content filter: equipment keyword gate (regex + word boundaries, specific hardware names) + impact/aftermath rejection gate (fire, smoke, ruins, wreckage — blocks aftermath footage, not target type)
+- [x] **1.9** Implement `tasks/_filter.py` — shared content filter: equipment keyword gate (regex + word boundaries, specific hardware names) + negative rejection gate (fire, smoke, ruins, wreckage — blocks aftermath footage, not target type)
 - [x] **1.10** Live scrape + download test passed (2026-04-18): 4/4 tests pass. Funker530 (5 clips, all valid Ukraine drone/infantry footage), GeoConfirmed (5 clips, all valid FPV/UAV strike footage). Impact filter correctly rejects refinery smoke plumes and aftermath videos.
 
 ---
@@ -390,7 +394,7 @@ yolo-training-template/                  ← monorepo root
 - [x] **2.16** `train_finetune.py` per-model class filtering — superseded by 2.30
 - [x] **2.17** `infer_video_multi_model()` in `core/inference.py` — 4-model sequential rendering, colour-coded bboxes
 - [x] **2.18** `render_annotated.py` `_best_weights_per_model()` — superseded by 2.29
-- [x] **2.19** All 5 Kaggle datasets on disk and verified: kiit-mita (1700 total, nc=7 → remap), mihprofi (37900 total, nc=2 → remap), shakedlevnat (19958 total, nc=83 → remap), nzigulic (16809 total, nc=11 anonymous labels unusable → GDINO), piterfm (31041 images, no labels → GDINO)
+- [x] **2.19** Initial 5 Kaggle datasets on disk and verified: kiit-mita (1700, nc=7→remap), mihprofi (37900, nc=2→remap), shakedlevnat (19958, nc=83→remap), nzigulic (16809, nc=11→GDINO), piterfm (31041, no labels→GDINO). 3 additional datasets added later: rookieengg (11788, nc=43→AIRCRAFT), rawsi18 (26315, nc=12→remap), amad-5 (34960, nc=5→remap)
 
 #### 2c — Infrastructure + First Test ✅
 - [x] **2.20** `test_pipeline_e2e.py` — real clip required; render → annotated MP4; `--keep`/`--purge-outputs`
@@ -440,11 +444,34 @@ yolo-training-template/                  ← monorepo root
   - `"piterfm/2022-ukraine-russia-war-equipment-losses-oryx"` identity map added to `DATASET_CLASS_MAPS` + `BASELINE_DATASETS` (AIRCRAFT, VEHICLE, GENERAL)
 - [x] **2.35** Spot-check label quality: nzigulic validated via contact sheets (all 11 classes identified); piterfm validated via 94.6% GDINO detection rate with category-aware prompts
 
-#### Step 2 — Train specialists (all 5 Kaggle datasets as corpus)
+#### Dataset Inventory (8 datasets, all on disk)
 
-- [x] **2.36** Run `test_baseline_train.py --model-type AIRCRAFT --epochs 10 --keep` — mAP50=0.9269 @ epoch 10 ✅
+| Kaggle handle | nc | Images | Labels | Notes |
+|---|---|---|---|---|
+| `mihprofi/drone-detect` | 2 | 37,900 | 37,900 | Both classes → AIRCRAFT |
+| `shakedlevnat/military-aircraft-database` | 83 | 19,958 | 19,958 | All → AIRCRAFT |
+| `nzigulic/military-equipment` | 11 | 16,809 | 16,809 | Visually mapped → nc=3 |
+| `piterfm/2022-ukraine-russia-war-equipment-losses-oryx` | 3 | 26,197 | 26,118 | GDINO category-aware labels |
+| `sudipchakrabarty/kiit-mita` | 7 | 1,700 | 1,700 | YOLO remapped → nc=3 |
+| `rookieengg/military-aircraft-detection` | 43 | 11,788 | 11,788 | All 43 classes → AIRCRAFT |
+| `rawsi18/military-assets-dataset-12-classes` | 12 | 26,315 | 26,315 | YOLO remapped → nc=3 |
+| `rupankarmajumdar/amad-5` | 5 | 34,960 | 34,960 | YOLO remapped → nc=3 |
+| **TOTAL** | | **175,627** | **175,548** | |
+
+#### Per-Model Dataset Mapping
+
+| Model | Source Datasets | ~Images |
+|---|---|---|
+| **AIRCRAFT** | mihprofi, shakedlevnat, nzigulic, piterfm, rookieengg, rawsi18 | ~115K |
+| **VEHICLE** | kiit-mita, nzigulic, piterfm, rawsi18, amad-5 | ~87K |
+| **PERSONNEL** | kiit-mita, rawsi18, amad-5 | ~25K |
+| **GENERAL** | all 8 | ~175K |
+
+#### Step 2 — Train specialists (8 Kaggle datasets as corpus)
+
+- [x] **2.36** Run `test_baseline_train.py --model-type AIRCRAFT --epochs 10 --keep` — mAP50=0.9269 @ epoch 10 (run 13, 83K images) ✅
 - [x] **2.36b** `ml-engine/scripts/aircraft_pipeline.py` — scrape→validate→annotate pipeline; `validate_clip()` in `core/inference.py` (generic, any model); detection-rate gate (≥15% frames with detections, 30 samples); 4 annotated MP4s produced (2 Funker530, 2 GeoConfirmed: Mi-28 hit 67%, Shahed building strike 17%)
-- [ ] **2.37** Run `test_baseline_train.py --model-type VEHICLE --epochs 10 --keep`
+- [x] **2.37** Run `test_baseline_train.py --model-type VEHICLE --epochs 10 --keep` — mAP50=0.8712 @ epoch 10 (run 25, 86,945 images) ✅
 - [ ] **2.38** Run `test_baseline_train.py --model-type PERSONNEL --epochs 10 --keep`
 - [ ] **2.39** Evaluate each: mAP50 > 0.4 = acceptable; increase epochs if below
 
@@ -484,27 +511,27 @@ yolo-training-template/                  ← monorepo root
   - `CapabilitiesSection.vue` — 2×2 grid: Automated Ingestion / YOLO Detection / GDINO Labeling / Open Archive
   - `AboutSection.vue` — project info + tech stack list
   - `SiteFooter.vue` — 4-col footer
-- [ ] **3.10** `Archive.vue` — dedicated `/archive` page
+- [x] **3.10** `Archive.vue` — dedicated `/archive` page
   - Paginated grid (20/page) with page controls
   - Filters: detection class pill buttons + source buttons + search input (mirrors `ArchiveSection` controls)
   - Folder/category sidebar: group by `source` (Funker530 / GeoConfirmed) and `det_class` (AIRCRAFT / VEHICLE / PERSONNEL); click to filter
   - URL query params (`?class=AIRCRAFT&source=funker530&q=drone`) so links are shareable
-  - Data from `GET /api/archive?page=N&per_page=20&det_class=X&source=Y`
-  - Backend: extend `/api/archive` to accept `det_class` + `source` query filters; return `det_class` + `video_url` in response (already in `ClipOut`)
-  - `ArchiveSection.vue` "View All" button routes to `/archive`
-- [ ] **3.11** `Submit.vue` — footage submission form (URL input → `POST /api/submit`)
+  - Data from `GET /api/annotated-clips`; scroll-to-top fixed with `nextTick` + `behavior:instant`
+  - `ArchiveSection.vue` "View All" button routes to `/archive`; "Browse Archive" hero button routes to `/archive`
+- [x] **3.11** `Submit.vue` — footage submission form (URL input → `POST /api/submit`); submitted clips land as `status=REVIEW`, admin approves via `POST /api/admin/clips/{id}/approve`
 
 #### Frontend ↔ Backend Integration
 
-- [ ] **3.16** Replace hardcoded `FOOTAGE_DATA` in `ArchiveSection.vue` + `Archive.vue` with live `GET /api/annotated-clips`; fix backend process management so hot-reload works reliably (move `sys.path` setup to `main.py` before any router imports)
-- [ ] **3.17** `AdminPanel.vue` — wire clips table to `GET /api/admin/clips` (replace stub data); infinite scroll or pagination
-- [ ] **3.18** `AdminPanel.vue` — wire training runs table to `GET /api/admin/training-runs`; poll every 5s while any run is `RUNNING`
-- [ ] **3.19** `AdminPanel.vue` — wire "Queue Training" buttons to `POST /api/admin/train`; disable button while model has a `RUNNING` or `QUEUED` run; show queued badge
-- [ ] **3.20** End-to-end auth flow — `AdminLogin.vue` posts to `/api/auth/login`, stores JWT, router guard redirects on 401; test with real admin credentials from `.env`
+- [x] **3.16** Replace hardcoded `FOOTAGE_DATA` in `ArchiveSection.vue` + `Archive.vue` with live `GET /api/annotated-clips`; constants.js stripped to visual-only
+- [x] **3.17** `AdminPanel.vue` — clips table wired to `GET /api/admin/clips`; paginated; REVIEW filter + APPROVE button for submitted clips
+- [x] **3.18** `AdminPanel.vue` — training runs table wired to `GET /api/admin/training-runs`; `map50` normalized via `model_validator` in `TrainingRunOut`
+- [x] **3.19** `AdminPanel.vue` — train buttons wired to `POST /api/admin/train`; dispatches Celery task on gpu queue; 202 Accepted
+- [x] **3.20** End-to-end auth flow — JWT login/logout; router guard; `.env` credentials; `admin` / `admin123`
+- [x] **3.23** `TickerBar.vue` + `MLCard` + `DataStrip` + `CapabilitiesSection` — all pull live data from `GET /api/stats`; `GET /api/stats` reads from `TrainingRun.metrics` DB column
 
 #### Backend ↔ ML Engine Integration
 
-- [ ] **3.21** `POST /api/admin/train` → create `TrainingRun(QUEUED)` in DB → dispatch Celery task `train_baseline` or `train_finetune` with `model_type` + `run_id`; task updates `status=RUNNING` on start, `status=DONE`/`ERROR` on finish, writes `weights_path` + `metrics` to DB
+- [x] **3.21** `POST /api/admin/train` → create `TrainingRun(QUEUED)` in DB → dispatch Celery task `train_baseline` with `model_type` + `run_id` on gpu queue; task updates status/metrics/weights in DB on finish
 - [ ] **3.22** Full Celery scrape→annotate pipeline wired end-to-end: `scrape_funker530` / `scrape_geoconfirmed` → `auto_label_clip` → `package_dataset` → `render_annotated` → sets `Clip.mp4_path` + `status=ANNOTATED` in DB → `/api/annotated-clips` serves real video to frontend
 - [ ] **3.23** `TickerBar.vue` items pulled from DB: total clip count, scrape status, model mAP50 scores — `GET /api/stats` endpoint returning live counts
 
@@ -534,28 +561,30 @@ yolo-training-template/                  ← monorepo root
 ## 5. Next Steps
 
 Phase 0 ✅, Phase 1 ✅, Phase 2a–2e (code) ✅, GDINO installed ✅, datasets prepped ✅.
+Phase 3 frontend + admin wiring largely complete (3.10–3.11, 3.16–3.21, 3.23 done ✅).
 
-**AIRCRAFT complete (mAP50=0.9269). 4 annotated MP4s in archive modal. Backend static files + ClipOut live.**
-
-**Immediate: finish ML specialists (2.37–2.38), then wire backend↔frontend↔ml-engine (3.16–3.23)**
+**Specialist training progress:**
+- AIRCRAFT: mAP50=0.929 ✅ (run 13, 83K images)
+- VEHICLE:  mAP50=0.871 ✅ (run 25, 87K images)
+- PERSONNEL: ⏳ next
+- GENERAL: ⏳ after all 3 specialists
 
 **Step A — Finish specialist training (Phase 2)**
 ```bash
 cd ml-engine
-python tests/test_baseline_train.py --model-type VEHICLE   --epochs 10 --keep
-python tests/test_baseline_train.py --model-type PERSONNEL --epochs 10 --keep
-python tests/test_baseline_train.py --model-type GENERAL   --epochs 10 --keep
+python tests/test_baseline_train.py --model-type PERSONNEL --epochs 10 --keep   # ~1h, ~25K images
+python tests/test_baseline_train.py --model-type GENERAL   --epochs 10 --keep   # ~5h, ~175K images
 # Target: mAP50 > 0.4 per model
 ```
 
-**Step B — Archive page (3.10)**
-- `Archive.vue` with folder sidebar (group by source + class), pagination, shareable URL params
-- Extend `/api/archive` backend filter params
+**Step B — Celery scrape→annotate pipeline (3.22)**
+- `render_annotated` task writes `mp4_path` + `status=ANNOTATED` back to Clip row
+- Start Celery worker: `celery -A celery_app worker -Q gpu --concurrency=1`
+- Verify `POST /api/admin/train` → worker picks up and executes
 
-**Step C — Frontend ↔ Backend live wiring (3.16–3.20)**
-- Replace `FOOTAGE_DATA` with live API
-- Wire AdminPanel clips/runs tables + train button
-- End-to-end auth test
+**Step C — Optional: WebSocket training progress (3.14–3.14b)**
+- FastAPI WebSocket `ws://localhost:8000/ws/training/{run_id}`
+- AdminPanel live epoch progress bar
 
 **Step D — Backend ↔ ML Engine Celery pipeline (3.21–3.22)**
 - `POST /api/admin/train` → Celery task → `TrainingRun` DB lifecycle

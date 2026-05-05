@@ -18,7 +18,7 @@ from celery_app import celery_app
 from config import settings
 from db.models import Clip, ClipSource, ClipStatus
 from db.session import get_session
-from tasks._filter import check_equipment, is_infrastructure_strike
+from tasks._filter import check_equipment, is_negative_input
 
 logger = logging.getLogger(__name__)
 
@@ -184,18 +184,18 @@ def extract_video_incidents(max_incidents: int) -> list[dict]:
                 # Feed description + gear into the filter
                 filter_text = f"{desc} {gear} {units}"
                 equip_ok, equip_reason = check_equipment(name, filter_text)
-                is_infra, infra_reason = is_infrastructure_strike(name, filter_text)
+                is_neg, neg_reason = is_negative_input(name, filter_text)
 
                 # Multi-line console logging restored
                 logger.info(
-                    f"  GeoConfirmed candidate  equipment={equip_reason!r}  impact={is_infra}\n"
+                    f"  GeoConfirmed candidate  equipment={equip_reason!r}  negative={is_neg}\n"
                     f"    name: {name}\n"
                     f"    desc: {desc}\n"
                     f"    gear: {gear}"
                 )
 
-                if is_infra:
-                    logger.info(f"    → SKIP: {infra_reason}")
+                if is_neg:
+                    logger.info(f"    → SKIP: {neg_reason}")
                     skipped += 1
                     continue
                 if not equip_ok:

@@ -56,30 +56,32 @@ All models use the same 3-class canonical vocabulary, aligned with `_filter.py` 
 | 2 | PERSONNEL | soldiers, fighters, combatants, RPG/ATGM operators |
 
 **ModelType enum:** AIRCRAFT, VEHICLE, PERSONNEL, GENERAL  
-**Training order:** specialists first (AIRCRAFT, VEHICLE, PERSONNEL in parallel) → GENERAL only once all 3 pass mAP50 > 0.4
+**Training order:** specialists sequentially (AIRCRAFT ✅ → VEHICLE ✅ → PERSONNEL ⏳ → GENERAL ⏳ once all 3 pass mAP50 > 0.4)
 
-### All 5 Kaggle Datasets
+### All 8 Kaggle Datasets (on disk)
 
-| Dataset handle | nc | Actual classes | Pipeline role |
-|----------------|-----|---------------|---------------|
-| `sudipchakrabarty/kiit-mita` | 7 | Artillery, Missile, Radar, M.RocketLauncher, Soldier, Tank, Vehicle | YOLO labels → remap to 3 classes |
-| `nzigulic/military-equipment` | 11 | Unknown (no original yaml) | **GDINO auto-label** — ignore existing labels |
-| `mihprofi/drone-detect` | 2 | Dron, Dron2 | YOLO labels → remap: both → AIRCRAFT |
-| `shakedlevnat/military-aircraft-database-prepared-for-yolo` | 83 | Specific aircraft types (F16, Su25, TB2, Mi28, Ka52…) | YOLO labels → remap: helicopters→AIRCRAFT, drones→AIRCRAFT, rest→AIRCRAFT |
-| `piterfm/2022-ukraine-russia-war-equipment-losses-oryx` | — | Images only | **GDINO auto-label** |
+| Dataset handle | nc | Images | Labels | Pipeline role |
+|----------------|-----|--------|--------|---------------|
+| `mihprofi/drone-detect` | 2 | 37,900 | 37,900 | YOLO remap: both → AIRCRAFT |
+| `shakedlevnat/military-aircraft-database` | 83 | 19,958 | 19,958 | YOLO remap: all → AIRCRAFT |
+| `nzigulic/military-equipment` | 11 | 16,809 | 16,809 | Visually mapped → nc=3 (all 11 classes identified) |
+| `piterfm/2022-ukraine-russia-war-equipment-losses-oryx` | 3 | 26,197 | 26,118 | GDINO category-aware auto-label |
+| `sudipchakrabarty/kiit-mita` | 7 | 1,700 | 1,700 | YOLO remap → nc=3 |
+| `rookieengg/military-aircraft-detection` | 43 | 11,788 | 11,788 | YOLO remap: all 43 → AIRCRAFT |
+| `rawsi18/military-assets-dataset-12-classes` | 12 | 26,315 | 26,315 | YOLO remap → nc=3 |
+| `rupankarmajumdar/amad-5` | 5 | 34,960 | 34,960 | YOLO remap → nc=3 |
+| **TOTAL** | | **175,627** | **175,548** | |
 
-**Wrong datasets (do not use):** `rawsi18/military-assets-dataset-12-classes-yolo8-format`, `muki2003/yolo-drone-detection-dataset`
+### Cold-Start Baseline Training (3-class canonical labels)
 
-### Cold-Start Kaggle Training (3-class canonical labels)
-| Model | Kaggle datasets used | Notes |
-|-------|---------------------|-------|
-| AIRCRAFT | mihprofi + shakedlevnat | All map to class 0 |
-| VEHICLE | kiit-mita | Artillery/tank/vehicle/radar → class 1; soldier/missile dropped |
-| PERSONNEL | kiit-mita | Soldier → class 2; everything else dropped |
-| GENERAL | all 3 above combined | Runs last, after specialists verified |
+| Model | Source Datasets | ~Images | Result |
+|-------|----------------|---------|--------|
+| AIRCRAFT | mihprofi, shakedlevnat, nzigulic, piterfm, rookieengg, rawsi18 | ~115K | mAP50=0.929 ✅ run 13 |
+| VEHICLE | kiit-mita, nzigulic, piterfm, rawsi18, amad-5 | ~87K | mAP50=0.871 ✅ run 25 |
+| PERSONNEL | kiit-mita, rawsi18, amad-5 | ~25K | ⏳ next |
+| GENERAL | all 8 | ~175K | ⏳ after all specialists |
 
-nzigulic and piterfm are NOT in Kaggle cold-start — they go through GDINO auto-label first, then enter the fine-tune corpus.
-Weights land at: `runs/baseline/<MODEL_TYPE>/weights/best.pt`
+Weights land at: `runs/baseline/<MODEL_TYPE>/baseline_<MODEL>_<run_id>/weights/best.pt`
 
 ### kiit-mita Class Remapping
 - 0 Artillery → 1 (VEHICLE)

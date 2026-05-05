@@ -181,9 +181,7 @@ def infer_video_multi_model(
             for box in results[0].boxes:
                 x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
                 conf_val = float(box.conf[0])
-                cls_id   = int(box.cls[0])
-                cls_name = results[0].names.get(cls_id, str(cls_id))
-                dets.append((x1, y1, x2, y2, conf_val, f"{label_prefix}:{cls_name}"))
+                dets.append((x1, y1, x2, y2, conf_val, label_prefix))
             frame_dets[idx] = dets
             idx += 1
         cap2.release()
@@ -224,8 +222,12 @@ def infer_video_multi_model(
         check=True,
     )
     os.remove(temp_path)
-    logging.info(f"Multi-model annotated video saved to {save_path} ({idx} frames)")
-    return idx
+    det_counts = {
+        label_prefix: sum(len(v) for v in all_detections[i].values())
+        for i, (_, label_prefix, _) in enumerate(models_info)
+    }
+    logging.info(f"Multi-model annotated video saved to {save_path} ({idx} frames) detections={det_counts}")
+    return idx, det_counts
 
 
 def validate_clip(model, path, conf_thresh: float = 0.35,

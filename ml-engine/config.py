@@ -81,10 +81,10 @@ class Settings(BaseSettings):
     }
     # Render colours per model type (BGR for OpenCV)
     MODEL_COLORS: dict = {
-        "GENERAL":   (200, 200, 200),  # light grey
-        "AIRCRAFT":  (255, 160,   0),  # cyan-blue
-        "VEHICLE":   (0,   200,  60),  # green
-        "PERSONNEL": (0,   80,  255),  # red-orange
+        "GENERAL":   (200, 200, 200),  # BGR grey
+        "AIRCRAFT":  (210, 152,  56),  # BGR → frontend steel blue  rgb(56,152,210)
+        "VEHICLE":   ( 50,  80, 210),  # BGR → frontend brick red   rgb(210,80,50)
+        "PERSONNEL": ( 90, 180,  60),  # BGR → frontend green       rgb(60,180,90)
     }
 
     def model_post_init(self, __context):
@@ -96,6 +96,8 @@ class Settings(BaseSettings):
             self.KAGGLE_CACHE_DIR,
         ]:
             d.mkdir(parents=True, exist_ok=True)
+        for cls in ("aircraft", "vehicle", "personnel", "general"):
+            (self.ANNOTATED_VIDEO_DIR / cls).mkdir(parents=True, exist_ok=True)
 
 
 settings = Settings()

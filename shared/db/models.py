@@ -19,6 +19,7 @@ class Base(DeclarativeBase):
 # ── Clip ──────────────────────────────────────────────────────────────
 
 class ClipStatus(str, enum.Enum):
+    REVIEW = "REVIEW"        # user-submitted, awaiting admin approval
     PENDING = "PENDING"
     DOWNLOADING = "DOWNLOADING"
     DOWNLOADED = "DOWNLOADED"
@@ -54,6 +55,7 @@ class Clip(Base):
     error_message = Column(Text)
     file_path = Column(String(2000))
     mp4_path = Column(String(2000))
+    det_class = Column(String(20))       # dominant detected class (AIRCRAFT/VEHICLE/PERSONNEL/GENERAL)
     duration_seconds = Column(Integer)
     width = Column(Integer)
     height = Column(Integer)

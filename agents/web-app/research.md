@@ -33,12 +33,39 @@ You focus exclusively on the `web-app/` service.
 ### Key UI Views
 | View | Route | Audience |
 |------|-------|---------|
-| `PublicFeed.vue` | `/` | Public — daily feed of annotated clips |
-| `Archive.vue` | `/archive` | Public — searchable historical archive |
-| `Submit.vue` | `/submit` | Public — footage submission form |
+| `PublicFeed.vue` | `/` | Public — homepage with hero, ticker, ML cards, archive section |
+| `Archive.vue` | `/archive` | Public — paginated archive with class/source filters |
+| `Submit.vue` | `/submit` | Public — footage submission form; clips land as `status=REVIEW` |
 | `AdminLogin.vue` | `/admin/login` | Admin — JWT login |
-| `AdminInbox.vue` | `/admin/inbox` | Admin — labeled dataset inbox with badges |
-| `TrainModel.vue` | `/admin/train` | Admin — stage selector + live training progress |
+| `AdminPanel.vue` | `/admin` | Admin — training run table + clips table + train buttons; APPROVE for REVIEW clips |
+
+### API Endpoints (implemented)
+| Method | Path | Notes |
+|--------|------|-------|
+| GET | `/api/stats` | Live model status + image counts from DB |
+| GET | `/api/annotated-clips` | MP4 list from disk (`ml-engine/media/annotated/`) |
+| GET | `/api/feed` | Paginated ANNOTATED clips from DB |
+| GET | `/api/archive` | Paginated all clips by status |
+| POST | `/api/submit` | Submit clip URL → `status=REVIEW` |
+| GET | `/api/admin/clips` | Paginated clips (admin, with status filter) |
+| POST | `/api/admin/clips/{id}/approve` | Flip REVIEW → PENDING |
+| GET | `/api/admin/training-runs` | Paginated training runs |
+| POST | `/api/admin/train` | Queue baseline or finetune Celery task |
+
+### Dev Server Setup
+```bash
+# Backend on port 8001 (frontend proxies to this)
+cd web-app/backend && uvicorn main:app --reload --port 8001
+
+# Frontend on port 5173
+cd web-app/frontend && npm run dev
+```
+
+### Training Validation (admin.py)
+`POST /api/admin/train` enforces:
+1. No duplicate active (QUEUED/RUNNING) run for same model_type → 409
+2. FINETUNE requires a DONE BASELINE with weights_path → 400
+3. FINETUNE weights file must exist on disk → 400
 
 ---
 

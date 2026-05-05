@@ -2,13 +2,13 @@ from datetime import datetime
 from typing import Optional
 
 from celery import Celery
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import get_current_admin
 from config import settings
-from db.models import Clip, ClipStatus, TrainingRun, TrainingStatus
+from db.models import Clip, ClipStatus, TrainingRun, TrainingStage, TrainingStatus
 from db.session import get_db
 from schemas.clips import ClipOut
 from schemas.training import TrainRequest, TrainingRunOut
@@ -54,12 +54,63 @@ async def list_training_runs(
     return {"items": [TrainingRunOut.model_validate(r) for r in items], "total": total, "page": page, "per_page": per_page}
 
 
+@router.post("/clips/{clip_id}/approve", status_code=200)
+async def approve_clip(
+    clip_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: dict = Depends(get_current_admin),
+) -> dict:
+    clip = await db.get(Clip, clip_id)
+    if not clip:
+        raise HTTPException(status_code=404, detail="Clip not found")
+    if clip.status != ClipStatus.REVIEW:
+        raise HTTPException(status_code=409, detail=f"Clip is {clip.status}, not REVIEW")
+    clip.status = ClipStatus.PENDING
+    return {"clip_id": clip_id, "status": "PENDING"}
+
+
 @router.post("/train", status_code=202)
 async def start_training(
     body: TrainRequest,
     db: AsyncSession = Depends(get_db),
     _: dict = Depends(get_current_admin),
 ) -> dict:
+    # Block if a run is already active for this model
+    active = (await db.execute(
+        select(TrainingRun)
+        .where(TrainingRun.model_type == body.model_type)
+        .where(TrainingRun.status.in_([TrainingStatus.QUEUED, TrainingStatus.RUNNING]))
+        .limit(1)
+    )).scalar_one_or_none()
+    if active:
+        raise HTTPException(
+            status_code=409,
+            detail=f"{body.model_type.value} already has a {active.status.value} run (id={active.id})",
+        )
+
+    # FINETUNE requires a completed baseline with weights on disk
+    if body.stage == TrainingStage.FINETUNE:
+        baseline = (await db.execute(
+            select(TrainingRun)
+            .where(TrainingRun.model_type == body.model_type)
+            .where(TrainingRun.stage == TrainingStage.BASELINE)
+            .where(TrainingRun.status == TrainingStatus.DONE)
+            .where(TrainingRun.weights_path.isnot(None))
+            .order_by(TrainingRun.id.desc())
+            .limit(1)
+        )).scalar_one_or_none()
+        if not baseline:
+            raise HTTPException(
+                status_code=400,
+                detail=f"No completed baseline run found for {body.model_type.value} — run BASELINE first",
+            )
+        from pathlib import Path
+        if not Path(baseline.weights_path).exists():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Baseline weights missing on disk: {baseline.weights_path}",
+            )
+
     run = TrainingRun(
         stage=body.stage,
         model_type=body.model_type,
@@ -68,8 +119,9 @@ async def start_training(
     )
     db.add(run)
     await db.flush()
+    task_name = "tasks.train_baseline.train_baseline" if body.stage == TrainingStage.BASELINE else "tasks.train_finetune.train_finetune"
     task = _celery.send_task(
-        "tasks.train_baseline.train_baseline",
+        task_name,
         kwargs={"training_run_id": run.id},
         queue="gpu",
     )
