@@ -58,7 +58,7 @@ const capabilities = computed(() => [
     title: 'Continuous Scraping',
     desc: 'Celery beat task monitors Funker530 and GeoConfirmed REST APIs on an hourly schedule. New clips are deduplicated by SHA-256 URL hash and downloaded with yt-dlp.',
     m1: stats.value ? String(stats.value.clips_total) : '—', m1l: 'Clips archived',
-    m2: stats.value ? `${stats.value.raw_gb}GB`         : '—', m2l: 'Raw footage stored',
+    m2: stats.value ? `${stats.value.raw_gb}GB`         : '—', m2l: 'Media stored',
     icon: 'geo',
   },
   {

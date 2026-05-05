@@ -1,12 +1,11 @@
 import hashlib
-import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 import cv2
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models import Clip, ClipSource, ClipStatus, ModelType, TrainingRun, TrainingStatus
@@ -18,23 +17,11 @@ router = APIRouter(prefix="/api", tags=["public"])
 _ANNOTATED_DIR = Path(__file__).parent.parent.parent.parent / "ml-engine" / "media" / "annotated"
 _RAW_DIR       = Path(__file__).parent.parent.parent.parent / "scraper-engine" / "media" / "raw"
 
-_MODEL_RE = re.compile(r'(aircraft|vehicle|personnel|general)', re.I)
-
 _SOURCE_DISPLAY = {
     "funker530":    "Funker530",
     "geoconfirmed": "GeoConfirmed",
     "submitted":    "Submitted",
 }
-
-
-def _lookup_source(hash_prefix: str) -> str:
-    """Find source by checking which raw subfolder contains a clip with this hash prefix."""
-    for folder in _RAW_DIR.iterdir():
-        if not folder.is_dir():
-            continue
-        if any(folder.glob(f"{hash_prefix}*")):
-            return _SOURCE_DISPLAY.get(folder.name.lower(), folder.name.capitalize())
-    return "Unknown"
 
 
 def _video_duration(path: Path) -> str:
@@ -48,25 +35,34 @@ def _video_duration(path: Path) -> str:
 
 
 @router.get("/annotated-clips")
-async def get_annotated_clips() -> list[dict]:
+async def get_annotated_clips(db: AsyncSession = Depends(get_db)) -> list[dict]:
+    """Return annotated clips from DB — det_class is authoritative, never derived from filename."""
+    stmt = (
+        select(Clip)
+        .where(Clip.status == ClipStatus.ANNOTATED, Clip.mp4_path.isnot(None), Clip.det_class.isnot(None))
+        .order_by(Clip.created_at.desc())
+    )
+    clips = (await db.execute(stmt)).scalars().all()
     items = []
-    for f in sorted(_ANNOTATED_DIR.glob("*.mp4"), key=lambda p: p.stat().st_mtime, reverse=True):
-        hash_prefix = f.stem[:8]
-        model_match = _MODEL_RE.search(f.stem)
-        det_class   = model_match.group().upper() if model_match else "AIRCRAFT"
-        mtime       = datetime.fromtimestamp(f.stat().st_mtime, tz=timezone.utc)
+    for clip in clips:
+        mp4 = Path(clip.mp4_path)
+        if not mp4.exists():
+            continue
+        # videoUrl uses the category subdir path
+        rel = mp4.relative_to(_ANNOTATED_DIR)
         items.append({
-            "id":       f.stem,
-            "title":    f.stem.replace("_", " ").replace("annotated", "").strip().upper(),
-            "date":     mtime.strftime("%Y-%m-%d"),
-            "duration": _video_duration(f),
-            "detClass": det_class,
-            "source":   _lookup_source(hash_prefix),
+            "id":       clip.url_hash[:12],
+            "title":    (clip.title or clip.url_hash[:12]).upper(),
+            "date":     clip.created_at.strftime("%Y-%m-%d") if clip.created_at else "",
+            "duration": _video_duration(mp4),
+            "detClass": clip.det_class,
+            "source":   _SOURCE_DISPLAY.get((clip.source.value if clip.source else ""), "Unknown"),
             "tag":      "annotated",
-            "src":      hash_prefix.upper(),
-            "videoUrl": f"/media/annotated/{f.name}",
+            "src":      clip.url_hash[:8].upper(),
+            "videoUrl": f"/media/annotated/{rel.as_posix()}",
         })
     return items
+
 
 
 _KAGGLE_DIR  = Path(__file__).parent.parent.parent.parent / "ml-engine" / "media" / "kaggle_datasets"
@@ -167,29 +163,25 @@ def _dir_gb(base: Path) -> float:
 
 @router.get("/stats")
 async def get_stats(db: AsyncSession = Depends(get_db)) -> dict:
-    # Count raw clips from disk — DB may be out of sync with directly-downloaded clips
-    clips_total = 0
-    if _RAW_DIR.exists():
-        for src_dir in _RAW_DIR.iterdir():
-            if src_dir.is_dir():
-                clips_total += len(list(src_dir.glob("*.mp4")))
+    clips_total = (await db.execute(text("SELECT COUNT(*) FROM clips"))).scalar() or 0
 
-    annotated_mp4s = len(list(_ANNOTATED_DIR.glob("*.mp4"))) if _ANNOTATED_DIR.exists() else 0
-    raw_gb = _dir_gb(_RAW_DIR) if _RAW_DIR.exists() else 0.0
+    annotated_mp4s = len(list(_ANNOTATED_DIR.glob("**/*.mp4"))) if _ANNOTATED_DIR.exists() else 0
+    raw_gb      = _dir_gb(_RAW_DIR)      if _RAW_DIR.exists()      else 0.0
+    annotated_gb = _dir_gb(_ANNOTATED_DIR) if _ANNOTATED_DIR.exists() else 0.0
+    storage_gb  = round(raw_gb + annotated_gb, 2)
 
-    images_labeled = 0
-    if _KAGGLE_DIR.exists():
-        for ds_dir in _KAGGLE_DIR.iterdir():
-            if ds_dir.name in _SOURCE_DATASETS and ds_dir.is_dir():
-                images_labeled += _count_images(ds_dir)
+    model_stats = await _model_stats(db)
+    images_labeled = sum(
+        m.get("images", 0) for m in model_stats.values() if m.get("status") == "DONE"
+    )
 
     return {
         "clips_total":     clips_total,
         "clips_annotated": annotated_mp4s,
-        "raw_gb":          raw_gb,
+        "raw_gb":          storage_gb,
         "images_labeled":  images_labeled,
         "annotated_mp4s":  annotated_mp4s,
-        "models":          await _model_stats(db),
+        "models":          model_stats,
         "sources_active":  2,
     }
 
@@ -247,7 +239,7 @@ async def submit_clip(body: ClipSubmit, db: AsyncSession = Depends(get_db)) -> C
         title=body.title,
         description=body.description,
         source=ClipSource.SUBMITTED,
-        status=ClipStatus.PENDING,
+        status=ClipStatus.REVIEW,
     )
     db.add(clip)
     await db.flush()

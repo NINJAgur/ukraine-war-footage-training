@@ -27,7 +27,7 @@ from celery_app import celery_app
 from config import settings
 from db.models import Clip, ClipSource, ClipStatus
 from db.session import get_session
-from tasks._filter import check_equipment, check_geo, is_infrastructure_strike
+from tasks._filter import check_equipment, check_geo, is_negative_input
 
 logger = logging.getLogger(__name__)
 
@@ -150,10 +150,10 @@ def fetch_ukraine_posts(max_count: int) -> list[dict]:
 
         geo = check_geo(title, description)
         equip_ok, equip_reason = check_equipment(title, description)
-        is_infra, infra_reason = is_infrastructure_strike(title, description)
+        is_neg, neg_reason = is_negative_input(title, description)
 
         logger.info(
-            f"  Funker530 candidate  geo={geo!r}  equipment={equip_reason!r}  impact={is_infra}\n"
+            f"  Funker530 candidate  geo={geo!r}  equipment={equip_reason!r}  negative={is_neg}\n"
             f"    title: {title}\n"
             f"    desc:  {description}"
         )
@@ -162,8 +162,8 @@ def fetch_ukraine_posts(max_count: int) -> list[dict]:
             logger.info(f"    → SKIP: no Ukraine/Russia geo keyword")
             skipped += 1
             continue
-        if is_infra:
-            logger.info(f"    → SKIP: {infra_reason}")
+        if is_neg:
+            logger.info(f"    → SKIP: {neg_reason}")
             skipped += 1
             continue
         if not equip_ok:

@@ -87,7 +87,6 @@ def render_annotated_clip(self, clip_id: int) -> dict:
             logger.info(f"[{self.request.id}] Already annotated: {clip.mp4_path}")
             return {"status": "skipped", "clip_id": clip_id}
 
-    output_path = settings.ANNOTATED_VIDEO_DIR / f"{clip_hash}_annotated.mp4"
     weights_map = _best_weights_per_model()
 
     from inference import load_model, infer_video_multi_model
@@ -107,30 +106,40 @@ def render_annotated_clip(self, clip_id: int) -> dict:
     if not models_info:
         raise RuntimeError("No models could be loaded for rendering")
 
-    frame_count = infer_video_multi_model(
+    tmp_path = settings.ANNOTATED_VIDEO_DIR / f"{clip_hash}_annotated.mp4"
+    frame_count, det_counts = infer_video_multi_model(
         models_info=models_info,
         video_path=str(video_path),
         conf_thresh=0.4,
-        save_path=str(output_path),
+        save_path=str(tmp_path),
         no_display=True,
     )
 
-    if not output_path.exists():
-        raise FileNotFoundError(f"Annotated video not created: {output_path}")
+    if not tmp_path.exists():
+        raise FileNotFoundError(f"Annotated video not created: {tmp_path}")
+
+    specialist_counts = {k: v for k, v in det_counts.items() if k != "GENERAL"}
+    dominant = max(specialist_counts, key=specialist_counts.get) if specialist_counts else "GENERAL"
+
+    # Save to per-class subdir — filename carries no semantic meaning, class lives in DB
+    output_path = settings.ANNOTATED_VIDEO_DIR / dominant.lower() / f"{clip_hash}_annotated.mp4"
+    tmp_path.rename(output_path)
 
     with get_session() as session:
         clip = session.get(Clip, clip_id)
         clip.mp4_path = str(output_path)
+        clip.det_class = dominant
         clip.status = ClipStatus.ANNOTATED
 
     logger.info(
         f"[{self.request.id}] Annotated MP4 saved: {output_path} "
-        f"({frame_count} frames, {len(models_info)} models)"
+        f"({frame_count} frames, dominant={dominant}, detections={det_counts})"
     )
     return {
         "status": "annotated",
         "clip_id": clip_id,
         "mp4_path": str(output_path),
-        "models_used": [m[1] for m in models_info],
+        "dominant_class": dominant,
+        "det_counts": det_counts,
         "frame_count": frame_count,
     }

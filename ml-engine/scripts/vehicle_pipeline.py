@@ -1,13 +1,13 @@
 """
-aircraft_pipeline.py
+vehicle_pipeline.py
 
-Scrape 2 aircraft-relevant clips from Funker530 + 2 from GeoConfirmed,
-validate each clip has visible aircraft (≥15% frames with detections),
-then run the AIRCRAFT model → annotated MP4 saved to media/annotated/aircraft/.
+Scrape 2 vehicle-relevant clips from Funker530 + 2 from GeoConfirmed,
+validate each clip has visible vehicles (≥15% frames with detections),
+then run the VEHICLE model → annotated MP4 saved to media/annotated/vehicle/.
 DB Clip entry written for each annotated clip.
 
 Usage (from repo root):
-    cd ml-engine && python scripts/aircraft_pipeline.py
+    cd ml-engine && python scripts/vehicle_pipeline.py
 """
 import sys
 import re
@@ -16,34 +16,42 @@ from pathlib import Path
 from datetime import datetime
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-log = logging.getLogger("aircraft_pipeline")
+log = logging.getLogger("vehicle_pipeline")
 
-REPO_ROOT        = Path(__file__).resolve().parents[2]
-ML_ENGINE_DIR    = REPO_ROOT / "ml-engine"
-SCRAPER_DIR      = REPO_ROOT / "scraper-engine"
-AIRCRAFT_WEIGHTS = ML_ENGINE_DIR / "runs/baseline/AIRCRAFT/baseline_AIRCRAFT_13/weights/best.pt"
-OUT_DIR          = ML_ENGINE_DIR / "media/annotated/aircraft"
+REPO_ROOT       = Path(__file__).resolve().parents[2]
+ML_ENGINE_DIR   = REPO_ROOT / "ml-engine"
+SCRAPER_DIR     = REPO_ROOT / "scraper-engine"
+VEHICLE_WEIGHTS = ML_ENGINE_DIR / "runs/baseline/VEHICLE/baseline_VEHICLE_25/weights/best.pt"
+OUT_DIR         = ML_ENGINE_DIR / "media/annotated/vehicle"
 
 sys.path.insert(0, str(ML_ENGINE_DIR))
 sys.path.insert(0, str(SCRAPER_DIR))
 sys.path.insert(0, str(REPO_ROOT))
 
-_HIGH = re.compile(
-    r"\b(fpv|drone|uav|shahed|geran|lancet|orlan|bayraktar|"
-    r"helicopter|ka-52|mi-8|mi-17|mi-24|mi-28|mi-35|"
-    r"loitering|kamikaze drone|strike drone|recon drone)\b",
+_TANK_RE = re.compile(
+    r"\b(tank|t-54|t-55|t-62|t-64|t-72|t-72b3|t-80|t-80bvm|t-90|t-90m|"
+    r"leopard|abrams|m1a1|challenger|pt-91|amx-10)\b",
     re.IGNORECASE,
 )
-_MED = re.compile(
-    r"\b(aircraft|jet|plane|su-24|su-25|su-27|su-30|su-34|su-35|"
-    r"glide bomb|kab|fab-500|fab-1500|intercept|aerial)\b",
+_APC_RE = re.compile(
+    r"\b(bmp|btr|bmd|bradley|m2a2|marder|cv90|stryker|m113|mt-lb|mrap|"
+    r"maxxpro|humvee|hmmwv|ifv|apc|armou?red vehicle)\b",
+    re.IGNORECASE,
+)
+_ARTY_RE = re.compile(
+    r"\b(artillery|howitzer|mlrs|himars|grad|bm-21|caesar|pzh2000|krab|"
+    r"m777|paladin|msta|2s19|2s3|2s1|tos-1|solntsepyok|gepard|pantsir)\b",
     re.IGNORECASE,
 )
 
 
-def _aircraft_score(title: str, desc: str = "") -> int:
+def _vehicle_score(title: str, desc: str = "") -> int:
     text = f"{title} {desc}"
-    return len(_HIGH.findall(text)) * 3 + len(_MED.findall(text))
+    return (
+        len(_TANK_RE.findall(text)) * 3
+        + len(_APC_RE.findall(text)) * 2
+        + len(_ARTY_RE.findall(text))
+    )
 
 
 # ── 1. Scrape + download ──────────────────────────────────────────────
@@ -58,7 +66,7 @@ def scrape_funker(model, n: int = 2) -> list[Path]:
 
     scored = sorted(
         posts,
-        key=lambda c: _aircraft_score(c.get("title", ""), c.get("description", "")),
+        key=lambda c: _vehicle_score(c.get("title", ""), c.get("description", "")),
         reverse=True,
     )
 
@@ -66,7 +74,7 @@ def scrape_funker(model, n: int = 2) -> list[Path]:
     for p in scored:
         if len(paths) >= n:
             break
-        score = _aircraft_score(p.get("title", ""), p.get("description", ""))
+        score = _vehicle_score(p.get("title", ""), p.get("description", ""))
         if score == 0:
             log.info("  remaining candidates score 0, stopping")
             break
@@ -94,7 +102,7 @@ def scrape_geo(model, n: int = 2) -> list[Path]:
 
     scored = sorted(
         incidents,
-        key=lambda c: _aircraft_score(c.get("title", ""), c.get("description", "")),
+        key=lambda c: _vehicle_score(c.get("title", ""), c.get("description", "")),
         reverse=True,
     )
 
@@ -102,7 +110,7 @@ def scrape_geo(model, n: int = 2) -> list[Path]:
     for inc in scored:
         if len(paths) >= n:
             break
-        score = _aircraft_score(inc.get("title", ""), inc.get("description", ""))
+        score = _vehicle_score(inc.get("title", ""), inc.get("description", ""))
         if score == 0:
             log.info("  remaining candidates score 0, stopping")
             break
@@ -120,7 +128,7 @@ def scrape_geo(model, n: int = 2) -> list[Path]:
     return paths
 
 
-# ── 2. Annotate with AIRCRAFT model + write DB ────────────────────────
+# ── 2. Annotate with VEHICLE model + write DB ─────────────────────────
 
 def annotate(input_paths: list[Path], model) -> list[Path]:
     from core.inference import infer_video_multi_model
@@ -132,7 +140,7 @@ def annotate(input_paths: list[Path], model) -> list[Path]:
     _spec = _ilu.spec_from_file_location("ml_config", ML_ENGINE_DIR / "config.py")
     _mod = _ilu.module_from_spec(_spec)
     _spec.loader.exec_module(_mod)
-    color = _mod.settings.MODEL_COLORS["AIRCRAFT"]
+    color = _mod.settings.MODEL_COLORS["VEHICLE"]
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     output_paths = []
@@ -144,9 +152,9 @@ def annotate(input_paths: list[Path], model) -> list[Path]:
         log.info(f"Annotating {src.name} → {out.name}")
         try:
             infer_video_multi_model(
-                models_info=[(model, "AIRCRAFT", color)],
+                models_info=[(model, "VEHICLE", color)],
                 video_path=str(src),
-                conf_thresh=0.35,
+                conf_thresh=0.4,
                 save_path=str(out),
                 no_display=True,
             )
@@ -164,7 +172,7 @@ def annotate(input_paths: list[Path], model) -> list[Path]:
                     source=clip_source,
                     title=src.stem,
                     status=ClipStatus.ANNOTATED,
-                    det_class="AIRCRAFT",
+                    det_class="VEHICLE",
                     mp4_path=str(out),
                     file_path=str(src),
                     created_at=datetime.utcnow(),
@@ -172,12 +180,12 @@ def annotate(input_paths: list[Path], model) -> list[Path]:
                 )
                 .on_conflict_do_update(
                     index_elements=["url_hash"],
-                    set_={"mp4_path": str(out), "det_class": "AIRCRAFT",
+                    set_={"mp4_path": str(out), "det_class": "VEHICLE",
                           "status": ClipStatus.ANNOTATED, "updated_at": datetime.utcnow()},
                 )
             )
             session.execute(stmt)
-        log.info(f"  saved + DB written  det_class=AIRCRAFT")
+        log.info(f"  saved + DB written  det_class=VEHICLE")
         output_paths.append(out)
 
     return output_paths
@@ -186,17 +194,17 @@ def annotate(input_paths: list[Path], model) -> list[Path]:
 # ── Main ──────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    log.info("=== AIRCRAFT PIPELINE START ===")
+    log.info("=== VEHICLE PIPELINE START ===")
 
     from ultralytics import YOLO
 
-    if not AIRCRAFT_WEIGHTS.exists():
-        raise FileNotFoundError(f"AIRCRAFT weights not found: {AIRCRAFT_WEIGHTS}")
-    log.info(f"Loading AIRCRAFT model from {AIRCRAFT_WEIGHTS}")
-    aircraft_model = YOLO(str(AIRCRAFT_WEIGHTS))
+    if not VEHICLE_WEIGHTS.exists():
+        raise FileNotFoundError(f"VEHICLE weights not found: {VEHICLE_WEIGHTS}")
+    log.info(f"Loading VEHICLE model from {VEHICLE_WEIGHTS}")
+    vehicle_model = YOLO(str(VEHICLE_WEIGHTS))
 
-    funker_clips = scrape_funker(aircraft_model, n=2)
-    geo_clips    = scrape_geo(aircraft_model, n=2)
+    funker_clips = scrape_funker(vehicle_model, n=2)
+    geo_clips    = scrape_geo(vehicle_model, n=2)
 
     all_clips = funker_clips + geo_clips
     log.info(f"\nTotal: {len(all_clips)} valid clips")
@@ -206,7 +214,7 @@ if __name__ == "__main__":
         log.error("No valid clips — aborting")
         sys.exit(1)
 
-    annotated = annotate(all_clips, aircraft_model)
+    annotated = annotate(all_clips, vehicle_model)
 
     log.info("\n=== DONE ===")
     log.info(f"Annotated videos ({len(annotated)}):")

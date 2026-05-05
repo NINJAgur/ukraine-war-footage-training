@@ -38,8 +38,8 @@ const items = computed(() => {
     {
       big:  stats.value ? String(stats.value.raw_gb) : '—',
       unit: 'GB',
-      label: 'Raw footage stored',
-      sub: 'From Russian, Ukrainian and Independent sources',
+      label: 'Media stored',
+      sub: 'Raw footage + annotated clips on disk',
     },
     {
       big:  stats.value ? labeled.big : '—',

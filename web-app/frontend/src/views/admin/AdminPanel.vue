@@ -48,7 +48,7 @@
           </div>
         </div>
 
-        <div v-if="trainMsg" class="panel-msg mono">{{ trainMsg }}</div>
+        <div v-if="trainMsg" :class="['panel-msg mono', trainMsg.startsWith('ERROR') ? 'panel-msg-error' : '']">{{ trainMsg }}</div>
       </section>
 
       <!-- ── TRAINING RUNS ── -->
@@ -99,16 +99,19 @@
         <div v-if="clipsLoading" class="panel-loading mono">LOADING...</div>
         <table v-else class="panel-table">
           <thead>
-            <tr><th>ID</th><th>TITLE</th><th>SOURCE</th><th>STATUS</th><th>DURATION</th><th>ADDED</th></tr>
+            <tr><th>ID</th><th>TITLE</th><th>SOURCE</th><th>STATUS</th><th>DURATION</th><th>ADDED</th><th></th></tr>
           </thead>
           <tbody>
             <tr v-for="c in clips" :key="c.id">
               <td class="mono dim">#{{ c.id }}</td>
-              <td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ c.title ?? c.url }}</td>
+              <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ c.title ?? c.url }}</td>
               <td class="mono dim">{{ c.source }}</td>
               <td><span :class="['clip-status', c.status.toLowerCase()]" class="mono">{{ c.status }}</span></td>
               <td class="mono dim">{{ c.duration_seconds ? fmtDur(c.duration_seconds) : '—' }}</td>
               <td class="mono dim">{{ fmtDate(c.created_at) }}</td>
+              <td>
+                <button v-if="c.status === 'REVIEW'" class="approve-btn mono" @click="approveClip(c.id)">APPROVE</button>
+              </td>
             </tr>
             <tr v-if="!clips.length">
               <td colspan="6" class="mono dim" style="text-align:center;padding:10px">NO CLIPS FOUND</td>
@@ -133,7 +136,7 @@ import { useRouter } from 'vue-router'
 const router = useRouter()
 
 const MODELS       = ['AIRCRAFT', 'VEHICLE', 'PERSONNEL', 'GENERAL']
-const CLIP_STATUSES = ['', 'PENDING', 'DOWNLOADING', 'DOWNLOADED', 'ANNOTATED', 'ERROR']
+const CLIP_STATUSES = ['', 'REVIEW', 'PENDING', 'DOWNLOADING', 'DOWNLOADED', 'ANNOTATED', 'ERROR']
 
 const MODEL_COLORS = {
   AIRCRAFT:  'oklch(0.62 0.16 220deg)',
@@ -202,14 +205,20 @@ async function queueTrain(modelType, stage) {
     if (res.ok) {
       trainMsg.value = `QUEUED: ${modelType} ${stage}`
       await loadRuns()
+      setTimeout(() => { trainMsg.value = '' }, 4000)
     } else {
       const d = await res.json()
       trainMsg.value = `ERROR: ${d.detail ?? res.status}`
+      setTimeout(() => { trainMsg.value = '' }, 10000)
     }
   } finally {
     launching.value = null
-    setTimeout(() => { trainMsg.value = '' }, 4000)
   }
+}
+
+async function approveClip(clipId) {
+  await apiFetch(`/api/admin/clips/${clipId}/approve`, { method: 'POST' })
+  await loadClips()
 }
 
 function latestRun(modelType) {
@@ -336,8 +345,15 @@ onMounted(() => { loadRuns(); loadClips() })
 .panel-msg {
   margin-top: 16px;
   font-size: 11px;
-  letter-spacing: 0.15em;
+  letter-spacing: 0.1em;
   color: var(--amber);
+}
+.panel-msg-error {
+  color: var(--red);
+  border: 1px solid rgba(210,40,40,0.4);
+  background: rgba(210,40,40,0.06);
+  padding: 10px 14px;
+  border-radius: 2px;
 }
 
 .panel-table {
@@ -373,6 +389,19 @@ onMounted(() => { loadRuns(); loadClips() })
 .clip-status.downloading { color: var(--amber); }
 .clip-status.pending    { color: var(--fg-2); }
 .clip-status.error      { color: var(--red); }
+.clip-status.review     { color: var(--amber); }
+
+.approve-btn {
+  background: none;
+  border: 1px solid var(--green);
+  color: var(--green);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.approve-btn:hover { background: rgba(34,197,94,0.1); }
 
 .panel-pagination {
   display: flex;
