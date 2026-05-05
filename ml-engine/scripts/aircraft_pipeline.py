@@ -1,16 +1,17 @@
 """
 aircraft_pipeline.py
 
-Scrape 2 aircraft-relevant clips from Funker530 + 2 from GeoConfirmed,
+Query database for aircraft-relevant clips (Majority Voting),
 validate each clip has visible aircraft (≥15% frames with detections),
-then run the AIRCRAFT model → annotated MP4 saved to media/annotated/aircraft/.
-DB Clip entry written for each annotated clip.
+then run the AIRCRAFT model → annotated MP4 saved to remote storage or local media/.
+DB Clip entry written for each annotated clip, and heavy raw file deleted.
 
 Usage (from repo root):
     cd ml-engine && python scripts/aircraft_pipeline.py
 """
 import sys
-import re
+import os
+import shutil
 import logging
 from pathlib import Path
 from datetime import datetime
@@ -18,198 +19,92 @@ from datetime import datetime
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("aircraft_pipeline")
 
-REPO_ROOT        = Path(__file__).resolve().parents[2]
-ML_ENGINE_DIR    = REPO_ROOT / "ml-engine"
-SCRAPER_DIR      = REPO_ROOT / "scraper-engine"
-AIRCRAFT_WEIGHTS = ML_ENGINE_DIR / "runs/baseline/AIRCRAFT/baseline_AIRCRAFT_13/weights/best.pt"
-OUT_DIR          = ML_ENGINE_DIR / "media/annotated/aircraft"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+ML_ENGINE_DIR = REPO_ROOT / "ml-engine"
 
 sys.path.insert(0, str(ML_ENGINE_DIR))
-sys.path.insert(0, str(SCRAPER_DIR))
 sys.path.insert(0, str(REPO_ROOT))
 
-_HIGH = re.compile(
-    r"\b(fpv|drone|uav|shahed|geran|lancet|orlan|bayraktar|"
-    r"helicopter|ka-52|mi-8|mi-17|mi-24|mi-28|mi-35|"
-    r"loitering|kamikaze drone|strike drone|recon drone)\b",
-    re.IGNORECASE,
-)
-_MED = re.compile(
-    r"\b(aircraft|jet|plane|su-24|su-25|su-27|su-30|su-34|su-35|"
-    r"glide bomb|kab|fab-500|fab-1500|intercept|aerial)\b",
-    re.IGNORECASE,
-)
+from core.inference import validate_clip, infer_video_multi_model
+from db.session import get_session
+from shared.db.models import Clip, ClipStatus
+from config import settings
 
+AIRCRAFT_WEIGHTS = ML_ENGINE_DIR / "runs/baseline/AIRCRAFT/baseline_AIRCRAFT_13/weights/best.pt"
+COLOR = settings.MODEL_COLORS["AIRCRAFT"]
 
-def _aircraft_score(title: str, desc: str = "") -> int:
-    text = f"{title} {desc}"
-    return len(_HIGH.findall(text)) * 3 + len(_MED.findall(text))
+def finalize_storage(clip: Clip, temp_path: Path) -> str:
+    """Uploads/moves annotated video, deletes raw file to save space, returns permanent URL."""
+    final_url = ""
+    storage_mode = getattr(settings, "STORAGE_MODE", "local")
+    
+    if storage_mode == "remote":
+        # Placeholder for generic cloud upload logic (GCP, Azure, S3)
+        bucket = getattr(settings, "REMOTE_STORAGE_BUCKET", "my-bucket")
+        final_url = f"https://storage.googleapis.com/{bucket}/aircraft/{temp_path.name}"
+        if temp_path.exists():
+            os.remove(temp_path)
+    else:
+        perm_dir = settings.ANNOTATED_VIDEO_DIR / "aircraft"
+        perm_dir.mkdir(parents=True, exist_ok=True)
+        clean_name = temp_path.stem.removeprefix("temp_").replace("_clip", "") + "_annotated.mp4"
+        perm_path = perm_dir / clean_name
+        shutil.move(str(temp_path), str(perm_path))
+        final_url = str(perm_path)
 
+    # Clean up the raw file downloaded by Celery to save disk space
+    if clip.file_path and os.path.exists(clip.file_path):
+        os.remove(clip.file_path)
+        clip.file_path = None
+        log.info(f"Deleted raw file from disk.")
 
-# ── 1. Scrape + download ──────────────────────────────────────────────
+    return final_url
 
-def scrape_funker(model, n: int = 2) -> list[Path]:
-    from tasks.scrape_funker530 import fetch_ukraine_posts, _download_video, get_output_path
-    from core.inference import validate_clip
-
-    log.info("Fetching Funker530 posts…")
-    posts = fetch_ukraine_posts(max_count=60)
-    log.info(f"  fetched {len(posts)} posts")
-
-    scored = sorted(
-        posts,
-        key=lambda c: _aircraft_score(c.get("title", ""), c.get("description", "")),
-        reverse=True,
-    )
-
-    paths = []
-    for p in scored:
-        if len(paths) >= n:
-            break
-        score = _aircraft_score(p.get("title", ""), p.get("description", ""))
-        if score == 0:
-            log.info("  remaining candidates score 0, stopping")
-            break
-        log.info(f"  trying (score={score}): {p.get('title', '')[:80]!r}")
-        out = get_output_path(p["video_url"], "clip")
-        out.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            _download_video(p["video_url"], out)
-            if validate_clip(model, out):
-                paths.append(out)
-        except Exception as e:
-            log.error(f"  failed: {e}")
-
-    log.info(f"  Funker530: {len(paths)}/{n} valid clips")
-    return paths
-
-
-def scrape_geo(model, n: int = 2) -> list[Path]:
-    from tasks.scrape_geoconfirmed import extract_video_incidents, _download_video, get_output_path
-    from core.inference import validate_clip
-
-    log.info("Fetching GeoConfirmed incidents…")
-    incidents = extract_video_incidents(max_incidents=60)
-    log.info(f"  fetched {len(incidents)} incidents")
-
-    scored = sorted(
-        incidents,
-        key=lambda c: _aircraft_score(c.get("title", ""), c.get("description", "")),
-        reverse=True,
-    )
-
-    paths = []
-    for inc in scored:
-        if len(paths) >= n:
-            break
-        score = _aircraft_score(inc.get("title", ""), inc.get("description", ""))
-        if score == 0:
-            log.info("  remaining candidates score 0, stopping")
-            break
-        log.info(f"  trying (score={score}): {inc.get('title', '')[:80]!r}")
-        out = get_output_path(inc["url"], "clip")
-        out.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            _download_video(inc["url"], out)
-            if validate_clip(model, out):
-                paths.append(out)
-        except Exception as e:
-            log.error(f"  failed: {e}")
-
-    log.info(f"  GeoConfirmed: {len(paths)}/{n} valid clips")
-    return paths
-
-
-# ── 2. Annotate with AIRCRAFT model + write DB ────────────────────────
-
-def annotate(input_paths: list[Path], model) -> list[Path]:
-    from core.inference import infer_video_multi_model
-    from db.session import get_session
-    from shared.db.models import Clip, ClipSource, ClipStatus
-    from sqlalchemy.dialects.postgresql import insert as pg_insert
-
-    import importlib.util as _ilu
-    _spec = _ilu.spec_from_file_location("ml_config", ML_ENGINE_DIR / "config.py")
-    _mod = _ilu.module_from_spec(_spec)
-    _spec.loader.exec_module(_mod)
-    color = _mod.settings.MODEL_COLORS["AIRCRAFT"]
-
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    output_paths = []
-    for src in input_paths:
-        hash_prefix = src.stem[:8]
-        src_name = src.parent.name.lower()
-        clip_source = ClipSource.FUNKER530 if "funker" in src_name else ClipSource.GEOCONFIRMED
-        out = OUT_DIR / f"{hash_prefix}_annotated.mp4"
-        log.info(f"Annotating {src.name} → {out.name}")
-        try:
-            infer_video_multi_model(
-                models_info=[(model, "AIRCRAFT", color)],
-                video_path=str(src),
-                conf_thresh=0.35,
-                save_path=str(out),
-                no_display=True,
-            )
-        except Exception as e:
-            log.error(f"  annotation failed: {e}")
-            continue
-
-        full_hash = hash_prefix.ljust(64, "0")
-        with get_session() as session:
-            stmt = (
-                pg_insert(Clip)
-                .values(
-                    url=f"https://recovered/{hash_prefix}",
-                    url_hash=full_hash,
-                    source=clip_source,
-                    title=src.stem,
-                    status=ClipStatus.ANNOTATED,
-                    det_class="AIRCRAFT",
-                    mp4_path=str(out),
-                    file_path=str(src),
-                    created_at=datetime.utcnow(),
-                    updated_at=datetime.utcnow(),
-                )
-                .on_conflict_do_update(
-                    index_elements=["url_hash"],
-                    set_={"mp4_path": str(out), "det_class": "AIRCRAFT",
-                          "status": ClipStatus.ANNOTATED, "updated_at": datetime.utcnow()},
-                )
-            )
-            session.execute(stmt)
-        log.info(f"  saved + DB written  det_class=AIRCRAFT")
-        output_paths.append(out)
-
-    return output_paths
-
-
-# ── Main ──────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     log.info("=== AIRCRAFT PIPELINE START ===")
-
     from ultralytics import YOLO
 
     if not AIRCRAFT_WEIGHTS.exists():
         raise FileNotFoundError(f"AIRCRAFT weights not found: {AIRCRAFT_WEIGHTS}")
-    log.info(f"Loading AIRCRAFT model from {AIRCRAFT_WEIGHTS}")
-    aircraft_model = YOLO(str(AIRCRAFT_WEIGHTS))
+    
+    model = YOLO(str(AIRCRAFT_WEIGHTS))
 
-    funker_clips = scrape_funker(aircraft_model, n=2)
-    geo_clips    = scrape_geo(aircraft_model, n=2)
+    with get_session() as session:
+        # ── The DB Query Magic (Majority Voting logic) ──
+        # Aircrafts > 0, OR (UAS > 0 AND NOT POV)
+        candidates = (
+            session.query(Clip)
+            .filter(Clip.status == ClipStatus.DOWNLOADED)
+            .filter(Clip.file_path.isnot(None))
+            .filter((Clip.score_aircraft > 0) | ((Clip.score_uas > 0) & (Clip.is_pov == 0)))
+            .limit(10)
+            .all()
+        )
 
-    all_clips = funker_clips + geo_clips
-    log.info(f"\nTotal: {len(all_clips)} valid clips")
-    if len(all_clips) < 4:
-        log.warning(f"Only {len(all_clips)} clips passed validation (expected 4)")
-    if not all_clips:
-        log.error("No valid clips — aborting")
-        sys.exit(1)
+        log.info(f"Found {len(candidates)} candidates in DB.")
 
-    annotated = annotate(all_clips, aircraft_model)
-
-    log.info("\n=== DONE ===")
-    log.info(f"Annotated videos ({len(annotated)}):")
-    for p in annotated:
-        size_mb = p.stat().st_size / 1024 / 1024 if p.exists() else 0
-        log.info(f"  {p.name}  ({size_mb:.1f} MB)")
+        for clip in candidates:
+            raw_path = Path(clip.file_path)
+            if not raw_path.exists():
+                clip.status = ClipStatus.ERROR
+                continue
+            
+            log.info(f"Validating {raw_path.name}...")
+            if validate_clip(model, raw_path, conf_thresh=0.15):
+                log.info(f"✅ Aircraft found in {raw_path.name}")
+                
+                temp_out = ML_ENGINE_DIR / "media" / f"temp_{raw_path.name}"
+                infer_video_multi_model([(model, "AIRCRAFT", COLOR)], str(raw_path), save_path=str(temp_out), no_display=True)
+                
+                clip.mp4_path = finalize_storage(clip, temp_out)
+                clip.det_class = "AIRCRAFT"
+                clip.status = ClipStatus.ANNOTATED
+                clip.updated_at = datetime.utcnow()
+            else:
+                log.warning(f"❌ No aircraft in {raw_path.name}")
+                # We do not delete the raw file here, because Vehicle model might want it!
+                clip.status = ClipStatus.PENDING 
+        
+        session.commit()
+    log.info("=== DONE ===")

@@ -69,10 +69,9 @@ def test_geoconfirmed() -> None:
     logger.info(f"GeoConfirmed: fetched {len(incidents)} video incidents")
     logger.info("  Filter: origin='VID' on GeoConfirmed Ukraine map + equipment keyword preference")
     for inc in incidents:
-        eq = inc.get("equipment_match")
-        tier = f"equipment_match='{eq}'" if eq else "(no equipment match)"
+        scores = inc.get("scores", {})
         logger.info(
-            f"  [{inc['url_hash'][:8]}] {tier}\n"
+            f"  [{inc['url_hash'][:8]}] scores={scores}\n"
             f"    url={inc['url'][:80]}\n"
             f"    title={inc['title'][:80]!r}"
         )
@@ -117,6 +116,7 @@ def test_db_write() -> None:
                     description=post["description"] or None,
                     published_at=post["published_at"],
                     status=ClipStatus.PENDING,
+                    **post.get("scores", {}),
                 )
                 .on_conflict_do_nothing(index_elements=["url_hash"])
                 .returning(Clip.id)
@@ -139,6 +139,7 @@ def test_db_write() -> None:
                     description=inc["description"] or None,
                     published_at=inc["published_at"],
                     status=ClipStatus.PENDING,
+                    **inc.get("scores", {}),
                 )
                 .on_conflict_do_nothing(index_elements=["url_hash"])
                 .returning(Clip.id)
