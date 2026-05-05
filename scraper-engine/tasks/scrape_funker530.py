@@ -27,7 +27,7 @@ from celery_app import celery_app
 from config import settings
 from db.models import Clip, ClipSource, ClipStatus
 from db.session import get_session
-from tasks._filter import check_equipment, check_geo, is_negative_input
+from tasks._filter import get_equipment_scores, check_geo, is_negative_input
 
 logger = logging.getLogger(__name__)
 
@@ -149,11 +149,11 @@ def fetch_ukraine_posts(max_count: int) -> list[dict]:
         checked += 1
 
         geo = check_geo(title, description)
-        equip_ok, equip_reason = check_equipment(title, description)
+        scores, equip_ok = get_equipment_scores(title, description)
         is_neg, neg_reason = is_negative_input(title, description)
 
         logger.info(
-            f"  Funker530 candidate  geo={geo!r}  equipment={equip_reason!r}  negative={is_neg}\n"
+            f"  Funker530 candidate  geo={geo!r}  scores={scores}  negative={is_neg}\n"
             f"    title: {title}\n"
             f"    desc:  {description}"
         )
@@ -167,7 +167,7 @@ def fetch_ukraine_posts(max_count: int) -> list[dict]:
             skipped += 1
             continue
         if not equip_ok:
-            logger.info(f"    → SKIP: {equip_reason}")
+            logger.info(f"    → SKIP: no equipment match")
             skipped += 1
             continue
 
@@ -191,8 +191,9 @@ def fetch_ukraine_posts(max_count: int) -> list[dict]:
             "title": title[:500],
             "description": description[:2000],
             "published_at": published_at if published_at != datetime.min else None,
+            "scores": scores
         })
-        logger.info(f"    → ACCEPT  equipment='{equip_reason}'  geo='{geo}'")
+        logger.info(f"    → ACCEPT  scores='{scores}'  geo='{geo}'")
 
     logger.info(f"Funker530: {len(results)} accepted, {skipped} skipped (checked {checked} candidates)")
     return results
@@ -273,6 +274,7 @@ def scrape_funker530(self) -> dict:
                         description=post["description"] or None,
                         published_at=post["published_at"],
                         status=ClipStatus.PENDING,
+                        **post["scores"]
                     )
                     .on_conflict_do_nothing(index_elements=["url_hash"])
                     .returning(Clip.id)

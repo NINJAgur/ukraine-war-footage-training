@@ -45,7 +45,7 @@ _ARTILLERY_AIR_DEFENSE = [
 
 _AIRCRAFT = [
     "helicopter", "ka-52", "alligator", "mi-8", "mi-17", "mi-24", "mi-28",
-    "mi-35", "uh-60", "black hawk", "ah-64", "apache", "aircraft", "aviation"
+    "mi-35", "uh-60", "black hawk", "ah-64", "apache", "aircraft", "aviation",
     "plane", "su-24", "su-25", "su-27", "su-30", "su-34", "su-35", "mig-29",
     "mig-31", "f-16", "a-50", "il-22", "tu-22", "tu-95", "tu-160",
     "glide bomb", "kab", "fab-500", "fab-1500", "fab-3000",
@@ -71,17 +71,10 @@ _PERSONNEL = [
     "kadyrovtsy", "mercenary", "paratrooper"
 ]
 
-# Combine all equipment lists
-EQUIPMENT_KEYWORDS = (
-    _UAS + _TANKS + _ARMORED_VEHICLES + _ARTILLERY_AIR_DEFENSE + 
-    _AIRCRAFT + _NAVAL_MARINE + _INFANTRY_WEAPONS + _PERSONNEL
-)
-
-# Sort by length descending to ensure specific models match before broad terms
-# e.g., "t-72b3" matches before "t-72"; "sea drone" before "drone"
-EQUIPMENT_KEYWORDS.sort(key=len, reverse=True)
-_eq_joined = "|".join(map(re.escape, EQUIPMENT_KEYWORDS))
-EQUIPMENT_PATTERN = re.compile(rf"\b({_eq_joined})\b", re.IGNORECASE)
+# POV/Kamikaze (Negative Match for Aircraft Pipeline Only)
+POV_KEYWORDS = [
+    "fpv", "kamikaze", "drops grenade", "drone drops", "first person view", "waiter drone"
+]
 
 
 # ── 2. Impact & Aftermath (Negative Match) ─────────────────────────────
@@ -95,99 +88,33 @@ EQUIPMENT_PATTERN = re.compile(rf"\b({_eq_joined})\b", re.IGNORECASE)
 #   "damaged" (standalone) — "BMP damaged by ATGM" is valid action footage
 NEGATIVE_KEYWORDS = [
     # Civilian Personnel
-    "civilian",
-    "civilians",
-    "child",
-    "children",
-    "kid",
-    "kids",
-    "woman",
-    "women",
-    "elderly",
-    "non-combatant",
-    "bystander",
-    "pedestrian",
-    "resident",
-    "citizen",
-    "paramedic",
+    "civilian", "civilians", "child", "children", "kid", "kids", "woman", "women",
+    "elderly", "non-combatant", "bystander", "pedestrian", "resident", "citizen", "paramedic",
     
     # Civilian Residential & Medical
-    "apartment",
-    "apartments",
-    "residential",
-    "neighborhood",
-    "hospital",
-    "clinic",
-    "maternity",
-    "ambulance",
-    "medical center",
+    "apartment", "apartments", "residential", "neighborhood", "hospital", "clinic",
+    "maternity", "ambulance", "medical center",
 
     # Civilian Education & Religion
-    "school",
-    "church",
-    "cathedral",
-    "monastery",
+    "school", "church", "cathedral", "monastery",
 
     # Civilian Commercial, Public & Infrastructure
-    "mall",
-    "shopping center",
-    "supermarket",
-    "grocery",
-    "market",
-    "museum",
-    "library",
-    "park",
-    "train",
-    "railway",
-    "water treatment",
-    "plant",
-    "power plant",
-    "bridge",
+    "mall", "shopping center", "supermarket", "grocery", "market", "museum", "library",
+    "park", "train", "railway", "water treatment", "plant", "power plant", "bridge",
     
     # Aftermath states
-    "Point of view",
-    "aftermath",
-    "ruins",
-    "rubble",
-    "wreckage",
-    "debris",
-    "remains",
-    "crater",
-    "crash site",
-    "burning wreckage",
-    "obliterated",
-    "scorched",
-    "charred",
-    "smoldering",
-    "incinerated",
+    "Point of view", "aftermath", "ruins", "rubble", "wreckage", "debris", "remains",
+    "crater", "crash site", "burning wreckage", "obliterated", "scorched", "charred",
+    "smoldering", "incinerated",
     
     # Fire/smoke states (aftermath visual evidence)
-    "flames",
-    "in flames",
-    "engulfed",
-    "inferno",
-    "blaze",
-    "burning",
-    "smoke",
-    "smoke plume",
-    "on fire",
+    "flames", "in flames", "engulfed", "inferno", "blaze", "burning", "smoke", 
+    "smoke plume", "on fire",
     
     # Damage assessment language (editorial framing = not raw action footage)
-    "bomb damage",
-    "battle damage",
-    "battle damage assessment",
-    "post-strike",
-    "war damage",
-    "damages",
-    "following the strike",
-    "following the attack",
-    "aftermath of",
-    "result of",           # "result of the strike" = editorial aftermath framing
+    "bomb damage", "battle damage", "battle damage assessment", "post-strike", "war damage",
+    "damages", "following the strike", "following the attack", "aftermath of", "result of"
 ]
-
-NEGATIVE_KEYWORDS.sort(key=len, reverse=True)
-_impact_joined = "|".join(map(re.escape, NEGATIVE_KEYWORDS))
-NEGATIVE_PATTERN = re.compile(rf"\b({_impact_joined})\b", re.IGNORECASE)
 
 
 # ── 3. Geo Markers (Soft Verification) ─────────────────────────────────
@@ -197,66 +124,46 @@ GEO_KEYWORDS = [
     "avdiivka", "dnipro", "crimea", "donbas", "donbass", "wagner", "azov"
 ]
 
-GEO_KEYWORDS.sort(key=len, reverse=True)
-_geo_joined = "|".join(map(re.escape, GEO_KEYWORDS))
-GEO_PATTERN = re.compile(rf"\b({_geo_joined})\b", re.IGNORECASE)
 
-
-# ── Filter Functions ───────────────────────────────────────────────────
-
-def check_equipment(title: str, description: str = "") -> tuple[bool, str]:
-    """Return (True, matched_keyword) if text strictly names military equipment."""
-    text = f"{title} {description}"
-    match = EQUIPMENT_PATTERN.search(text)
-    if match:
-        return True, match.group(1).lower()
-    return False, "no equipment keyword"
-
-
-def is_negative_input(title: str, description: str = "") -> tuple[bool, str]:
-    """Return (True, reason) if text describes negative/civilian rather than military action."""
-    text = f"{title} {description}"
-    match = NEGATIVE_PATTERN.search(text)
-    if match:
-        return True, f"negative keyword '{match.group(1).lower()}'"
-    return False, ""
-
-
-def check_geo(title: str, description: str = "") -> Optional[str]:
-    """Return first matched Ukraine/Russia geo keyword, or None."""
-    text = f"{title} {description}"
-    match = GEO_PATTERN.search(text)
-    return match.group(1).lower() if match else None
-
-
-# ── Model-specific scoring ─────────────────────────────────────────────
+# ── Filter & Scoring Functions ─────────────────────────────────────────
 
 def _make_pattern(terms: list) -> re.Pattern:
     joined = "|".join(map(re.escape, sorted(terms, key=len, reverse=True)))
     return re.compile(rf"\b({joined})\b", re.IGNORECASE)
 
-
-_SCORE_WEIGHTS: dict = {
-    "AIRCRAFT": [
-        (_make_pattern(_UAS), 3),
-        (_make_pattern(_AIRCRAFT), 1),
-    ],
-    "VEHICLE": [
-        (_make_pattern(_TANKS), 3),
-        (_make_pattern(_ARMORED_VEHICLES), 2),
-        (_make_pattern(_ARTILLERY_AIR_DEFENSE), 1),
-    ],
-    "PERSONNEL": [
-        (_make_pattern(_PERSONNEL), 3),
-        (_make_pattern(_INFANTRY_WEAPONS), 1),
-    ],
+PATTERNS = {
+    "aircraft": _make_pattern(_AIRCRAFT),
+    "vehicle": _make_pattern(_TANKS + _ARMORED_VEHICLES + _ARTILLERY_AIR_DEFENSE),
+    "personnel": _make_pattern(_PERSONNEL + _INFANTRY_WEAPONS),
+    "uas": _make_pattern(_UAS),
+    "pov": _make_pattern(POV_KEYWORDS),
+    "negative": _make_pattern(NEGATIVE_KEYWORDS),
+    "geo": _make_pattern(GEO_KEYWORDS),
 }
 
+def get_equipment_scores(title: str, description: str = "") -> tuple[dict, bool]:
+    """Returns exactly the dictionary needed for the DB, and a boolean if it's worth scraping."""
+    text = f"{title} {description}"
+    scores = {
+        "score_aircraft": len(PATTERNS["aircraft"].findall(text)),
+        "score_vehicle": len(PATTERNS["vehicle"].findall(text)),
+        "score_personnel": len(PATTERNS["personnel"].findall(text)),
+        "score_uas": len(PATTERNS["uas"].findall(text)),
+        "is_pov": 1 if PATTERNS["pov"].search(text) else 0
+    }
+    has_equipment = sum(v for k, v in scores.items() if k != "is_pov") > 0
+    return scores, has_equipment
 
-def score_for_model(model_type: str, title: str, desc: str = "") -> int:
-    """Weighted relevance score for a clip against a model type. Returns 0 if model_type unknown."""
-    text = f"{title} {desc}"
-    return sum(
-        len(pat.findall(text)) * weight
-        for pat, weight in _SCORE_WEIGHTS.get(model_type, [])
-    )
+def is_negative_input(title: str, description: str = "") -> tuple[bool, str]:
+    """Return (True, reason) if text describes negative/civilian rather than military action."""
+    text = f"{title} {description}"
+    match = PATTERNS["negative"].search(text)
+    if match:
+        return True, f"negative keyword '{match.group(1).lower()}'"
+    return False, ""
+
+def check_geo(title: str, description: str = "") -> Optional[str]:
+    """Return first matched Ukraine/Russia geo keyword, or None."""
+    text = f"{title} {description}"
+    match = PATTERNS["geo"].search(text)
+    return match.group(1).lower() if match else None

@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     FRAMES_DIR: Path = Path(__file__).parent / "media" / "frames"
     DATASETS_DIR: Path = Path(__file__).parent / "media" / "scraped_datasets"
 
+    # ── Storage Mode (local or remote) ────────────────────────────────
+    STORAGE_MODE: str = "local" 
+    REMOTE_STORAGE_BUCKET: str = "ukraine-footage-bucket"
+
     # ── Training Runs — under ml-engine/ ─────────────────────────────
     RUNS_DIR: Path = Path(__file__).parent / "runs"
 

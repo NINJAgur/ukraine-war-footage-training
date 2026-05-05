@@ -44,25 +44,34 @@ async def get_annotated_clips(db: AsyncSession = Depends(get_db)) -> list[dict]:
     )
     clips = (await db.execute(stmt)).scalars().all()
     items = []
+    
     for clip in clips:
-        mp4 = Path(clip.mp4_path)
-        if not mp4.exists():
-            continue
-        # videoUrl uses the category subdir path
-        rel = mp4.relative_to(_ANNOTATED_DIR)
+        # Support both local paths and remote URLs
+        if clip.mp4_path.startswith("http"):
+            video_url = clip.mp4_path
+            # For remote files, rely on DB duration rather than OpenCV scanning
+            duration_str = f"00:00:{clip.duration_seconds:02d}" if clip.duration_seconds else "00:00:00"
+        else:
+            mp4 = Path(clip.mp4_path)
+            if not mp4.exists():
+                continue
+            # videoUrl uses the category subdir path
+            rel = mp4.relative_to(_ANNOTATED_DIR)
+            video_url = f"/media/annotated/{rel.as_posix()}"
+            duration_str = _video_duration(mp4)
+
         items.append({
             "id":       clip.url_hash[:12],
             "title":    (clip.title or clip.url_hash[:12]).upper(),
             "date":     clip.created_at.strftime("%Y-%m-%d") if clip.created_at else "",
-            "duration": _video_duration(mp4),
+            "duration": duration_str,
             "detClass": clip.det_class,
             "source":   _SOURCE_DISPLAY.get((clip.source.value if clip.source else ""), "Unknown"),
             "tag":      "annotated",
             "src":      clip.url_hash[:8].upper(),
-            "videoUrl": f"/media/annotated/{rel.as_posix()}",
+            "videoUrl": video_url,
         })
     return items
-
 
 
 _KAGGLE_DIR  = Path(__file__).parent.parent.parent.parent / "ml-engine" / "media" / "kaggle_datasets"

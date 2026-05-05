@@ -53,8 +53,18 @@ class Clip(Base):
         default=ClipStatus.PENDING,
     )
     error_message = Column(Text)
+    
+    # ── Storage Paths ──
     file_path = Column(String(2000))
     mp4_path = Column(String(2000))
+    
+    # ── Text Metadata Scores (Majority Voting) ──
+    score_aircraft = Column(Integer, default=0)
+    score_vehicle = Column(Integer, default=0)
+    score_personnel = Column(Integer, default=0)
+    score_uas = Column(Integer, default=0)
+    is_pov = Column(Integer, default=0)
+    
     det_class = Column(String(20))       # dominant detected class (AIRCRAFT/VEHICLE/PERSONNEL/GENERAL)
     duration_seconds = Column(Integer)
     width = Column(Integer)

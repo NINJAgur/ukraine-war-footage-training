@@ -15,7 +15,7 @@
 
 **Continuous production loop:**
 ```
-[Celery Beat] → [scraper-engine] → Clip(DOWNLOADED) → [render_annotated] → annotated MP4 → Public Feed
+[Celery Beat] → [scraper-engine] → Clip(DOWNLOADED, scores populated) → [ML pipelines] → annotated MP4 → Public Feed
                                                                ↑
                                               best .pt per model (FINETUNE > BASELINE > pretrained)
                                                                ↑
@@ -23,6 +23,12 @@
                                ↑
                         [train_baseline] ← Kaggle cold-start (once, in dev)
 ```
+
+**Scraper → ML pipeline decoupling (Phase 1.9 upgrade):**
+- Scrapers are "greedy vacuums": they scrape broadly and save keyword match scores to DB columns (`score_aircraft`, `score_vehicle`, `score_personnel`, `score_uas`, `is_pov`)
+- ML pipelines query DB by score thresholds (majority voting) — no HTTP requests, no re-scraping
+- Raw `.mp4` files deleted from disk after annotation to prevent disk bloat (`STORAGE_MODE=local|remote`)
+- `get_equipment_scores(title, desc)` in `_filter.py` is the single source of scoring truth
 
 **3 universal classes (aligned with `_filter.py`):**
 - `0=AIRCRAFT` — drones, helicopters, fixed-wing, missiles
@@ -83,12 +89,13 @@ All services import via re-export stubs (`ml-engine/db/models.py`, `scraper-engi
 | Inference + multi-model | `ml-engine/core/inference.py` |
 | Auto-label (video clips) | `ml-engine/core/autolabeling/auto_label.py` |
 | Auto-label (any image folder) | `ml-engine/tasks/autolabel_kaggle.py` |
-| piterfm category-aware labeler | `ml-engine/tasks/relabel_piterfm.py` |
 | Baseline training task | `ml-engine/tasks/train_baseline.py` |
 | ML tasks | `ml-engine/tasks/` |
+| AIRCRAFT pipeline (DB-driven) | `ml-engine/scripts/aircraft_pipeline.py` |
+| VEHICLE pipeline (DB-driven) | `ml-engine/scripts/vehicle_pipeline.py` |
 | Funker530 scraper | `scraper-engine/tasks/scrape_funker530.py` |
 | GeoConfirmed scraper | `scraper-engine/tasks/scrape_geoconfirmed.py` |
-| Content filter | `scraper-engine/tasks/_filter.py` |
+| Content filter + scoring | `scraper-engine/tasks/_filter.py` |
 | Phase 1 test | `scraper-engine/tests/test_scrape_live.py` |
 | Phase 2 baseline test | `ml-engine/tests/test_baseline_train.py` |
 | Phase 2 E2E test | `ml-engine/tests/test_pipeline_e2e.py` |
