@@ -1,9 +1,9 @@
-// Canvas color palette — keyed by category id, used by useMLCanvas.js
+// Canvas color palette — matched to CSS oklch vars in style.css
 export const CAT_RGB = {
-  generalist: '194, 120,  40',
-  aircraft:   ' 56, 152, 210',
-  personnel:  ' 60, 180,  90',
-  vehicles:   '210,  80,  50',
+  generalist: '223, 105,   0',
+  aircraft:   '  0, 153, 200',
+  personnel:  ' 24, 154,  48',
+  vehicles:   '222,  59,  61',
 }
 
 // Hero section demo card — purely visual, canvas animation only

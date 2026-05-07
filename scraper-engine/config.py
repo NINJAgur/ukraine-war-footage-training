@@ -44,19 +44,15 @@ class Settings(BaseSettings):
     FUNKER530_BASE_URL: str = "https://funker530.com"
     SCRAPE_MAX_PAGES: int = 10
     SCRAPE_DELAY_SECONDS: float = 2.0
-    FUNKER530_MAX_POSTS: int = 20   # max Ukraine posts to process per run
     # GeoConfirmed API
     GEOCONFIRMED_API_URL: str = "https://geoconfirmed.org/api/placemark/Ukraine"
-    GEOCONFIRMED_MAX_INCIDENTS: int = 20   # max video incidents to process per run
+    SCRAPE_LOOKBACK_HOURS: int = 24   # fetch everything published in the last N hours
     YTDLP_FORMAT: str = "bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4]/best"
 
     def model_post_init(self, __context):
         self.FUNKER530_DIR.mkdir(parents=True, exist_ok=True)
         self.GEOCONFIRMED_DIR.mkdir(parents=True, exist_ok=True)
 
-    @property
-    def kaggle_dataset_list(self) -> list[str]:
-        return [d.strip() for d in self.KAGGLE_BASELINE_DATASETS.split(",") if d.strip()]
 
 
 settings = Settings()

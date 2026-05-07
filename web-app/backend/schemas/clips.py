@@ -30,13 +30,13 @@ class ClipOut(BaseModel):
     @model_validator(mode='after')
     def _compute_derived(self) -> 'ClipOut':
         if self.mp4_path:
-            mp4 = Path(self.mp4_path)
-            parts = mp4.parts
+            parts = Path(self.mp4_path).parts
             try:
-                idx = list(parts).index('annotated')
-                self.video_url = '/media/annotated/' + '/'.join(parts[idx + 1:])
+                idx = parts.index('annotated')
+                rel = '/'.join(parts[idx + 1:])
+                self.video_url = f'/media/annotated/{rel}'
             except ValueError:
-                self.video_url = '/media/annotated/' + mp4.name
+                self.video_url = '/media/annotated/' + Path(self.mp4_path).name
         return self
 
 

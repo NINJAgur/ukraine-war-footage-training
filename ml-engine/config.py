@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     # ── Kaggle dataset cache — kept inside the project ────────────────
     KAGGLE_CACHE_DIR: Path = Path(__file__).parent / "media" / "kaggle_datasets"
 
+
     # ── GPU / Model ───────────────────────────────────────────────────
     GPU_DEVICE: str = "cuda:0"          # device for training and inference
     YOLO_MODEL: str = "yolov8m.pt"      # base model for Stage 1 baseline
@@ -83,12 +84,12 @@ class Settings(BaseSettings):
         5: "VEHICLE",  6: "VEHICLE",  7: "VEHICLE",  8: "VEHICLE",  9: "VEHICLE",  10: "VEHICLE",
         11: "PERSONNEL", 12: "PERSONNEL", 13: "PERSONNEL", 14: "PERSONNEL",
     }
-    # Render colours per model type (BGR for OpenCV)
+    # Render colours per model type (BGR for OpenCV) — matched to CSS oklch vars in style.css
     MODEL_COLORS: dict = {
-        "GENERAL":   (200, 200, 200),  # BGR grey
-        "AIRCRAFT":  (210, 152,  56),  # BGR → frontend steel blue  rgb(56,152,210)
-        "VEHICLE":   ( 50,  80, 210),  # BGR → frontend brick red   rgb(210,80,50)
-        "PERSONNEL": ( 90, 180,  60),  # BGR → frontend green       rgb(60,180,90)
+        "GENERAL":   (  0, 105, 223),  # BGR ← oklch(0.65 0.18 55)  rgb(223,105,0)
+        "AIRCRAFT":  (200, 153,   0),  # BGR ← oklch(0.62 0.16 220) rgb(0,153,200)
+        "VEHICLE":   ( 61,  59, 222),  # BGR ← oklch(0.60 0.20 25)  rgb(222,59,61)
+        "PERSONNEL": ( 48, 154,  24),  # BGR ← oklch(0.60 0.18 145) rgb(24,154,48)
     }
 
     def model_post_init(self, __context):
@@ -100,8 +101,6 @@ class Settings(BaseSettings):
             self.KAGGLE_CACHE_DIR,
         ]:
             d.mkdir(parents=True, exist_ok=True)
-        for cls in ("aircraft", "vehicle", "personnel", "general"):
-            (self.ANNOTATED_VIDEO_DIR / cls).mkdir(parents=True, exist_ok=True)
 
 
 settings = Settings()

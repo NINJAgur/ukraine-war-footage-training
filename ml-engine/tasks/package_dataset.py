@@ -2,13 +2,12 @@
 ml-engine/tasks/package_dataset.py
 
 Celery task: take a LABELED Dataset, split frames into train/val (80/20),
-update data.yaml with correct split paths, mark Dataset as PACKAGED,
-then dispatch render_annotated for the parent Clip.
+update data.yaml with correct split paths, mark Dataset as PACKAGED.
 
 Pipeline:
   Dataset(LABELED) → train/val split → data.yaml updated → Dataset(PACKAGED)
-                                                                    ↓
-                                                       dispatch render_annotated
+
+annotate_clips (Beat daily 04:00 UTC) picks up LABELED clips after this completes.
 """
 import logging
 import random
@@ -81,10 +80,7 @@ def update_data_yaml(yaml_path: Path, dataset_dir: Path) -> None:
     default_retry_delay=60,
 )
 def package_dataset(self, dataset_id: int) -> dict:
-    """
-    Split a LABELED Dataset into train/val, update data.yaml, mark PACKAGED.
-    Dispatches render_annotated for the parent Clip on completion.
-    """
+    """Split a LABELED Dataset into train/val, update data.yaml, mark PACKAGED."""
     logger.info(f"[{self.request.id}] package_dataset dataset_id={dataset_id}")
 
     with get_session() as session:
@@ -112,10 +108,6 @@ def package_dataset(self, dataset_id: int) -> dict:
         f"[{self.request.id}] Dataset {dataset_id} packaged — "
         f"train={train_count}  val={val_count}"
     )
-
-    if clip_id is not None:
-        from tasks.render_annotated import render_annotated_clip
-        render_annotated_clip.delay(clip_id=clip_id)
 
     return {
         "status": "packaged",

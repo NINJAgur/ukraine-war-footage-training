@@ -109,7 +109,7 @@ def auto_label_clip(self, clip_id: int) -> dict:
         raise ValueError(f"No frames extracted from {video_path}")
 
     # ── Run GroundingDINO ─────────────────────────────────────────────
-    from autolabeling.auto_label import create_yolo_dataset
+    from core.autolabeling.auto_label import create_yolo_dataset
 
     dataset_dir = settings.DATASETS_DIR / clip_hash
     create_yolo_dataset(
@@ -212,3 +212,38 @@ def auto_label_clip(self, clip_id: int) -> dict:
         "frame_count": frame_count,
         "labeled_frames": labeled_frames,
     }
+
+
+_BATCH_SIZE = 10
+
+
+@celery_app.task(
+    bind=True,
+    name="tasks.auto_label.auto_label_batch",
+    queue="gpu",
+    max_retries=0,
+)
+def auto_label_batch(self) -> dict:
+    """
+    Find all DOWNLOADED clips and dispatch auto_label_clip for each.
+    Marks clips QUEUED before dispatch to prevent double-processing on next Beat fire.
+    Runs daily at 02:00 UTC, giving scrapers 2h to finish yt-dlp downloads.
+    """
+    with get_session() as session:
+        clips = (
+            session.query(Clip)
+            .filter(Clip.status == ClipStatus.DOWNLOADED)
+            .filter(Clip.file_path.isnot(None))
+            .order_by(Clip.created_at.asc())
+            .limit(_BATCH_SIZE)
+            .all()
+        )
+        clip_ids = [c.id for c in clips]
+        for clip in clips:
+            clip.status = ClipStatus.QUEUED
+
+    logger.info(f"[{self.request.id}] auto_label_batch dispatching {len(clip_ids)} clips")
+    for clip_id in clip_ids:
+        auto_label_clip.delay(clip_id=clip_id)
+
+    return {"dispatched": len(clip_ids), "clip_ids": clip_ids}

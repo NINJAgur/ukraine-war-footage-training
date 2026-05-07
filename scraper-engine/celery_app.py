@@ -19,7 +19,6 @@ celery_app = Celery(
     include=[
         "tasks.scrape_funker530",
         "tasks.scrape_geoconfirmed",
-        "tasks.download_kaggle",
     ],
 )
 

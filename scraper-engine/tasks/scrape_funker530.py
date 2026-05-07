@@ -27,7 +27,7 @@ from celery_app import celery_app
 from config import settings
 from db.models import Clip, ClipSource, ClipStatus
 from db.session import get_session
-from tasks._filter import get_equipment_scores, check_geo, is_negative_input, is_pov_noise
+from utils._filter import get_equipment_scores, check_geo, is_negative_input, is_pov_noise
 
 logger = logging.getLogger(__name__)
 

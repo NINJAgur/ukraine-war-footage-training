@@ -27,8 +27,12 @@
 **Scraper → ML pipeline decoupling (Phase 1.9 upgrade):**
 - Scrapers are "greedy vacuums": they scrape broadly and save keyword match scores to DB columns (`score_aircraft`, `score_vehicle`, `score_personnel`, `score_uas`, `is_pov`)
 - ML pipelines query DB by score thresholds (majority voting) — no HTTP requests, no re-scraping
-- Raw `.mp4` files deleted from disk after annotation to prevent disk bloat (`STORAGE_MODE=local|remote`)
+- Raw `.mp4` files deleted from disk after annotation AND after rejection (failed validation or zero-detection inference)
 - `get_equipment_scores(title, desc)` in `_filter.py` is the single source of scoring truth
+- `is_pov_noise(scores)` in `_filter.py` blocks pure FPV clips with zero class scores from entering DB
+- Scrapers have two function variants: `_since(since_date)` for Celery/daily runs, `_sample(max_count/max_incidents)` for tests
+- Annotated output: `media/annotated/<model>/<date>/<hash>_annotated.mp4` — temp files also written to same dir during inference, renamed on completion
+- Pipeline conf threshold: `CONF_THRESH=0.15` used for both `validate_clip` and `infer_video_multi_model` — same standard for gate and box drawing
 
 **3 universal classes (aligned with `_filter.py`):**
 - `0=AIRCRAFT` — drones, helicopters, fixed-wing, missiles
@@ -40,7 +44,7 @@
 2. Pre-build merged folders once via `scripts/build_specialist_datasets.py` ✅ — all future training reads from these
 3. AIRCRAFT baseline: mAP50=0.929 @ 10 epochs, run 13 ✅ (retraining on clean merged/)
 4. VEHICLE baseline: mAP50=0.871 @ 10 epochs, run 25 ✅ (retraining on clean merged/)
-5. PERSONNEL baseline: ⏳ retraining on clean merged/ (11K images, contamination-free)
+5. PERSONNEL baseline: mAP50=0.780 @ 10 epochs, run 29 ✅ (clean merged/, 8,433 images)
 6. GENERAL: ⏳ after all 3 specialists pass mAP50 > 0.4 (~144K images)
 
 **Scraped dataset pipeline (GDINO → fine-tune):**
@@ -94,7 +98,7 @@ All services import via re-export stubs (`ml-engine/db/models.py`, `scraper-engi
 | Service | Directory | Phase |
 |---------|-----------|-------|
 | Scraper Engine | `scraper-engine/` | 1 ✅ |
-| ML Engine | `ml-engine/` | 2 🔄 (AIRCRAFT ✅ VEHICLE ✅ PERSONNEL ⏳ GENERAL ⏳) |
+| ML Engine | `ml-engine/` | 2 🔄 (AIRCRAFT ✅ VEHICLE ✅ PERSONNEL ✅ GENERAL ⏳) |
 | Backend API | `web-app/backend/` | 3 🔄 |
 | Frontend | `web-app/frontend/` | 3 🔄 |
 
@@ -128,15 +132,19 @@ All services import via re-export stubs (`ml-engine/db/models.py`, `scraper-engi
 | Build merged datasets (run once) | `ml-engine/scripts/build_specialist_datasets.py` |
 | AIRCRAFT pipeline (DB-driven) | `ml-engine/scripts/aircraft_pipeline.py` |
 | VEHICLE pipeline (DB-driven) | `ml-engine/scripts/vehicle_pipeline.py` |
+| PERSONNEL pipeline (DB-driven) | `ml-engine/scripts/personnel_pipeline.py` |
 | Funker530 scraper | `scraper-engine/tasks/scrape_funker530.py` |
 | GeoConfirmed scraper | `scraper-engine/tasks/scrape_geoconfirmed.py` |
-| Content filter + scoring | `scraper-engine/tasks/_filter.py` |
-| Phase 1 test | `scraper-engine/tests/test_scrape_live.py` |
+| Content filter + scoring | `scraper-engine/utils/_filter.py` |
+| Phase 1 quick sample test | `scraper-engine/tests/test_scrape_sample.py` |
+| Phase 1 24h window test | `scraper-engine/tests/test_scrape_24h.py` |
+| Daily scrape orchestration | `scraper-engine/scripts/scrape_daily.py` |
 | Phase 2 baseline test | `ml-engine/tests/test_baseline_train.py` |
 | Phase 2 E2E test | `ml-engine/tests/test_pipeline_e2e.py` |
 | Project plan | `PROJECT_PLAN.md` |
 
-Run Phase 1 test: `cd scraper-engine && python tests/test_scrape_live.py`
+Run Phase 1 sample test: `cd scraper-engine && python tests/test_scrape_sample.py`
+Run Phase 1 24h test: `cd scraper-engine && python tests/test_scrape_24h.py`
 Run Phase 2 test: `cd ml-engine && python tests/test_pipeline_e2e.py`
 
 ---
@@ -147,7 +155,7 @@ Run Phase 2 test: `cd ml-engine && python tests/test_pipeline_e2e.py`
 |-------|-------|--------|
 | 0 | Agentic workspace | ✅ Complete |
 | 1 | Scraper engine | ✅ Complete |
-| 2 | ML pipeline — baseline training | 🔄 In progress (AIRCRAFT ✅ 0.929, VEHICLE ✅ 0.871, PERSONNEL ⏳, GENERAL ⏳) |
+| 2 | ML pipeline — baseline training | 🔄 In progress (AIRCRAFT ✅ 0.929, VEHICLE ✅ 0.871, PERSONNEL ✅ 0.780, GENERAL ⏳) |
 | 3 | Web application | 🔄 In progress (core wired; WebSocket + full Celery pipeline pending) |
 | 4 | Cloud & DevOps | ⏳ Pending |
 
