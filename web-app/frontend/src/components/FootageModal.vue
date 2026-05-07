@@ -2,15 +2,15 @@
   <div class="modal-backdrop" @click="$emit('close')">
     <div class="modal-panel" @click.stop>
       <div class="modal-header">
-        <div>
+        <div style="min-width:0;flex:1;overflow:hidden;margin-right:20px">
           <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:0.15em;color:var(--amber);text-transform:uppercase;margin-bottom:4px">
             {{ item.src }}
           </div>
-          <div style="font-size:16px;font-weight:600;text-transform:uppercase;letter-spacing:-0.01em">
+          <div style="font-size:16px;font-weight:600;text-transform:uppercase;letter-spacing:-0.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
             {{ item.title }}
           </div>
         </div>
-        <button class="modal-close" @click="$emit('close')">[ CLOSE ]</button>
+        <button class="modal-close" style="flex-shrink:0" @click="$emit('close')">[ CLOSE ]</button>
       </div>
       <div class="modal-body">
         <div class="modal-video-placeholder">

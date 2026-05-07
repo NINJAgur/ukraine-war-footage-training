@@ -15,7 +15,7 @@ from schemas.clips import ClipOut, ClipSubmit
 router = APIRouter(prefix="/api", tags=["public"])
 
 _ANNOTATED_DIR = Path(__file__).parent.parent.parent.parent / "ml-engine" / "media" / "annotated"
-_RAW_DIR       = Path(__file__).parent.parent.parent.parent / "scraper-engine" / "media" / "raw"
+_RAW_DIR       = Path(__file__).parent.parent.parent.parent / "scraper-engine" / "media"
 
 _SOURCE_DISPLAY = {
     "funker530":    "Funker530",

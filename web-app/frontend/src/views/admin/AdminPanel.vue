@@ -268,7 +268,7 @@ onMounted(() => { loadRuns(); loadClips() })
 
 .panel-main {
   flex: 1;
-  overflow: hidden;
+  overflow-y: auto;
   padding: 16px 32px 12px;
   display: flex;
   flex-direction: column;

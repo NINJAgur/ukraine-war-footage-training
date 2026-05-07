@@ -1,12 +1,21 @@
 <template>
   <div class="footage-card" @click="$emit('open', item)">
     <div class="card-thumb">
-      <div class="card-thumb-placeholder">
+      <video
+        v-if="item.videoUrl"
+        :src="item.videoUrl"
+        class="card-video"
+        controls
+        preload="metadata"
+        playsinline
+        @click.stop
+      />
+      <div v-else class="card-thumb-placeholder">
         <div class="card-thumb-label">{{ item.detClass }}<br>{{ item.src }}</div>
       </div>
     </div>
     <div class="card-overlay"></div>
-    <div class="card-play"></div>
+    <div v-if="!item.videoUrl" class="card-play"></div>
     <div :class="`card-tag tag-${item.tag}`">{{ item.tag }}</div>
     <div class="card-meta-bar">
       <div class="card-location">{{ item.source }}</div>

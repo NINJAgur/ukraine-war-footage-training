@@ -3,19 +3,19 @@ Celery task: fetch latest Ukraine war video posts from Funker530 REST API,
 create Clip records for new entries, and dispatch yt-dlp downloads.
 
 Flow:
-  1. Fetch recent video posts strictly from the Ukraine category (categories=16)
-  2. Iterate until max_count is reached
-  3. Require: geo keyword match (Ukraine/Russia theater)
-  4. Require: explicit equipment or personnel keyword
-  5. Reject: infrastructure or civilian targeting
-  6. Resolve video URL from rumbleJson or bunnyId
-  7. Insert Clip records (ON CONFLICT DO NOTHING) and dispatch downloads
+  1. Fetch posts published since `since_date` from the Ukraine category (categories=16)
+  2. Require: geo keyword match (Ukraine/Russia theater)
+  3. Require: explicit equipment or personnel keyword
+  4. Reject: infrastructure or civilian targeting
+  5. Resolve video URL from rumbleJson or bunnyId
+  6. Insert Clip records (ON CONFLICT DO NOTHING) and dispatch downloads
+  7. Videos saved to media/funker530/<YYYY-MM-DD>/<hash>_<slug>.mp4
 """
 import hashlib
 import json
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
@@ -27,7 +27,7 @@ from celery_app import celery_app
 from config import settings
 from db.models import Clip, ClipSource, ClipStatus
 from db.session import get_session
-from tasks._filter import get_equipment_scores, check_geo, is_negative_input
+from tasks._filter import get_equipment_scores, check_geo, is_negative_input, is_pov_noise
 
 logger = logging.getLogger(__name__)
 
@@ -70,19 +70,27 @@ def slugify(text: str, max_len: int = 60) -> str:
     return slug[:max_len] or "video"
 
 
-def get_output_path(url: str, title: str) -> Path:
+def get_output_path(url: str, title: str, date_str: str = None) -> Path:
     h = url_hash(url)
     slug = slugify(title)
-    path = settings.FUNKER530_DIR / f"{h[:8]}_{slug}.mp4"
+    date_str = date_str or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    path = settings.FUNKER530_DIR / date_str / f"{h[:8]}_{slug}.mp4"
     path.parent.mkdir(parents=True, exist_ok=True)
     return path
 
 
+def _parse_date(p: dict) -> datetime:
+    """Parse post date → naive UTC datetime. Returns datetime.min on failure."""
+    raw = p.get("publicationDate") or p.get("creationDate") or ""
+    try:
+        dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        return dt.replace(tzinfo=None)
+    except (ValueError, AttributeError):
+        return datetime.min
+
+
 def resolve_video_url(post: dict) -> Optional[str]:
-    """
-    Resolve a yt-dlp-downloadable video URL from a Funker530 API post object.
-    Priority: rumbleJson URL → Bunny.net embed URL.
-    """
+    """Resolve a yt-dlp-downloadable URL. Priority: rumbleJson → Bunny embed."""
     rumble_raw = post.get("rumbleJson") or ""
     if rumble_raw:
         try:
@@ -102,102 +110,117 @@ def resolve_video_url(post: dict) -> Optional[str]:
 
 # ── Funker530 API ──────────────────────────────────────────────────────
 
-def fetch_ukraine_posts(max_count: int) -> list[dict]:
-    """
-    Fetch Ukraine-category video posts from Funker530 REST API.
-    Returns list of {url_hash, page_url, video_url, title, description, published_at}.
-    """
-    logger.info("Fetching Funker530 Ukraine posts from REST API...")
+# ── Internal helpers ──────────────────────────────────────────────────
+
+def _fetch_raw_posts() -> list[dict]:
     resp = requests.get(FUNKER530_API_URL, headers=_HEADERS, timeout=30)
     resp.raise_for_status()
     data = resp.json()
     posts = data if isinstance(data, list) else data.get("posts", data.get("items", []))
+    return sorted(posts, key=_parse_date, reverse=True)
 
-    def parse_date(p: dict) -> datetime:
-        raw = p.get("publicationDate") or p.get("creationDate") or ""
-        try:
-            return datetime.fromisoformat(raw.replace("Z", "+00:00"))
-        except (ValueError, AttributeError):
-            return datetime.min
 
-    posts_sorted = sorted(posts, key=parse_date, reverse=True)
-    logger.info(f"Funker530: {len(posts_sorted)} posts loaded. Searching for {max_count} valid clips...")
+def _evaluate_post(post: dict, seen_hashes: set) -> Optional[dict]:
+    """Score and filter one post. Returns result dict if accepted, None otherwise."""
+    slug = (post.get("slug") or "").strip()
+    if not slug:
+        return None
 
-    seen_hashes: set[str] = set()
+    title = (post.get("title") or "").strip()
+    raw_desc = (
+        post.get("ogDescription") or post.get("excerpt") or
+        post.get("description") or post.get("content") or ""
+    ).strip()
+    description = re.sub(r'<[^>]+>', '', raw_desc).strip()
+    desc_lines = [l.strip() for l in description.split('\n') if l.strip()]
+    description = desc_lines[0] if desc_lines else ""
+
+    published_at = _parse_date(post)
+    geo = check_geo(title, description)
+    scores, equip_ok = get_equipment_scores(title, description)
+    is_neg, neg_reason = is_negative_input(title, description)
+
+    logger.info(
+        f"  Funker530 candidate  date={published_at.date() if published_at != datetime.min else 'unknown'}"
+        f"  geo={geo!r}  scores={scores}  negative={is_neg}\n"
+        f"    title: {title}\n"
+        f"    desc:  {description}"
+    )
+
+    if not geo:
+        logger.info(f"    -> SKIP: no Ukraine/Russia geo keyword")
+        return None
+    if is_neg:
+        logger.info(f"    -> SKIP: {neg_reason}")
+        return None
+    if not equip_ok:
+        logger.info(f"    -> SKIP: no equipment match")
+        return None
+    if is_pov_noise(scores):
+        logger.info(f"    -> SKIP: pure FPV noise (pov + no class score)")
+        return None
+
+    video_url = resolve_video_url(post)
+    if not video_url:
+        logger.info(f"    -> SKIP: no downloadable URL")
+        return None
+
+    page_url = f"https://funker530.com/video/{slug}/"
+    h = url_hash(page_url)
+    if h in seen_hashes:
+        return None
+    seen_hashes.add(h)
+
+    logger.info(f"    -> ACCEPT  scores='{scores}'  geo='{geo}'")
+    return {
+        "page_url": page_url,
+        "video_url": video_url,
+        "url_hash": h,
+        "title": title[:500],
+        "description": description[:2000],
+        "published_at": published_at if published_at != datetime.min else None,
+        "scores": scores,
+    }
+
+
+# ── Public API ────────────────────────────────────────────────────────
+
+# Celery / scrape_daily: fetch everything published in the last N hours
+def fetch_ukraine_posts_since(since_date: datetime) -> list[dict]:
+    """Date mode — all posts published on or after since_date. Used by Celery and scrape_daily."""
+    if since_date.tzinfo is not None:
+        since_date = since_date.replace(tzinfo=None)
+    posts_sorted = _fetch_raw_posts()
+    logger.info(f"Funker530: {len(posts_sorted)} total posts — filtering since {since_date.date()}")
+    seen: set[str] = set()
     results: list[dict] = []
-    skipped = 0
-    checked = 0
-
     for post in posts_sorted:
-        if len(results) >= max_count:
+        published_at = _parse_date(post)
+        if published_at != datetime.min and published_at < since_date:
+            logger.info(f"  Reached posts older than {since_date.date()} — stopping")
             break
+        result = _evaluate_post(post, seen)
+        if result:
+            results.append(result)
+    logger.info(f"Funker530: {len(results)} accepted")
+    return results
 
-        slug = (post.get("slug") or "").strip()
-        if not slug:
-            continue
 
-        title = (post.get("title") or "").strip()
-        raw_desc = (
-            post.get("ogDescription") or 
-            post.get("excerpt") or 
-            post.get("description") or 
-            post.get("content") or 
-            ""
-        ).strip()
-        
-        description = re.sub(r'<[^>]+>', '', raw_desc).strip()
-        desc_lines = [line.strip() for line in description.split('\n') if line.strip()]
-        description = desc_lines[0] if desc_lines else ""
-        checked += 1
-
-        geo = check_geo(title, description)
-        scores, equip_ok = get_equipment_scores(title, description)
-        is_neg, neg_reason = is_negative_input(title, description)
-
-        logger.info(
-            f"  Funker530 candidate  geo={geo!r}  scores={scores}  negative={is_neg}\n"
-            f"    title: {title}\n"
-            f"    desc:  {description}"
-        )
-
-        if not geo:
-            logger.info(f"    → SKIP: no Ukraine/Russia geo keyword")
-            skipped += 1
-            continue
-        if is_neg:
-            logger.info(f"    → SKIP: {neg_reason}")
-            skipped += 1
-            continue
-        if not equip_ok:
-            logger.info(f"    → SKIP: no equipment match")
-            skipped += 1
-            continue
-
-        video_url = resolve_video_url(post)
-        if not video_url:
-            logger.info(f"    → SKIP: no downloadable URL")
-            skipped += 1
-            continue
-
-        page_url = f"https://funker530.com/video/{slug}/"
-        h = url_hash(page_url)
-        if h in seen_hashes:
-            continue
-        seen_hashes.add(h)
-
-        published_at = parse_date(post)
-        results.append({
-            "page_url": page_url,
-            "video_url": video_url,
-            "url_hash": h,
-            "title": title[:500],
-            "description": description[:2000],
-            "published_at": published_at if published_at != datetime.min else None,
-            "scores": scores
-        })
-        logger.info(f"    → ACCEPT  scores='{scores}'  geo='{geo}'")
-
-    logger.info(f"Funker530: {len(results)} accepted, {skipped} skipped (checked {checked} candidates)")
+# Tests: grab the first N passing posts to verify the pipeline end-to-end
+def fetch_ukraine_posts_sample(max_count: int) -> list[dict]:
+    """Count mode — first N passing posts regardless of date. Used by tests."""
+    posts_sorted = _fetch_raw_posts()
+    logger.info(f"Funker530: {len(posts_sorted)} total posts — sampling max_count={max_count}")
+    seen: set[str] = set()
+    results: list[dict] = []
+    for post in posts_sorted:
+        result = _evaluate_post(post, seen)
+        if result:
+            results.append(result)
+            if len(results) >= max_count:
+                logger.info(f"  Reached max_count={max_count} — stopping")
+                break
+    logger.info(f"Funker530: {len(results)} accepted")
     return results
 
 
@@ -256,11 +279,11 @@ def scrape_funker530(self) -> dict:
         return {"status": "skipped", "reason": "lock_held"}
 
     logger.info(f"[{self.request.id}] scrape_funker530 started")
-    new_count = 0
-    skipped_count = 0
+    new_count = skipped_count = 0
 
     try:
-        posts = fetch_ukraine_posts(settings.FUNKER530_MAX_POSTS)
+        since_date = datetime.now(timezone.utc) - timedelta(hours=settings.SCRAPE_LOOKBACK_HOURS)
+        posts = fetch_ukraine_posts_since(since_date)
         if not posts:
             return {"status": "ok", "new": 0, "skipped": 0}
 
@@ -281,8 +304,7 @@ def scrape_funker530(self) -> dict:
                     .on_conflict_do_nothing(index_elements=["url_hash"])
                     .returning(Clip.id)
                 )
-                result = session.execute(stmt)
-                row = result.fetchone()
+                row = session.execute(stmt).fetchone()
                 if row:
                     clip_id = row[0]
                     new_count += 1
@@ -318,8 +340,9 @@ def download_funker530_video(self, clip_id: int, video_url: str, page_url: str) 
             return {"status": "skipped", "clip_id": clip_id}
         clip.status = ClipStatus.DOWNLOADING
         clip.error_message = None
+        date_str = clip.published_at.strftime("%Y-%m-%d") if clip.published_at else datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
-    output_path = get_output_path(page_url, "")
+    output_path = get_output_path(page_url, "", date_str)
     try:
         meta = _download_video(video_url, output_path)
         with get_session() as session:

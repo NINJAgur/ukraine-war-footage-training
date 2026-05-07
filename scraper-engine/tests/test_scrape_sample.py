@@ -1,5 +1,5 @@
 """
-test_scrape_live.py — Phase 1 end-to-end scrape test.
+test_scrape_sample.py — Count-based scrape test (N clips from each source).
 
 Covers three things:
   1. Funker530 — REST API fetch (Ukraine categoryId=16, video URL resolution)
@@ -7,7 +7,7 @@ Covers three things:
   3. DB write — inserts Clip rows into PostgreSQL and verifies they exist
 
 Run from repo root:
-    cd scraper-engine && python tests/test_scrape_live.py
+    cd scraper-engine && python tests/test_scrape_sample.py
 """
 import sys
 import os
@@ -18,7 +18,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
-logger = logging.getLogger("test_scrape_live")
+logger = logging.getLogger("test_scrape_sample")
 
 # Test lives in scraper-engine/tests/ — parent is scraper-engine/ (the importable package root)
 SCRAPER_ENGINE_DIR = str(Path(__file__).resolve().parent.parent)
@@ -36,10 +36,10 @@ def test_funker530() -> None:
     logger.info("TEST: Funker530 — REST API Ukraine video post fetch")
     logger.info("=" * 60)
 
-    from tasks.scrape_funker530 import fetch_ukraine_posts
+    from tasks.scrape_funker530 import fetch_ukraine_posts_sample
 
     global _funker_posts
-    posts = fetch_ukraine_posts(max_count=5)
+    posts = fetch_ukraine_posts_sample(max_count=5)
     _funker_posts = posts
     logger.info(f"Funker530: fetched {len(posts)} Ukraine video posts")
     for p in posts:
@@ -61,10 +61,10 @@ def test_geoconfirmed() -> None:
     logger.info("TEST: GeoConfirmed — REST API video incident fetch")
     logger.info("=" * 60)
 
-    from tasks.scrape_geoconfirmed import extract_video_incidents
+    from tasks.scrape_geoconfirmed import extract_video_incidents_sample
 
     global _geo_incidents
-    incidents = extract_video_incidents(max_incidents=5)
+    incidents = extract_video_incidents_sample(max_incidents=5)
     _geo_incidents = incidents
     logger.info(f"GeoConfirmed: fetched {len(incidents)} video incidents")
     logger.info("  Filter: origin='VID' on GeoConfirmed Ukraine map + equipment keyword preference")

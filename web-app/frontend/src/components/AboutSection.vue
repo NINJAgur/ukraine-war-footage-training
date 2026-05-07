@@ -37,7 +37,7 @@ const rows = [
   { label: 'Source code',  val: 'github.com/NINJAgur/ukraine-war-footage-training' },
   { label: 'Hosted on',    val: 'Self-hosted (FastAPI + Vue 3)' },
   { label: 'License',      val: 'Open Evidence License' },
-  { label: 'Started',      val: 'February 24, 2022' },
+  { label: 'Started',      val: 'April 16, 2026' },
   { label: 'Maintained by', val: '1 person' },
   { label: 'Submissions',  val: 'Open — secure upload' },
 ]
