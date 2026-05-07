@@ -6,7 +6,6 @@ Creates a TrainingRun record, calls train_baseline() directly (no Celery),
 verifies best.pt is produced, then optionally cleans up.
 
 Run from ml-engine/:
-    python tests/test_baseline_train.py --model-type VEHICLE --epochs 2
     python tests/test_baseline_train.py --model-type GENERAL --epochs 50 --keep
     python tests/test_baseline_train.py --model-type GENERAL --purge-outputs
 """
@@ -34,7 +33,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model-type", default="VEHICLE",
                         choices=[m.value for m in ModelType])
-    parser.add_argument("--epochs", type=int, default=2)
+    parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--keep", action="store_true",
                         help="Keep weights and DB row after test")
     parser.add_argument("--purge-outputs", action="store_true",

@@ -73,7 +73,7 @@ def slugify(text: str, max_len: int = 60) -> str:
 def get_output_path(url: str, title: str) -> Path:
     h = url_hash(url)
     slug = slugify(title)
-    path = settings.RAW_VIDEO_DIR / "funker530" / f"{h[:8]}_{slug}.mp4"
+    path = settings.FUNKER530_DIR / f"{h[:8]}_{slug}.mp4"
     path.parent.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -146,6 +146,8 @@ def fetch_ukraine_posts(max_count: int) -> list[dict]:
         ).strip()
         
         description = re.sub(r'<[^>]+>', '', raw_desc).strip()
+        desc_lines = [line.strip() for line in description.split('\n') if line.strip()]
+        description = desc_lines[0] if desc_lines else ""
         checked += 1
 
         geo = check_geo(title, description)

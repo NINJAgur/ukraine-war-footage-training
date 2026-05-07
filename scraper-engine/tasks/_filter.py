@@ -14,10 +14,20 @@ from typing import Optional
 
 # ── 1. Equipment & Personnel (Positive Match) ──────────────────────────
 
+_AIRCRAFT = [
+    "fighter", "helicopter", "ka-52", "alligator", "mi-8", "mi-17", "mi-24", "mi-28",
+    "mi-35", "uh-60", "black hawk", "ah-64", "apache", "aircraft", "aviation",
+    "plane", "su-24", "su-25", "su-27", "su-30", "su-34", "su-35", "mig-29",
+    "mig-31", "f-16", "a-50", "il-22", "tu-22", "tu-95", "tu-160",
+    "glide bomb", "kab", "fab-500", "fab-1500", "fab-3000",
+    # MOVED TARGET DRONES HERE:
+    "shahed", "geran", "lancet", "orlan", "bayraktar", "tb2", "switchblade", 
+    "leleka", "valkyrie", "puma", "poseidon", "shark", "zala", "supercam"
+]
+
 _UAS = [
-    "drone", "uav", "fpv", "shahed", "geran", "lancet", "orlan", "bayraktar", 
-    "tb2", "switchblade", "mavic", "baba yaga", "leleka", "valkyrie", "puma", 
-    "poseidon", "shark", "zala", "supercam"
+    # GENERIC AND CAMERA DRONES ONLY:
+    "drone", "uav", "fpv", "mavic", "baba yaga", "quadcopter", "hexacopter"
 ]
 
 _TANKS = [
@@ -43,14 +53,6 @@ _ARTILLERY_AIR_DEFENSE = [
     "nasams", "s-300", "s-400", "buk", "tor", "pantsir", "tunguska", "gepard"
 ]
 
-_AIRCRAFT = [
-    "helicopter", "ka-52", "alligator", "mi-8", "mi-17", "mi-24", "mi-28",
-    "mi-35", "uh-60", "black hawk", "ah-64", "apache", "aircraft", "aviation",
-    "plane", "su-24", "su-25", "su-27", "su-30", "su-34", "su-35", "mig-29",
-    "mig-31", "f-16", "a-50", "il-22", "tu-22", "tu-95", "tu-160",
-    "glide bomb", "kab", "fab-500", "fab-1500", "fab-3000",
-]
-
 _NAVAL_MARINE = [
     "ship", "boat", "vessel", "usv", "sea drone", "magura", "magura v5", 
     "sea baby", "landing ship", "ropucha", "tapir", "corvette", "frigate", 
@@ -58,8 +60,14 @@ _NAVAL_MARINE = [
     "raptor", "patrol boat", "bk-16"
 ]
 
+_LOGISTICS_VEHICLES = [
+    "uaz", "bukhanka", "scooby-doo van", "loaf", "kamaz", "ural", 
+    "desertcross", "technical", "supply truck", "logistics truck",
+    "munition"
+]
+
 _INFANTRY_WEAPONS = [
-    "rpg", "atgm", "javelin", "nlaw", "stugna", "stugna-p", "kornet", 
+    "ak-47", "rpg", "atgm", "javelin", "nlaw", "stugna", "stugna-p", "kornet", 
     "fagot", "konkurs", "milan", "tow", "carl gustaf", "at4", "panzerfaust",
     "anti-tank", "mine"
 ]
@@ -73,7 +81,8 @@ _PERSONNEL = [
 
 # POV/Kamikaze (Negative Match for Aircraft Pipeline Only)
 POV_KEYWORDS = [
-    "fpv", "kamikaze", "drops grenade", "drone drops", "first person view", "waiter drone"
+    "fpv", "kamikaze", "drops grenade", "drone drops", "first person view", 
+    "waiter drone", "loitering munition", "suicide drone", "impact"
 ]
 
 
@@ -133,7 +142,7 @@ def _make_pattern(terms: list) -> re.Pattern:
 
 PATTERNS = {
     "aircraft": _make_pattern(_AIRCRAFT),
-    "vehicle": _make_pattern(_TANKS + _ARMORED_VEHICLES + _ARTILLERY_AIR_DEFENSE),
+    "vehicle": _make_pattern(_TANKS + _ARMORED_VEHICLES + _ARTILLERY_AIR_DEFENSE + _LOGISTICS_VEHICLES + _NAVAL_MARINE),
     "personnel": _make_pattern(_PERSONNEL + _INFANTRY_WEAPONS),
     "uas": _make_pattern(_UAS),
     "pov": _make_pattern(POV_KEYWORDS),

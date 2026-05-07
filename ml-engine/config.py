@@ -32,8 +32,8 @@ class Settings(BaseSettings):
     MEDIA_ROOT: Path = Path(__file__).parent.parent / "media"
     RAW_VIDEO_DIR: Path = Path(__file__).parent.parent / "media" / "raw"
     ANNOTATED_VIDEO_DIR: Path = Path(__file__).parent / "media" / "annotated"
-    FRAMES_DIR: Path = Path(__file__).parent / "media" / "frames"
     DATASETS_DIR: Path = Path(__file__).parent / "media" / "scraped_datasets"
+    FRAMES_DIR: Path = Path(__file__).parent / "media" / "scraped_datasets" / "frames"
 
     # ── Storage Mode (local or remote) ────────────────────────────────
     STORAGE_MODE: str = "local" 

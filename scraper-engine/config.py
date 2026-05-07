@@ -30,7 +30,9 @@ class Settings(BaseSettings):
 
     # ── Media Storage — absolute paths inside scraper-engine/ ────────
     MEDIA_ROOT: Path = Path(__file__).resolve().parent / "media"
-    RAW_VIDEO_DIR: Path = Path(__file__).resolve().parent / "media" / "raw"
+    FUNKER530_DIR: Path = Path(__file__).resolve().parent / "media" / "funker530"
+    GEOCONFIRMED_DIR: Path = Path(__file__).resolve().parent / "media" / "geoconfirmed"
+    COMBINED_DIR: Path = Path(__file__).resolve().parent / "media" / "combined"
 
     # ── Storage Mode (local or remote) ────────────────────────────────
     # 'local' leaves annotated files in ml-engine/media/annotated.
@@ -48,17 +50,9 @@ class Settings(BaseSettings):
     GEOCONFIRMED_MAX_INCIDENTS: int = 20   # max video incidents to process per run
     YTDLP_FORMAT: str = "bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4]/best"
 
-    # ── Kaggle ────────────────────────────────────────────────────────
-    KAGGLE_USERNAME: str = ""
-    KAGGLE_KEY: str = ""
-    # Comma-separated Kaggle dataset slugs
-    KAGGLE_BASELINE_DATASETS: str = "sudipchakrabarty/kiit-mita"
-    DATASETS_DIR: Path = Path(__file__).resolve().parent / "media" / "datasets"
-
     def model_post_init(self, __context):
-        # Ensure media directories exist
-        self.RAW_VIDEO_DIR.mkdir(parents=True, exist_ok=True)
-        self.DATASETS_DIR.mkdir(parents=True, exist_ok=True)
+        self.FUNKER530_DIR.mkdir(parents=True, exist_ok=True)
+        self.GEOCONFIRMED_DIR.mkdir(parents=True, exist_ok=True)
 
     @property
     def kaggle_dataset_list(self) -> list[str]:
