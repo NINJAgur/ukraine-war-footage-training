@@ -37,23 +37,57 @@
 
 **Cold-start training order (8 Kaggle datasets total):**
 1. Dataset prep: nzigulic mapped nc=11→nc=3 ✅; piterfm GDINO labeled ✅; rookieengg, rawsi18, amad-5 added ✅
-2. AIRCRAFT baseline: mAP50=0.929 @ 10 epochs, run 13 ✅
-3. VEHICLE baseline: mAP50=0.871 @ 10 epochs, run 25 ✅
-4. PERSONNEL baseline: ⏳ next (~25K images, kiit-mita + rawsi18 + amad-5)
-5. GENERAL: ⏳ after all 3 specialists pass mAP50 > 0.4 (~175K images, all 8 datasets)
+2. Pre-build merged folders once via `scripts/build_specialist_datasets.py` ✅ — all future training reads from these
+3. AIRCRAFT baseline: mAP50=0.929 @ 10 epochs, run 13 ✅ (retraining on clean merged/)
+4. VEHICLE baseline: mAP50=0.871 @ 10 epochs, run 25 ✅ (retraining on clean merged/)
+5. PERSONNEL baseline: ⏳ retraining on clean merged/ (11K images, contamination-free)
+6. GENERAL: ⏳ after all 3 specialists pass mAP50 > 0.4 (~144K images)
 
-**GDINO auto-label pipeline (category-aware "." prompt → canonical nc=3):**
+**Scraped dataset pipeline (GDINO → fine-tune):**
+
+Each scrape run produces a dated YOLO dataset:
+```
+ml-engine/media/scraped_datasets/
+    frames/                     ← transient scratch; one subfolder per video hash
+        <url_hash>/             ← extracted frames (deleted after GDINO finishes)
+    7.5.25/                     ← dated scrape run — permanent YOLO dataset
+        train/images/
+        train/labels/
+        val/images/
+        val/labels/
+    8.5.25/                     ← next run
+        ...
+```
+Pipeline per scrape batch:
+1. Download N videos → `scraper-engine/media/<source>/` (funker530/ or geoconfirmed/)
+2. Package all videos → `scraper-engine/media/combined/`
+3. Feed each video to GDINO → frames land in `ml-engine/media/scraped_datasets/frames/<hash>/`
+4. GDINO labels generated → move images + labels into `scraped_datasets/<date>/train/`
+5. Delete `frames/<hash>/` and `combined/` — both wiped after annotation
+6. Production: also wipes funker530/ and geoconfirmed/ contents after annotation
+
+Fine-tune uses accumulated dated folders as additional training data on top of Kaggle baseline.
+
+**Scraper media structure:**
+```
+scraper-engine/media/
+    funker530/          ← downloaded videos (wiped after annotation in production)
+    geoconfirmed/       ← downloaded videos (wiped after annotation in production)
+    combined/           ← transient packaging folder, created + deleted per run
+```
+
+**Kaggle baseline datasets — pre-built merged folders:**
+- `scripts/build_specialist_datasets.py` — ONE-TIME script, run once to build `media/kaggle_datasets/merged/`
+- All training reads from `media/kaggle_datasets/merged/<MODEL>/dataset.yaml` — never merged on-the-fly again
+- `media/kaggle_datasets/combined/` — OLD on-the-fly merge output, deleted
+- **amad-5 note:** dataset was cleaned in-place — original class map had 2↔3 swapped (civilians labeled as soldiers). 13,862 images deleted, labels rewritten to canonical nc=3. Class map in `build_specialist_datasets.py` is now a pass-through `{0:0, 1:1, 2:2}`.
+
+**GDINO auto-label:**
 - Video clips: `core/autolabeling/auto_label.py` — extracts frames, runs GDINO, remaps via `GDINO_CLASS_TO_MODEL`
 - Any image folder: `tasks/autolabel_kaggle.py --path <dir> [--prompt <terms>]` — universal, recursive
-- piterfm specifically: `tasks/relabel_piterfm.py` — category-aware per-image prompts (Aircraft→"aircraft", Tanks→"tank" etc.)
-- All on-disk labeled datasets are nc=3 with canonical IDs baked in
 
 **Shared DB models:** `shared/db/models.py` — single source of truth for all ORM models.
 All services import via re-export stubs (`ml-engine/db/models.py`, `scraper-engine/db/models.py`, `web-app/backend/db/models.py`).
-
-**Fine-tune loop (after enough scraped clips):**
-- Extract frames from scraped clips → GDINO auto-label (3 classes) → dataset → fine-tune from baseline
-- `media/frames/` is scratch space for GDINO only — always deleted after auto-labeling
 
 **4 YOLO models:** AIRCRAFT + VEHICLE + PERSONNEL (specialists) + GENERAL — specialists train first.
 
@@ -91,6 +125,7 @@ All services import via re-export stubs (`ml-engine/db/models.py`, `scraper-engi
 | Auto-label (any image folder) | `ml-engine/tasks/autolabel_kaggle.py` |
 | Baseline training task | `ml-engine/tasks/train_baseline.py` |
 | ML tasks | `ml-engine/tasks/` |
+| Build merged datasets (run once) | `ml-engine/scripts/build_specialist_datasets.py` |
 | AIRCRAFT pipeline (DB-driven) | `ml-engine/scripts/aircraft_pipeline.py` |
 | VEHICLE pipeline (DB-driven) | `ml-engine/scripts/vehicle_pipeline.py` |
 | Funker530 scraper | `scraper-engine/tasks/scrape_funker530.py` |

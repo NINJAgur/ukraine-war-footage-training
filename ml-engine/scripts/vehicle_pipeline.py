@@ -93,7 +93,7 @@ if __name__ == "__main__":
             
             log.info(f"Validating {raw_path.name}...")
             if validate_clip(model, raw_path, conf_thresh=0.15):
-                log.info(f"✅ Vehicle found in {raw_path.name}")
+                log.info(f"Vehicle found in {raw_path.name}")
                 
                 temp_out = ML_ENGINE_DIR / "media" / f"temp_{raw_path.name}"
                 infer_video_multi_model([(model, "VEHICLE", COLOR)], str(raw_path), save_path=str(temp_out), no_display=True)
@@ -103,7 +103,7 @@ if __name__ == "__main__":
                 clip.status = ClipStatus.ANNOTATED
                 clip.updated_at = datetime.utcnow()
             else:
-                log.warning(f"❌ No vehicle in {raw_path.name}")
+                log.warning(f"No vehicle in {raw_path.name}")
                 clip.status = ClipStatus.PENDING 
         
         session.commit()

@@ -209,12 +209,12 @@ def _download_clip(clip_id: int, video_url: str, source_label: str, download_fn,
 def test_download_video() -> None:
     """
     Download ALL scraped clips (all Funker530 + all GeoConfirmed rows in DB).
-    Each video is saved to scraper-engine/media/raw/<source>/<hash>_clip.mp4.
+    Each video is saved to scraper-engine/media/<source>/<hash>_clip.mp4.
     Clip.status is updated to DOWNLOADED or ERROR per row.
     Asserts ≥1 successful download per source.
     """
     logger.info("=" * 60)
-    logger.info("TEST: Download all Funker530 + GeoConfirmed clips → media/raw/")
+    logger.info("TEST: Download all Funker530 + GeoConfirmed clips → media/<source>/")
     logger.info("=" * 60)
 
     from db.models import Clip, ClipSource, ClipStatus
@@ -300,10 +300,9 @@ def _cleanup() -> None:
         deleted = session.query(Clip).delete()
         logger.info(f"Cleanup: deleted {deleted} Clip rows from DB")
 
-    # scraper-engine/media/raw/ is the canonical raw video location
     scraper_engine_dir = Path(__file__).resolve().parent.parent
     for subdir in ["funker530", "geoconfirmed"]:
-        raw_dir = scraper_engine_dir / "media" / "raw" / subdir
+        raw_dir = scraper_engine_dir / "media" / subdir
         if raw_dir.exists():
             shutil.rmtree(raw_dir)
             logger.info(f"Cleanup: removed {raw_dir}")

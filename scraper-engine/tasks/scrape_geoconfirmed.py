@@ -70,7 +70,7 @@ def slugify(text: str, max_len: int = 60) -> str:
 def get_output_path(url: str, title: str) -> Path:
     h = url_hash(url)
     slug = slugify(title)
-    path = settings.RAW_VIDEO_DIR / "geoconfirmed" / f"{h[:8]}_{slug}.mp4"
+    path = settings.GEOCONFIRMED_DIR / f"{h[:8]}_{slug}.mp4"
     path.parent.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -174,23 +174,25 @@ def extract_video_incidents(max_incidents: int) -> list[dict]:
                 seen_hashes.add(h)
 
                 name = (detail.get("name") or "").strip()
-                desc = (detail.get("description") or "").strip()
+                raw_desc = (detail.get("description") or "").strip()
                 
-                gear = str(detail.get("gear") or "")
+                # Keep only the first valid paragraph of the description
+                desc_lines = [line.strip() for line in raw_desc.split('\n') if line.strip()]
+                desc = desc_lines[0] if desc_lines else ""
+                
                 units = str(detail.get("units") or "")
                 
                 title = f"{name} — {desc}" if name and desc else name or desc
 
-                # Feed description + gear into the filter
-                filter_text = f"{desc} {gear} {units}"
+                # Feed description + units into the filter (gear intentionally ignored to prevent false positives)
+                filter_text = f"{desc} {units}"
                 scores, equip_ok = get_equipment_scores(name, filter_text)
                 is_neg, neg_reason = is_negative_input(name, filter_text)
 
                 logger.info(
                     f"  GeoConfirmed candidate  scores={scores}  negative={is_neg}\n"
                     f"    name: {name}\n"
-                    f"    desc: {desc}\n"
-                    f"    gear: {gear}"
+                    f"    desc: {desc}"
                 )
 
                 if is_neg:
