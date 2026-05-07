@@ -22,12 +22,13 @@ _AIRCRAFT = [
     "glide bomb", "kab", "fab-500", "fab-1500", "fab-3000",
     # MOVED TARGET DRONES HERE:
     "shahed", "geran", "lancet", "orlan", "bayraktar", "tb2", "switchblade", 
-    "leleka", "valkyrie", "puma", "poseidon", "shark", "zala", "supercam"
+    "leleka", "valkyrie", "puma", "poseidon", "shark", "zala", "supercam",
+    "Liutyi", "AN-196", "Molnya-2", "Molniya-2"
 ]
 
 _UAS = [
     # GENERIC AND CAMERA DRONES ONLY:
-    "drone", "uav", "fpv", "mavic", "baba yaga", "quadcopter", "hexacopter"
+    "point of view", "drone", "uav", "fpv", "mavic", "baba yaga", "quadcopter", "hexacopter"
 ]
 
 _TANKS = [
@@ -61,22 +62,31 @@ _NAVAL_MARINE = [
 ]
 
 _LOGISTICS_VEHICLES = [
-    "uaz", "bukhanka", "scooby-doo van", "loaf", "kamaz", "ural", 
-    "desertcross", "technical", "supply truck", "logistics truck",
-    "munition"
+    "truck", "uaz", "bukhanka", "scooby-doo van", "loaf", "kamaz", "ural", 
+    "desertcross", "technical", "supply truck", "logistics truck", "quad"
 ]
 
 _INFANTRY_WEAPONS = [
     "ak-47", "rpg", "atgm", "javelin", "nlaw", "stugna", "stugna-p", "kornet", 
     "fagot", "konkurs", "milan", "tow", "carl gustaf", "at4", "panzerfaust",
-    "anti-tank", "mine"
+    "anti-tank", "GoPro"
 ]
 
 _PERSONNEL = [
-    "soldier", "soldiers", "troops", "infantry", "infantryman", "sniper", 
-    "fighter", "fighters", "combatant", "combatants", "marine", "marines", 
-    "spetsnaz", "vdv", "sso", "kraken", "azov", "wagner", "storm-z", 
-    "kadyrovtsy", "mercenary", "paratrooper"
+    "soldier", "soldiers", "troops", "infantry", "infantryman", "infantrymen", "sniper",
+    "fighter", "fighters", "combatant", "combatants", "marine", "marines",
+    "paratrooper", "mercenary", "casualties", "evacuation team", "POW", "POWs",
+    "gopro", "assault squad", "assault group", "stormtroopers", "naval infantry",
+
+    # ── Russian units & factions ──────────────────────────────────────
+    "spetsnaz", "vdv", "gru", "rosgvardia", "omon", "sobr",
+    "wagner", "storm-z", "kadyrovtsy", "chechen", "chechens", "kontraktnik",
+
+    # ── Ukrainian units & factions ────────────────────────────────────
+    "sso", "gur",
+    "azov", "kraken", "right sector", "svoboda", "tdf", "tro",
+    "foreign fighters", "foreign legion",
+    "national guard", "ngu",
 ]
 
 # POV/Kamikaze (Negative Match for Aircraft Pipeline Only)
@@ -89,12 +99,6 @@ POV_KEYWORDS = [
 # ── 2. Impact & Aftermath (Negative Match) ─────────────────────────────
 # Block on VISUAL STATE (fire, smoke, ruins) not on TARGET TYPE (refinery, bridge).
 # "drone hits refinery" → valid; "smoke plume over refinery" → invalid.
-#
-# Omitted intentionally:
-#   "explosion" / "detonation" — these ARE the moment of impact (FPV hit = explosion)
-#   "crashed" — "drone crashed into tank" is the action itself
-#   "destroyed" (standalone) — "T-72 destroyed by FPV" is valid action footage
-#   "damaged" (standalone) — "BMP damaged by ATGM" is valid action footage
 NEGATIVE_KEYWORDS = [
     # Civilian Personnel
     "civilian", "civilians", "child", "children", "kid", "kids", "woman", "women",
@@ -105,24 +109,25 @@ NEGATIVE_KEYWORDS = [
     "maternity", "ambulance", "medical center",
 
     # Civilian Education & Religion
-    "school", "church", "cathedral", "monastery",
+    "school", "church", "cathedral", "monastery", "kindergarten",
 
     # Civilian Commercial, Public & Infrastructure
     "mall", "shopping center", "supermarket", "grocery", "market", "museum", "library",
-    "park", "train", "railway", "water treatment", "plant", "power plant", "bridge",
+    "park", "train", "railway", "water treatment", "plant", "power plant", "bridge", "oil depot",
     
     # Aftermath states
-    "Point of view", "aftermath", "ruins", "rubble", "wreckage", "debris", "remains",
+    "aftermath", "ruins", "rubble", "wreckage", "debris", "remains",
     "crater", "crash site", "burning wreckage", "obliterated", "scorched", "charred",
-    "smoldering", "incinerated",
+    "smoldering", "incinerated", "crashed",
     
     # Fire/smoke states (aftermath visual evidence)
     "flames", "in flames", "engulfed", "inferno", "blaze", "burning", "smoke", 
-    "smoke plume", "on fire",
+    "smoke plume", "on fire", "explosion",
     
     # Damage assessment language (editorial framing = not raw action footage)
-    "bomb damage", "battle damage", "battle damage assessment", "post-strike", "war damage",
-    "damages", "following the strike", "following the attack", "aftermath of", "result of"
+    "bomb damage", "battle damage", "battle damage assessment", 
+    "damages", "following the strike", "following the attack", "result of", "post-strike", 
+    "war damage",
 ]
 
 
@@ -138,7 +143,9 @@ GEO_KEYWORDS = [
 
 def _make_pattern(terms: list) -> re.Pattern:
     joined = "|".join(map(re.escape, sorted(terms, key=len, reverse=True)))
-    return re.compile(rf"\b({joined})\b", re.IGNORECASE)
+    # Explicit boundary treats hyphens as part of words, so "tank" won't match
+    # inside "anti-tank" and "t-72" won't match inside "t-72b3".
+    return re.compile(rf"(?<![a-zA-Z0-9-])({joined})(?![a-zA-Z0-9-])", re.IGNORECASE)
 
 PATTERNS = {
     "aircraft": _make_pattern(_AIRCRAFT),
@@ -176,3 +183,13 @@ def check_geo(title: str, description: str = "") -> Optional[str]:
     text = f"{title} {description}"
     match = PATTERNS["geo"].search(text)
     return match.group(1).lower() if match else None
+
+def is_pov_noise(scores: dict) -> bool:
+    """True if clip is pure FPV drone noise — POV flag with no identifiable class."""
+    return (
+        scores.get("is_pov", 0) == 1 and
+        scores.get("score_uas", 0) > 0 and
+        scores.get("score_aircraft", 0) == 0 and
+        scores.get("score_vehicle", 0) == 0 and
+        scores.get("score_personnel", 0) == 0
+    )

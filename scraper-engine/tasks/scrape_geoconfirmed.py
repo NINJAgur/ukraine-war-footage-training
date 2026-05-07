@@ -6,7 +6,7 @@ import concurrent.futures
 import hashlib
 import logging
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
@@ -18,7 +18,7 @@ from celery_app import celery_app
 from config import settings
 from db.models import Clip, ClipSource, ClipStatus
 from db.session import get_session
-from tasks._filter import get_equipment_scores, is_negative_input
+from tasks._filter import get_equipment_scores, is_negative_input, is_pov_noise
 
 logger = logging.getLogger(__name__)
 
@@ -67,10 +67,11 @@ def slugify(text: str, max_len: int = 60) -> str:
     return slug[:max_len] or "video"
 
 
-def get_output_path(url: str, title: str) -> Path:
+def get_output_path(url: str, title: str, date_str: str = None) -> Path:
     h = url_hash(url)
     slug = slugify(title)
-    path = settings.GEOCONFIRMED_DIR / f"{h[:8]}_{slug}.mp4"
+    date_str = date_str or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    path = settings.GEOCONFIRMED_DIR / date_str / f"{h[:8]}_{slug}.mp4"
     path.parent.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -81,13 +82,13 @@ def is_downloadable(url: str) -> bool:
     return any(domain in url for domain in _DOWNLOADABLE_DOMAINS)
 
 
-def fetch_recent_placemark_ids(days_back: int = 60) -> list[dict]:
-    logger.info("Fetching GeoConfirmed placemark list...")
+def fetch_recent_placemark_ids(since_date: datetime) -> list[dict]:
     resp = requests.get(GEOCONFIRMED_LIST_URL, headers=_HEADERS, timeout=30)
     resp.raise_for_status()
     factions = resp.json()
 
-    cutoff = datetime.utcnow() - timedelta(days=days_back)
+    cutoff = since_date.replace(tzinfo=None) if since_date.tzinfo else since_date
+
     all_pms: list[dict] = []
     for faction in factions:
         for icon in faction.get("icons", []):
@@ -96,13 +97,14 @@ def fetch_recent_placemark_ids(days_back: int = 60) -> list[dict]:
                 if pm.get("date"):
                     try:
                         pm_date = datetime.fromisoformat(pm["date"])
+                        if pm_date.tzinfo:
+                            pm_date = pm_date.replace(tzinfo=None)
                     except (ValueError, TypeError):
                         pass
                 if pm_date and pm_date >= cutoff:
                     all_pms.append({"id": pm["id"], "date": pm_date})
 
     all_pms.sort(key=lambda x: x["date"], reverse=True)
-    logger.info(f"GeoConfirmed: {len(all_pms)} placemarks available in last {days_back} days.")
     return all_pms
 
 
@@ -127,31 +129,30 @@ def extract_first_url(raw: str) -> Optional[str]:
     return None
 
 
-def extract_video_incidents(max_incidents: int) -> list[dict]:
-    recent_pms = fetch_recent_placemark_ids(days_back=60)
+# ── Internal helpers ──────────────────────────────────────────────────
 
+def _process_placemarks(placemarks: list[dict], max_incidents: int = None) -> list[dict]:
+    """Fetch details and filter a list of placemarks. Stops early if max_incidents is set."""
     seen_hashes: set[str] = set()
     results: list[dict] = []
-    skipped = 0
-    checked = 0
-    
+    skipped = checked = 0
     BATCH_SIZE = 20
     MAX_WORKERS = 10
+    done = False
 
-    for i in range(0, len(recent_pms), BATCH_SIZE):
-        if len(results) >= max_incidents:
+    for i in range(0, len(placemarks), BATCH_SIZE):
+        if done:
             break
-            
-        batch = recent_pms[i : i + BATCH_SIZE]
+        batch = placemarks[i : i + BATCH_SIZE]
         logger.info(f"Processing GeoConfirmed batch {i} to {i+len(batch)}...")
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             future_to_pm = {executor.submit(fetch_placemark_detail, pm["id"]): pm for pm in batch}
-            
+
             for future in concurrent.futures.as_completed(future_to_pm):
                 pm_stub = future_to_pm[future]
                 checked += 1
-                
+
                 try:
                     detail = future.result()
                 except Exception:
@@ -175,32 +176,31 @@ def extract_video_incidents(max_incidents: int) -> list[dict]:
 
                 name = (detail.get("name") or "").strip()
                 raw_desc = (detail.get("description") or "").strip()
-                
-                # Keep only the first valid paragraph of the description
                 desc_lines = [line.strip() for line in raw_desc.split('\n') if line.strip()]
                 desc = desc_lines[0] if desc_lines else ""
-                
                 units = str(detail.get("units") or "")
-                
-                title = f"{name} — {desc}" if name and desc else name or desc
+                title = f"{name} - {desc}" if name and desc else name or desc
 
-                # Feed description + units into the filter (gear intentionally ignored to prevent false positives)
                 filter_text = f"{desc} {units}"
                 scores, equip_ok = get_equipment_scores(name, filter_text)
                 is_neg, neg_reason = is_negative_input(name, filter_text)
 
                 logger.info(
-                    f"  GeoConfirmed candidate  scores={scores}  negative={is_neg}\n"
+                    f"  GeoConfirmed candidate  date={pm_stub['date'].date()}  scores={scores}  negative={is_neg}\n"
                     f"    name: {name}\n"
                     f"    desc: {desc}"
                 )
 
                 if is_neg:
-                    logger.info(f"    → SKIP: {neg_reason}")
+                    logger.info(f"    -> SKIP: {neg_reason}")
                     skipped += 1
                     continue
                 if not equip_ok:
-                    logger.info(f"    → SKIP: no equipment matches")
+                    logger.info(f"    -> SKIP: no equipment matches")
+                    skipped += 1
+                    continue
+                if is_pov_noise(scores):
+                    logger.info(f"    -> SKIP: pure FPV noise (pov + no class score)")
                     skipped += 1
                     continue
 
@@ -212,13 +212,34 @@ def extract_video_incidents(max_incidents: int) -> list[dict]:
                     "published_at": pm_stub["date"],
                     "scores": scores,
                 })
-                logger.info(f"    → ACCEPT  scores='{scores}'")
-                
-                if len(results) >= max_incidents:
+                logger.info(f"    -> ACCEPT  scores='{scores}'")
+
+                if max_incidents and len(results) >= max_incidents:
+                    logger.info(f"  Reached max_incidents={max_incidents} — stopping")
+                    done = True
                     break
 
     logger.info(f"GeoConfirmed: {len(results)} accepted, {skipped} skipped (checked {checked} placemarks)")
-    return results[:max_incidents]
+    return results
+
+
+# ── Public API ────────────────────────────────────────────────────────
+
+# Celery / scrape_daily: fetch everything published in the last N hours
+def extract_video_incidents_since(since_date: datetime) -> list[dict]:
+    """Date mode — all incidents published on or after since_date. Used by Celery and scrape_daily."""
+    placemarks = fetch_recent_placemark_ids(since_date)
+    logger.info(f"GeoConfirmed: {len(placemarks)} total placemarks — filtering since {since_date.date()}")
+    return _process_placemarks(placemarks)
+
+
+# Tests: grab the first N passing incidents to verify the pipeline end-to-end
+def extract_video_incidents_sample(max_incidents: int) -> list[dict]:
+    """Count mode — first N passing incidents regardless of date. Used by tests."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=365)
+    placemarks = fetch_recent_placemark_ids(cutoff)
+    logger.info(f"GeoConfirmed: {len(placemarks)} total placemarks — sampling max_incidents={max_incidents}")
+    return _process_placemarks(placemarks, max_incidents=max_incidents)
 
 
 def _download_video(video_url: str, output_path: Path) -> dict:
@@ -275,7 +296,8 @@ def scrape_geoconfirmed(self) -> dict:
     skipped_count = 0
 
     try:
-        incidents = extract_video_incidents(settings.GEOCONFIRMED_MAX_INCIDENTS)
+        since_date = datetime.now(timezone.utc) - timedelta(hours=settings.SCRAPE_LOOKBACK_HOURS)
+        incidents = extract_video_incidents_since(since_date)
         if not incidents:
             return {"status": "ok", "new": 0, "skipped": 0}
 
@@ -330,7 +352,11 @@ def download_geoconfirmed_video(self, clip_id: int, video_url: str) -> dict:
         clip.status = ClipStatus.DOWNLOADING
         clip.error_message = None
 
-    output_path = get_output_path(video_url, "")
+    with get_session() as session:
+        clip = session.get(Clip, clip_id)
+        date_str = clip.published_at.strftime("%Y-%m-%d") if clip and clip.published_at else datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    output_path = get_output_path(video_url, "", date_str)
     try:
         meta = _download_video(video_url, output_path)
         with get_session() as session:

@@ -231,18 +231,13 @@ def infer_video_multi_model(
 
 
 def validate_clip(model, path, conf_thresh: float = 0.35,
-                  min_rate: float = 0.15, n_samples: int = 30) -> bool:
-    """Return True if ≥min_rate of sampled frames have at least one detection.
-    Deletes the file and returns False when the clip fails validation."""
-    import numpy as np
-
+                  min_rate: float = 0.15, n_samples: int = 30) -> tuple[bool, float]:
+    """Return (passed, detection_rate). Caller is responsible for file deletion."""
     cap = cv2.VideoCapture(str(path))
     total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     if total == 0:
         cap.release()
-        os.remove(path)
-        logging.warning(f"validate_clip REJECTED (empty): {path}")
-        return False
+        return False, 0.0
 
     step = max(1, total // n_samples)
     detected = sampled = 0
@@ -260,12 +255,7 @@ def validate_clip(model, path, conf_thresh: float = 0.35,
     cap.release()
 
     rate = detected / sampled if sampled > 0 else 0.0
-    logging.info(f"validate_clip {detected}/{sampled} frames ({rate:.0%}): {path}")
-    if rate < min_rate:
-        logging.warning(f"validate_clip REJECTED ({rate:.0%} < {min_rate:.0%}): {path}")
-        os.remove(path)
-        return False
-    return True
+    return rate >= min_rate, rate
 
 
 def infer_webcam(model, conf_thresh=0.5, no_display=False):

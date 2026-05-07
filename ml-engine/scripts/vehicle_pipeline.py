@@ -2,8 +2,8 @@
 vehicle_pipeline.py
 
 Query database for vehicle-relevant clips (Majority Voting),
-validate each clip has visible vehicles (≥15% frames with detections),
-then run the VEHICLE model → annotated MP4 saved to remote storage or local media/.
+validate each clip has visible vehicles (>=15% frames with detections),
+then run the VEHICLE model -> annotated MP4 saved to remote storage or local media/.
 DB Clip entry written for each annotated clip, and heavy raw file deleted.
 
 Usage (from repo root):
@@ -14,7 +14,7 @@ import os
 import shutil
 import logging
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("vehicle_pipeline")
@@ -30,81 +30,145 @@ from db.session import get_session
 from shared.db.models import Clip, ClipStatus
 from config import settings
 
-VEHICLE_WEIGHTS = ML_ENGINE_DIR / "runs/baseline/VEHICLE/baseline_VEHICLE_25/weights/best.pt"
 COLOR = settings.MODEL_COLORS["VEHICLE"]
+CONF_THRESH = 0.15
+MIN_RATE    = 0.10
+
+
+def _latest_weights(model_name: str) -> Path:
+    """Return best.pt from the highest-numbered run that has it."""
+    runs_dir = ML_ENGINE_DIR / "runs/baseline" / model_name
+    if not runs_dir.exists():
+        raise FileNotFoundError(f"No runs directory: {runs_dir}")
+    candidates = sorted(
+        (d for d in runs_dir.iterdir() if d.is_dir()),
+        key=lambda d: int(d.name.rsplit("_", 1)[-1]) if d.name.rsplit("_", 1)[-1].isdigit() else 0,
+        reverse=True,
+    )
+    for run_dir in candidates:
+        w = run_dir / "weights" / "best.pt"
+        if w.exists():
+            return w
+    raise FileNotFoundError(f"No best.pt found in {runs_dir}")
 
 
 def finalize_storage(clip: Clip, temp_path: Path) -> str:
-    """Uploads/moves annotated video, deletes raw file to save space, returns permanent URL."""
-    final_url = ""
     storage_mode = getattr(settings, "STORAGE_MODE", "local")
-    
     if storage_mode == "remote":
-        # Placeholder for generic cloud upload logic (GCP, Azure, S3)
         bucket = getattr(settings, "REMOTE_STORAGE_BUCKET", "my-bucket")
         final_url = f"https://storage.googleapis.com/{bucket}/vehicle/{temp_path.name}"
         if temp_path.exists():
             os.remove(temp_path)
     else:
-        perm_dir = settings.ANNOTATED_VIDEO_DIR / "vehicle"
+        date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        perm_dir = settings.ANNOTATED_VIDEO_DIR / "vehicle" / date_str
         perm_dir.mkdir(parents=True, exist_ok=True)
         clean_name = temp_path.stem.removeprefix("temp_").replace("_clip", "") + "_annotated.mp4"
         perm_path = perm_dir / clean_name
         shutil.move(str(temp_path), str(perm_path))
         final_url = str(perm_path)
 
-    # Clean up the raw file downloaded by Celery to save disk space
     if clip.file_path and os.path.exists(clip.file_path):
         os.remove(clip.file_path)
         clip.file_path = None
-        log.info(f"Deleted raw file from disk.")
 
     return final_url
 
 
+def _db_match_reason(clip: Clip) -> str:
+    parts = []
+    if clip.score_vehicle and clip.score_vehicle > 0:
+        parts.append(f"score_vehicle={clip.score_vehicle}")
+    if clip.score_uas and clip.score_uas > 0:
+        parts.append(f"score_uas={clip.score_uas}")
+    return " + ".join(parts) if parts else "unknown"
+
+
 if __name__ == "__main__":
-    log.info("=== VEHICLE PIPELINE START ===")
+    log.info("=" * 60)
+    log.info("VEHICLE PIPELINE START")
+    log.info("=" * 60)
     from ultralytics import YOLO
 
-    if not VEHICLE_WEIGHTS.exists():
-        raise FileNotFoundError(f"VEHICLE weights not found: {VEHICLE_WEIGHTS}")
-    
-    model = YOLO(str(VEHICLE_WEIGHTS))
+    weights_path = _latest_weights("VEHICLE")
+    log.info(f"Using weights: {weights_path}")
+    model = YOLO(str(weights_path))
 
     with get_session() as session:
-        # ── The DB Query Magic (Majority Voting logic) ──
-        # Vehicle > 0 OR UAS > 0 (Even POV kamikazes are valid for vehicles)
         candidates = (
             session.query(Clip)
             .filter(Clip.status == ClipStatus.DOWNLOADED)
             .filter(Clip.file_path.isnot(None))
-            .filter((Clip.score_vehicle > 0) | (Clip.score_uas > 0))
+            .filter(
+                (Clip.score_vehicle > 0) &
+                (Clip.score_vehicle >= Clip.score_aircraft) &
+                (Clip.score_vehicle >= Clip.score_personnel)
+            )
             .limit(10)
             .all()
         )
 
-        log.info(f"Found {len(candidates)} candidates in DB.")
+        log.info(f"DB query returned {len(candidates)} candidates")
+        log.info("-" * 60)
+
+        accepted = rejected = errors = 0
+        total_detections = 0
 
         for clip in candidates:
             raw_path = Path(clip.file_path)
+            match_reason = _db_match_reason(clip)
+
+            log.info(
+                f"[clip_id={clip.id}] {clip.source.value if hasattr(clip.source, 'value') else clip.source}\n"
+                f"  title   : {(clip.title or 'N/A')[:100]}\n"
+                f"  scores  : aircraft={clip.score_aircraft} vehicle={clip.score_vehicle} "
+                f"uas={clip.score_uas} pov={clip.is_pov}\n"
+                f"  matched : {match_reason}\n"
+                f"  file    : {raw_path.name}"
+            )
+
             if not raw_path.exists():
+                log.warning(f"  SKIP — file not on disk: {raw_path}")
                 clip.status = ClipStatus.ERROR
+                errors += 1
                 continue
-            
-            log.info(f"Validating {raw_path.name}...")
-            if validate_clip(model, raw_path, conf_thresh=0.15):
-                log.info(f"Vehicle found in {raw_path.name}")
-                
-                temp_out = ML_ENGINE_DIR / "media" / f"temp_{raw_path.name}"
-                infer_video_multi_model([(model, "VEHICLE", COLOR)], str(raw_path), save_path=str(temp_out), no_display=True)
-                
-                clip.mp4_path = finalize_storage(clip, temp_out)
-                clip.det_class = "VEHICLE"
-                clip.status = ClipStatus.ANNOTATED
-                clip.updated_at = datetime.utcnow()
-            else:
-                log.warning(f"No vehicle in {raw_path.name}")
-                clip.status = ClipStatus.PENDING 
-        
+
+            passed, rate = validate_clip(model, raw_path, conf_thresh=CONF_THRESH, min_rate=MIN_RATE)
+
+            if not passed:
+                log.info(f"  REJECT — detection rate {rate:.0%} < {MIN_RATE:.0%} threshold")
+                clip.status = ClipStatus.PENDING
+                rejected += 1
+                continue
+
+            log.info(f"  ACCEPT — detection rate {rate:.0%} — running full inference...")
+
+            temp_out = ML_ENGINE_DIR / "media" / f"temp_{raw_path.name}"
+            _, det_counts = infer_video_multi_model(
+                [(model, "VEHICLE", COLOR)], str(raw_path), save_path=str(temp_out), no_display=True
+            )
+            clip_dets = sum(det_counts.values())
+            total_detections += clip_dets
+
+            clip.mp4_path = finalize_storage(clip, temp_out)
+            clip.det_class = "VEHICLE"
+            clip.status = ClipStatus.ANNOTATED
+            clip.updated_at = datetime.now(timezone.utc)
+            accepted += 1
+
+            log.info(
+                f"  ANNOTATED — detections={clip_dets}  output={Path(clip.mp4_path).name}"
+            )
+
         session.commit()
-    log.info("=== DONE ===")
+
+    log.info("=" * 60)
+    log.info(
+        f"VEHICLE PIPELINE DONE\n"
+        f"  candidates : {len(candidates)}\n"
+        f"  accepted   : {accepted}\n"
+        f"  rejected   : {rejected}\n"
+        f"  errors     : {errors}\n"
+        f"  detections : {total_detections}"
+    )
+    log.info("=" * 60)

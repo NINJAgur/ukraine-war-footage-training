@@ -14,7 +14,7 @@
           style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0.55"
         />
       </div>
-      <canvas ref="canvasEl" class="ml-canvas" style="position:absolute;inset:0;width:100%;height:100%;display:block"></canvas>
+      <canvas v-if="!cat.videoSrc" ref="canvasEl" class="ml-canvas" style="position:absolute;inset:0;width:100%;height:100%;display:block"></canvas>
       <div class="ml-scanline"></div>
       <div class="ml-hud-corner tl"></div>
       <div class="ml-hud-corner tr"></div>
