@@ -60,16 +60,17 @@ def finalize_storage(clip: Clip, temp_path: Path) -> str:
         if temp_path.exists():
             os.remove(temp_path)
     else:
-        date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        perm_dir = settings.ANNOTATED_VIDEO_DIR / "personnel" / date_str
-        perm_dir.mkdir(parents=True, exist_ok=True)
         clean_name = temp_path.stem.removeprefix("temp_").replace("_clip", "") + "_annotated.mp4"
-        perm_path = perm_dir / clean_name
+        perm_path = temp_path.parent / clean_name
         shutil.move(str(temp_path), str(perm_path))
         final_url = str(perm_path)
 
-    if clip.file_path and os.path.exists(clip.file_path):
-        os.remove(clip.file_path)
+    if clip.file_path:
+        if os.path.exists(clip.file_path):
+            try:
+                os.remove(clip.file_path)
+            except PermissionError:
+                log.warning(f"Could not delete raw file (Windows lock): {clip.file_path}")
         clip.file_path = None
 
     return final_url
@@ -97,7 +98,7 @@ if __name__ == "__main__":
     with get_session() as session:
         candidates = (
             session.query(Clip)
-            .filter(Clip.status == ClipStatus.DOWNLOADED)
+            .filter(Clip.status.in_([ClipStatus.DOWNLOADED, ClipStatus.PENDING]))
             .filter(Clip.file_path.isnot(None))
             .filter(
                 (Clip.score_personnel > 0) &
@@ -137,19 +138,37 @@ if __name__ == "__main__":
 
             if not passed:
                 log.info(f"  REJECT -- detection rate {rate:.0%} < {MIN_RATE:.0%} threshold")
+                if raw_path.exists():
+                    raw_path.unlink()
+                    clip.file_path = None
                 clip.status = ClipStatus.PENDING
                 rejected += 1
                 continue
 
             log.info(f"  ACCEPT -- detection rate {rate:.0%} -- running full inference...")
 
-            temp_out = ML_ENGINE_DIR / "media" / f"temp_{raw_path.name}"
+            date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            out_dir = settings.ANNOTATED_VIDEO_DIR / "personnel" / date_str
+            out_dir.mkdir(parents=True, exist_ok=True)
+            temp_out = out_dir / f"temp_{raw_path.name}"
             _, det_counts = infer_video_multi_model(
-                [(model, "PERSONNEL", COLOR)], str(raw_path), save_path=str(temp_out), no_display=True
+                [(model, "PERSONNEL", COLOR)], str(raw_path), save_path=str(temp_out),
+                no_display=True, conf_thresh=CONF_THRESH
             )
             clip_dets = sum(det_counts.values())
-            total_detections += clip_dets
 
+            if clip_dets == 0:
+                log.info(f"  REJECT -- full inference produced 0 detections, skipping")
+                if temp_out.exists():
+                    temp_out.unlink()
+                if raw_path.exists():
+                    raw_path.unlink()
+                    clip.file_path = None
+                clip.status = ClipStatus.PENDING
+                rejected += 1
+                continue
+
+            total_detections += clip_dets
             clip.mp4_path = finalize_storage(clip, temp_out)
             clip.det_class = "PERSONNEL"
             clip.status = ClipStatus.ANNOTATED

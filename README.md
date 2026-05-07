@@ -33,7 +33,7 @@ YOLOv8 model retraining.
 |-------|-------|--------|--------|
 | AIRCRAFT | 0.929 | 83K | ✅ run 13 |
 | VEHICLE | 0.871 | 87K | ✅ run 25 |
-| PERSONNEL | — | ~25K | ⏳ next |
+| PERSONNEL | 0.780 | ~8K | ✅ run 29 |
 | GENERAL | — | ~175K | ⏳ after specialists |
 
 ## Dataset Inventory (8 Kaggle datasets)
