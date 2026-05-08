@@ -98,7 +98,7 @@ def create_yaml(dataset_path, paths, nc, names):
     logging.info(f"Created YAML config at: {yaml_path}")
     return yaml_path
 
-def train_model(yaml_path, epochs, imgsz, batch, device, project, name, weights=None, resume=False):
+def train_model(yaml_path, epochs, imgsz, batch, device, project, name, weights=None, resume=False, extra_callbacks=None):
     """Train the YOLO model."""
     if resume:
         # Resume from last checkpoint
@@ -128,6 +128,9 @@ def train_model(yaml_path, epochs, imgsz, batch, device, project, name, weights=
         # Load custom weights
         logging.info(f"Loading weights from: {weights}")
         model = YOLO(weights)
+        if extra_callbacks:
+            for event, fn in extra_callbacks.items():
+                model.add_callback(event, fn)
         results = model.train(
             data=yaml_path,
             epochs=epochs,
@@ -142,6 +145,9 @@ def train_model(yaml_path, epochs, imgsz, batch, device, project, name, weights=
         # Start fresh with pretrained YOLOv8
         logging.info("Starting training with YOLOv8m pretrained weights...")
         model = YOLO("yolov8m.pt")
+        if extra_callbacks:
+            for event, fn in extra_callbacks.items():
+                model.add_callback(event, fn)
         results = model.train(
             data=yaml_path,
             epochs=epochs,

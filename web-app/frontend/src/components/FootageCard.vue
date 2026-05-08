@@ -3,12 +3,14 @@
     <div class="card-thumb">
       <video
         v-if="item.videoUrl"
+        ref="videoEl"
         :src="item.videoUrl"
         class="card-video"
-        controls
+        muted playsinline
         preload="metadata"
-        playsinline
-        @click.stop
+        @mouseenter="videoEl.play()"
+        @mouseleave="videoEl.pause(); videoEl.currentTime = 0"
+        @click.stop="$emit('open', item)"
       />
       <div v-else class="card-thumb-placeholder">
         <div class="card-thumb-label">{{ item.detClass }}<br>{{ item.src }}</div>
@@ -30,8 +32,12 @@
 </template>
 
 <script setup>
+import { ref } from 'vue'
+
 defineProps({ item: { type: Object, required: true } })
 defineEmits(['open'])
+
+const videoEl = ref(null)
 
 function classColor(cls) {
   const map = { AIRCRAFT: 'color:oklch(0.62 0.16 220deg)', VEHICLE: 'color:oklch(0.60 0.20 25deg)', PERSONNEL: 'color:oklch(0.60 0.18 145deg)' }

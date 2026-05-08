@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from api.auth import router as auth_router
 from api.public import router as public_router
 from api.admin import router as admin_router
+from api.ws import router as ws_router
 from config import settings
 
 app = FastAPI(title="Ukraine Combat Footage API", version="0.1.0")
@@ -29,6 +30,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(public_router)
 app.include_router(admin_router)
+app.include_router(ws_router)
 
 _ANNOTATED_DIR = Path(__file__).parent.parent.parent / "ml-engine" / "media" / "annotated"
 _ANNOTATED_DIR.mkdir(parents=True, exist_ok=True)

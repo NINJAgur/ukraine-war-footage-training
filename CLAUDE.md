@@ -45,7 +45,7 @@
 3. AIRCRAFT baseline: mAP50=0.929 @ 10 epochs, run 13 ✅ (retraining on clean merged/)
 4. VEHICLE baseline: mAP50=0.871 @ 10 epochs, run 25 ✅ (retraining on clean merged/)
 5. PERSONNEL baseline: mAP50=0.780 @ 10 epochs, run 29 ✅ (clean merged/, 8,433 images)
-6. GENERAL: ⏳ after all 3 specialists pass mAP50 > 0.4 (~144K images)
+6. GENERAL: mAP50=0.784 @ 10 epochs, run 30 ✅ (175K images, 2026-05-08)
 
 **Scraped dataset pipeline (GDINO → fine-tune):**
 
@@ -98,7 +98,7 @@ All services import via re-export stubs (`ml-engine/db/models.py`, `scraper-engi
 | Service | Directory | Phase |
 |---------|-----------|-------|
 | Scraper Engine | `scraper-engine/` | 1 ✅ |
-| ML Engine | `ml-engine/` | 2 🔄 (AIRCRAFT ✅ VEHICLE ✅ PERSONNEL ✅ GENERAL ⏳) |
+| ML Engine | `ml-engine/` | 2 ✅ (AIRCRAFT ✅ 0.929, VEHICLE ✅ 0.871, PERSONNEL ✅ 0.780, GENERAL ✅ 0.784) |
 | Backend API | `web-app/backend/` | 3 🔄 |
 | Frontend | `web-app/frontend/` | 3 🔄 |
 
@@ -133,6 +133,8 @@ All services import via re-export stubs (`ml-engine/db/models.py`, `scraper-engi
 | AIRCRAFT pipeline (DB-driven) | `ml-engine/scripts/aircraft_pipeline.py` |
 | VEHICLE pipeline (DB-driven) | `ml-engine/scripts/vehicle_pipeline.py` |
 | PERSONNEL pipeline (DB-driven) | `ml-engine/scripts/personnel_pipeline.py` |
+| GENERAL pipeline (DB-driven) | `ml-engine/scripts/general_pipeline.py` |
+| Annotate clips Celery task | `ml-engine/tasks/annotate_clips.py` |
 | Funker530 scraper | `scraper-engine/tasks/scrape_funker530.py` |
 | GeoConfirmed scraper | `scraper-engine/tasks/scrape_geoconfirmed.py` |
 | Content filter + scoring | `scraper-engine/utils/_filter.py` |
@@ -155,7 +157,7 @@ Run Phase 2 test: `cd ml-engine && python tests/test_pipeline_e2e.py`
 |-------|-------|--------|
 | 0 | Agentic workspace | ✅ Complete |
 | 1 | Scraper engine | ✅ Complete |
-| 2 | ML pipeline — baseline training | 🔄 In progress (AIRCRAFT ✅ 0.929, VEHICLE ✅ 0.871, PERSONNEL ✅ 0.780, GENERAL ⏳) |
+| 2 | ML pipeline — baseline training | ✅ Complete (AIRCRAFT 0.929, VEHICLE 0.871, PERSONNEL 0.780, GENERAL 0.784) |
 | 3 | Web application | 🔄 In progress (core wired; WebSocket + full Celery pipeline pending) |
 | 4 | Cloud & DevOps | ⏳ Pending |
 
