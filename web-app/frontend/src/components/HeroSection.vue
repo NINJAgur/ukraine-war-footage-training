@@ -3,7 +3,7 @@
 
     <video
       autoplay muted loop playsinline
-      src="/hero.mp4"
+      :src="heroVideoSrc"
       style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0.42;z-index:1"
     />
 
@@ -54,6 +54,7 @@ import { GENERALIST_CAT } from '../data/constants.js'
 
 import { ref, onMounted } from 'vue'
 
+const heroVideoSrc = ref('/hero.mp4')
 const stats = ref([
   { num: '—', label: 'Clips archived' },
   { num: '—', label: 'Training images' },
@@ -62,14 +63,24 @@ const stats = ref([
 
 onMounted(async () => {
   try {
-    const res = await fetch('/api/stats')
-    if (!res.ok) return
-    const d = await res.json()
-    const k = d.images_labeled >= 1000 ? Math.round(d.images_labeled / 1000) + 'K+' : String(d.images_labeled)
-    stats.value[0] = { num: String(d.clips_total), label: 'Clips archived' }
-    stats.value[1] = { num: k, label: 'Training images' }
-    const maps = Object.values(d.models ?? {}).filter(m => m.map50 != null).map(m => m.map50)
-    if (maps.length) stats.value[2] = { num: Math.max(...maps).toFixed(3), label: 'Best mAP50' }
+    const [statsRes, clipsRes] = await Promise.all([
+      fetch('/api/stats'),
+      fetch('/api/annotated-clips'),
+    ])
+    if (statsRes.ok) {
+      const d = await statsRes.json()
+      const k = d.images_labeled >= 1000 ? Math.round(d.images_labeled / 1000) + 'K+' : String(d.images_labeled)
+      stats.value[0] = { num: String(d.clips_total), label: 'Clips archived' }
+      stats.value[1] = { num: k, label: 'Training images' }
+      const maps = Object.values(d.models ?? {}).filter(m => m.map50 != null).map(m => m.map50)
+      if (maps.length) stats.value[2] = { num: Math.max(...maps).toFixed(3), label: 'Best mAP50' }
+    }
+    if (clipsRes.ok) {
+      const clips = await clipsRes.json()
+      // Prefer most recent GENERAL clip, fall back to any clip
+      const best = clips.find(c => c.det_class === 'GENERAL') ?? clips[0]
+      if (best?.videoUrl) heroVideoSrc.value = best.videoUrl
+    }
   } catch {}
 })
 </script>
