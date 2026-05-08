@@ -163,6 +163,47 @@ Run Phase 2 test: `cd ml-engine && python tests/test_pipeline_e2e.py`
 
 ---
 
+## Agent Usage — Modus Operandi
+
+Slash commands in `.claude/commands/` wire up the `agents/` domain docs. Invoke them via the `Skill` tool.
+
+### Available commands
+| Command | Domain | Agent doc |
+|---------|--------|-----------|
+| `/review-webapp` | `web-app/` code review | `agents/web-app/review.md` |
+| `/review-ml` | `ml-engine/` code review | `agents/ml-pipeline/review.md` |
+| `/review-scraper` | `scraper-engine/` code review | `agents/ingestion/review.md` |
+| `/qa-webapp` | API contract + frontend QA | `agents/web-app/qa.md` |
+| `/qa-pipeline` | End-to-end DB state + pipeline health | `agents/ml-pipeline/qa.md` + `agents/ingestion/qa.md` |
+| `/qa-scraper` | Ingestion integrity | `agents/ingestion/qa.md` |
+| `/research-webapp` | Before new web-app features | `agents/web-app/research.md` |
+| `/research-ml` | Before new ML features | `agents/ml-pipeline/research.md` |
+| `/research-scraper` | Before new scraper features | `agents/ingestion/research.md` |
+
+### When to spawn (demand criteria)
+
+**Review agents** — spawn after a commit when ANY of:
+- New admin endpoint or auth-touching code added
+- Non-trivial architectural decision made during implementation
+- A bug in this area was already hit this session
+- Something felt hacky or required a workaround
+
+**QA agents** — spawn when:
+- New API endpoint added (verify contract)
+- DB enum or column type changed (not just nullable column additions)
+- A bug fix touches a path with no tests
+
+**Research agents** — spawn BEFORE implementing when:
+- New technology or pattern not yet used in this codebase (first WebSocket, first migration, etc.)
+- Getting the approach wrong means a rewrite later
+
+**Skip entirely for:** CSS/styling changes, text fixes, simple prop additions, anything obviously correct and self-contained.
+
+### Rule of thumb
+If a senior engineer would want to glance at it before merging — spawn. Roughly 1 in 3 commits warrants a review agent.
+
+---
+
 ## Do NOT
 
 - Use Docker locally (Phase 4 only)

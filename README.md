@@ -7,34 +7,43 @@ YOLOv8 model retraining.
 ## Architecture
 
 ```
-[Celery Beat] → scraper-engine → PostgreSQL + media/raw/
-                                       ↓
-                            ml-engine: auto_label (Phase 2)
-                                       ↓
-                    package_dataset + render_annotated
-                           ↓                    ↓
-                    Admin Inbox             Public Feed (Phase 3)
-                           ↓
-              train_baseline → train_finetune
+[Celery Beat 00:00 UTC] → scraper-engine → Clip(DOWNLOADED, scores in DB)
+                                                    ↓
+                          [Celery Beat 04:00 UTC] annotate_clips task
+                                  ↓           ↓          ↓         ↓
+                             AIRCRAFT    VEHICLE    PERSONNEL   GENERAL
+                             pipeline    pipeline   pipeline    pipeline
+                                  └──────────┴──────────┴─────────┘
+                                             ↓
+                                     annotated MP4
+                                  ↓                   ↓
+                           Public Feed           Admin Panel
+                                                      ↓
+                                          train_baseline / train_finetune
+                                                      ↓
+                                             best.pt weights
+                                          (auto-selected next run)
 ```
+
+**Scraper → ML decoupling:** scrapers write keyword scores to DB (`score_aircraft`, `score_vehicle`, `score_personnel`, `score_uas`, `is_pov`). Pipelines query by score thresholds — no re-scraping at inference time.
 
 ## Services
 
 | Service | Directory | Phase | Status |
 |---------|-----------|-------|--------|
 | Scraper Engine | `scraper-engine/` | 1 | ✅ Complete |
-| ML Engine | `ml-engine/` | 2 | 🔄 In progress |
+| ML Engine | `ml-engine/` | 2 | ✅ Complete |
 | Backend API | `web-app/backend/` | 3 | 🔄 In progress |
 | Frontend | `web-app/frontend/` | 3 | 🔄 In progress |
 
-## ML Training Progress
+## ML Training — All Baselines Complete
 
-| Model | mAP50 | Images | Status |
-|-------|-------|--------|--------|
-| AIRCRAFT | 0.929 | 83K | ✅ run 13 |
-| VEHICLE | 0.871 | 87K | ✅ run 25 |
-| PERSONNEL | 0.780 | ~8K | ✅ run 29 |
-| GENERAL | — | ~175K | ⏳ after specialists |
+| Model | mAP50 | Images | Run | Status |
+|-------|-------|--------|-----|--------|
+| AIRCRAFT | 0.929 | 83K | 13 | ✅ |
+| VEHICLE | 0.871 | 87K | 25 | ✅ |
+| PERSONNEL | 0.780 | 8,433 | 29 | ✅ |
+| GENERAL | 0.784 | 175K | 30 | ✅ |
 
 ## Dataset Inventory (8 Kaggle datasets)
 
@@ -53,23 +62,52 @@ YOLOv8 model retraining.
 ## Quick Start
 
 ```bash
-# Backend
-cd web-app/backend && uvicorn main:app --reload --port 8001
+# Backend (port 8000)
+cd web-app/backend && python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
-# Frontend
+# Frontend (port 5173, auto-opens browser)
 cd web-app/frontend && npm run dev
-
-# PERSONNEL baseline training
-cd ml-engine && python tests/test_baseline_train.py --model-type PERSONNEL --epochs 10 --keep
 ```
+
+Admin panel: `http://localhost:5173/admin` — credentials in `web-app/backend/.env`
+
+## Running Tests
+
+```bash
+# Backend unit + integration tests
+cd web-app/backend && pytest tests/unit tests/integration -v
+
+# ML engine unit tests (no GPU needed)
+cd ml-engine && pytest tests/unit -v
+
+# Scraper unit tests
+cd scraper-engine && pytest tests/unit -v
+
+# Frontend component tests
+cd web-app/frontend && npm run test
+```
+
+## Agent Slash Commands
+
+Domain-specific review, QA, and research agents in `.claude/commands/`:
+
+| Command | Use when |
+|---------|----------|
+| `/review-webapp` | After web-app changes touching auth, endpoints, or architecture |
+| `/review-ml` | After ml-engine pipeline changes |
+| `/review-scraper` | After scraper changes |
+| `/qa-webapp` | New API endpoint added or DB enum changed |
+| `/qa-pipeline` | End-to-end DB state health check |
+| `/research-webapp` | Before implementing new web-app patterns |
+| `/research-ml` | Before new ML pipeline patterns |
 
 ## Tech Stack
 
 - **Scraping:** Funker530 REST API + GeoConfirmed REST API + yt-dlp
 - **Queue:** Celery + Redis
-- **Database:** PostgreSQL 16
-- **ML:** Ultralytics YOLOv8 + GroundingDINO + PyTorch (CUDA 12.1)
-- **Frontend:** Vue 3 + Vite + Tailwind CSS
-- **API:** FastAPI + SQLAlchemy 2.x
+- **Database:** PostgreSQL 16 (`ukraine_footage`)
+- **ML:** Ultralytics YOLOv8 + GroundingDINO + PyTorch (CUDA 12.1, RTX 3060 Ti)
+- **Backend:** FastAPI + SQLAlchemy 2.x (async) + Pydantic v2
+- **Frontend:** Vue 3 (`<script setup>`) + Vite + Tailwind CSS + Pinia + Vue Router 4
 
 See [PROJECT_PLAN.md](PROJECT_PLAN.md) for full architecture and implementation plan.

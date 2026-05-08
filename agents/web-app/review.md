@@ -3,6 +3,29 @@
 
 ---
 
+## Current Project State
+*Last updated: 2026-05-08*
+
+**Backend endpoints (all implemented):**
+- `GET /api/stats` — live model status + images_labeled (GENERAL count = 175,627)
+- `GET /api/feed` — paginated ANNOTATED clips
+- `GET /api/archive` — paginated all clips by status
+- `GET /api/annotated-clips` — MP4 list from disk for frontend video backgrounds
+- `POST /api/submit` — submit URL → `status=REVIEW`
+- `GET/POST /api/admin/clips` — paginated clips; approve (REVIEW→PENDING); decline (DELETE, REVIEW only)
+- `GET /api/admin/training-runs` — paginated training runs
+- `POST /api/admin/train` — queue BASELINE or FINETUNE Celery task
+- `POST /api/auth/login` — JWT login
+
+**ClipStatus enum:** `PENDING | DOWNLOADING | DOWNLOADED | QUEUED | LABELED | ANNOTATED | ERROR | REVIEW`
+
+**Key recent changes (review focus):**
+- `DELETE /api/admin/clips/{id}` — async delete, requires `await db.delete(clip)` (NOT `db.delete`)
+- `FootageCard.vue` — `ref="videoEl"` hover-play; `.card-overlay` has `pointer-events: none`
+- `GET /api/stats` `images_labeled` — uses GENERAL model count only (not sum of all 4)
+
+---
+
 ## Identity & Role
 You are the **Web App Code Review Agent** for the Ukraine Combat Footage project.
 Apply this checklist when reviewing any code in `web-app/`.

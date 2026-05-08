@@ -553,10 +553,11 @@ yolo-training-template/                  ← monorepo root
 
 - [x] **3.32** Test suite implemented across all 4 services:
   - `scraper-engine/tests/unit/` — `_filter.py` unit tests (21 tests: equipment scoring, negative gate, POV detection)
-  - `ml-engine/tests/unit/` — epoch callback DB writes, fine-tune trigger logic
-  - `web-app/backend/tests/unit/` + `tests/integration/` — public + admin API endpoints via FastAPI TestClient
-  - `web-app/frontend/tests/unit/` — Vitest + `@vue/test-utils` component tests (HeroSection, MLCard)
+  - `ml-engine/tests/unit/` — epoch callback DB writes, fine-tune trigger logic, GENERAL pipeline (10 tests)
+  - `web-app/backend/tests/unit/` + `tests/integration/` — public + admin API endpoints via FastAPI TestClient; decline endpoint (401/404/409)
+  - `web-app/frontend/tests/unit/` — Vitest + `@vue/test-utils` component tests (HeroSection, MLCard, TickerBar)
   - pytest marks: `unit`, `integration`, `network`, `gpu`, `smoke`, `slow`; default run skips gpu/slow/network/integration
+- [x] **3.38** Agent slash commands wired: `/review-webapp`, `/review-ml`, `/review-scraper`, `/qa-webapp`, `/qa-pipeline`, `/qa-scraper`, `/research-webapp`, `/research-ml`, `/research-scraper` — all in `.claude/commands/`; modus operandi documented in `CLAUDE.md`
 - [ ] **3.15** Integration test — scrape 1 clip → full pipeline → clip appears in archive with playable video; train button queues a run → status updates in admin panel
 
 ---
@@ -577,7 +578,7 @@ yolo-training-template/                  ← monorepo root
 
 ## 5. Next Steps
 
-Phase 0 ✅, Phase 1 ✅, Phase 2 ✅ (all 4 models trained), Phase 3 🔄 (core wired; WebSocket pending).
+Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 🔄 (core wired; WebSocket + Celery E2E pending), Phase 4 ⏳
 
 **All baseline training complete:**
 - AIRCRAFT: mAP50=0.929 ✅ (run 13, 83K images)
@@ -585,13 +586,20 @@ Phase 0 ✅, Phase 1 ✅, Phase 2 ✅ (all 4 models trained), Phase 3 🔄 (core
 - PERSONNEL: mAP50=0.780 ✅ (run 29, 8,433 images)
 - GENERAL:  mAP50=0.784 ✅ (run 30, 175K images, 2026-05-08)
 
-**Remaining Phase 3 tasks:**
-- **3.14/3.14b** (optional) — WebSocket training progress in AdminPanel
-- **3.15** Integration smoke: scrape 1 clip → full pipeline → archive entry
-- **2.41** `test_pipeline_e2e.py` with trained weights → verify annotated MP4 quality
-- **Celery worker verification** — start worker, verify `POST /api/admin/train` executes end-to-end
+**Web app — live and functional:**
+- Public feed, archive, submit, hero, ticker, ML cards — all wired to live DB/API
+- Admin panel: clips table (APPROVE + DECLINE + preview modal), training runs table, train buttons
+- Auth: JWT login/logout, router guard
+- Stats: `images_labeled` = 175,627 (GENERAL count), `clips_annotated` = 8
 
-**Phase 4 (deferred):** Cloud + DevOps — Docker, GCP, CI/CD
+**Remaining Phase 3 tasks (priority order):**
+1. **Celery worker E2E** — start Redis + Celery worker, verify `POST /api/admin/train` → task executes → DB updates
+2. **3.14/3.14b** (optional) — WebSocket training progress in AdminPanel (live epoch/loss/mAP50)
+3. **3.15** Integration smoke — scrape 1 clip → annotate_clips → clip in archive with playable video
+4. **Hero background video** — wire `HeroSection.vue` to first GENERAL clip from `/api/annotated-clips` once GENERAL clips accumulate
+5. **2.41** `test_pipeline_e2e.py` — run with trained weights, verify annotated MP4 quality
+
+**Phase 4 (deferred):** Cloud + DevOps — Docker, GCP Terraform, NGINX, CI/CD
 
 ---
 

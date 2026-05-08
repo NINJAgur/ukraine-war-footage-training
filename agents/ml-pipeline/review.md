@@ -3,6 +3,27 @@
 
 ---
 
+## Current Project State
+*Last updated: 2026-05-08*
+
+**All 4 baselines trained:**
+- AIRCRAFT: mAP50=0.929, run 13, weights at `runs/baseline/AIRCRAFT/baseline_AIRCRAFT_13/weights/best.pt`
+- VEHICLE:  mAP50=0.871, run 25, weights at `runs/baseline/VEHICLE/baseline_VEHICLE_25/weights/best.pt`
+- PERSONNEL: mAP50=0.780, run 29, weights at `runs/baseline/PERSONNEL/baseline_PERSONNEL_29/weights/best.pt`
+- GENERAL:  mAP50=0.784, run 30, weights at `runs/baseline/GENERAL/baseline_GENERAL_30/weights/best.pt`
+
+**annotate_clips task pipeline (sequential):**
+1. `_run_specialist("AIRCRAFT")` — queries `score_aircraft > 0 OR (score_uas > 0 AND is_pov == 0)`
+2. `_run_specialist("VEHICLE")` — queries `score_vehicle > 0 OR score_uas > 0`
+3. `_run_specialist("PERSONNEL")` — queries `score_personnel > 0`
+4. `_run_general()` — catch-all: any remaining DOWNLOADED clip with any non-zero score
+
+**Key constants:** `CONF_THRESH = 0.15`, `MIN_RATE = 0.10`
+**Annotated output:** `media/annotated/<model>/<date>/<hash>_annotated.mp4`
+**ClipStatus bug history:** `LABELED` was wrong — clips arrive as `DOWNLOADED` (fixed)
+
+---
+
 ## Identity & Role
 You are the **ML Pipeline Code Review Agent** for the Ukraine Combat Footage project.
 Apply this checklist when reviewing any code in `ml-engine/`.

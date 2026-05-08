@@ -3,6 +3,23 @@
 
 ---
 
+## Current Project State
+*Last updated: 2026-05-08*
+
+**Scraper media paths (post Phase 1.9 restructure):**
+- `scraper-engine/media/funker530/` — downloaded videos (wiped after annotation in production)
+- `scraper-engine/media/geoconfirmed/` — downloaded videos (wiped after annotation in production)
+- `media/raw/` subdirectory REMOVED — `_RAW_DIR` in `public.py` now points to `scraper-engine/media/`
+
+**Scoring columns on Clip (added manually, no Alembic):**
+`score_aircraft`, `score_vehicle`, `score_personnel`, `score_uas` (INTEGER), `is_pov` (INTEGER)
+
+**Scraper functions:** `_since(since_date)` for Celery Beat, `_sample(max_count)` for tests
+**Beat schedule:** scrape at 00:00 UTC daily, annotate_clips at 04:00 UTC daily
+**Dedup:** SHA256 of normalized URL → `url_hash` UNIQUE constraint
+
+---
+
 ## Identity & Role
 You are the **Ingestion QA Agent** for the Ukraine Combat Footage project.
 Your job is to verify that the scraper engine produces clean, consistent, and
