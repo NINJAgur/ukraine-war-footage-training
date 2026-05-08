@@ -3,6 +3,16 @@
 
 ---
 
+## Current Project State
+*Last updated: 2026-05-08*
+
+**Backend port:** 8000 (not 8001 as shown in some older docs)
+**All core endpoints implemented** — see `web-app/backend/api/` for `public.py`, `admin.py`, `auth.py`
+**DELETE /api/admin/clips/{id}** added — async SQLAlchemy delete requires `await db.delete(obj)`
+**Next unimplemented feature:** WebSocket training progress (`ws://localhost:8000/ws/training/{run_id}`) — stub exists at `web-app/backend/api/ws.py`
+
+---
+
 ## Identity & Role
 You are the **Web App Research Agent** for the Ukraine Combat Footage project.
 Your job is to investigate and recommend the best approaches for building the

@@ -3,6 +3,17 @@
 
 ---
 
+## Current Project State
+*Last updated: 2026-05-08*
+
+**DB clip state:** 8 ANNOTATED, 1 PENDING, 1 ERROR — all from VEHICLE/AIRCRAFT pipelines. 0 GENERAL annotated clips yet.
+**Training runs:** 4 DONE (runs 13, 25, 29, 30). No QUEUED or RUNNING.
+**mAP acceptance:** all 4 models above 0.3 minimum threshold ✅
+**Merged datasets:** built once via `scripts/build_specialist_datasets.py` — all training reads from `media/kaggle_datasets/merged/<MODEL>/dataset.yaml`
+**Celery worker:** not verified end-to-end yet (task dispatch works, but worker hasn't been run against `POST /api/admin/train`)
+
+---
+
 ## Identity & Role
 You are the **ML Pipeline QA Agent** for the Ukraine Combat Footage project.
 Your job is to validate auto-labeling output, dataset integrity, training runs,

@@ -3,6 +3,29 @@
 
 ---
 
+## Current Project State
+*Last updated: 2026-05-08*
+
+**Live DB state:** 10 clips total — 8 ANNOTATED, 1 PENDING, 1 ERROR. 0 REVIEW clips.
+**Backend:** FastAPI on port 8000 (`python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000`)
+**Frontend:** Vite on port 5173 (`npm run dev` in `web-app/frontend/`)
+**Admin credentials:** `admin` / `admin123` (from `web-app/backend/.env`)
+
+**AdminPanel current capabilities:**
+- Clips table: paginated, filter tabs (ALL / PENDING / ANNOTATED / REVIEW / ERROR)
+- APPROVE button on REVIEW clips → `POST /api/admin/clips/{id}/approve`
+- DECLINE button on REVIEW clips → `DELETE /api/admin/clips/{id}`
+- PREVIEW button on all clips → modal with video (ANNOTATED) or URL link (REVIEW)
+- Training runs table with mAP50 + status
+- Train buttons (BASELINE/FINETUNE per model)
+
+**Known gaps (not yet implemented):**
+- WebSocket training progress (3.14/3.14b)
+- Celery worker E2E not verified end-to-end
+- Hero background video (waiting for GENERAL annotated clips to accumulate)
+
+---
+
 ## Identity & Role
 You are the **Web App QA Agent** for the Ukraine Combat Footage project.
 Your job is to validate that the FastAPI backend and Vue 3 frontend meet
