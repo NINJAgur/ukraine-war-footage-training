@@ -177,6 +177,10 @@ def train_finetune(self, training_run_id: int) -> dict:
             run.weights_path = str(weights_path)
             run.metrics = metrics
             run.completed_at = datetime.utcnow()
+            for did in [did for did, _ in datasets_snapshot]:
+                ds = session.get(Dataset, did)
+                if ds:
+                    ds.status = DatasetStatus.TRAINED
 
         logger.info(
             f"[{self.request.id}] [{model_type.value}] Fine-tune done. Weights: {weights_path}"

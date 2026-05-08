@@ -69,6 +69,21 @@ async def approve_clip(
     return {"clip_id": clip_id, "status": "PENDING"}
 
 
+@router.delete("/clips/{clip_id}", status_code=200)
+async def decline_clip(
+    clip_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: dict = Depends(get_current_admin),
+) -> dict:
+    clip = await db.get(Clip, clip_id)
+    if not clip:
+        raise HTTPException(status_code=404, detail="Clip not found")
+    if clip.status != ClipStatus.REVIEW:
+        raise HTTPException(status_code=409, detail=f"Clip is {clip.status}, not REVIEW — only submitted clips can be declined")
+    await db.delete(clip)
+    return {"clip_id": clip_id, "status": "DECLINED"}
+
+
 @router.post("/train", status_code=202)
 async def start_training(
     body: TrainRequest,

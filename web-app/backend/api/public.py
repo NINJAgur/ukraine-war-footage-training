@@ -180,8 +180,12 @@ async def get_stats(db: AsyncSession = Depends(get_db)) -> dict:
     storage_gb  = round(raw_gb + annotated_gb, 2)
 
     model_stats = await _model_stats(db)
-    images_labeled = sum(
-        m.get("images", 0) for m in model_stats.values() if m.get("status") == "DONE"
+    # Use GENERAL's image count as the canonical unique-images total — it already
+    # contains all data from the specialist models, so summing all 4 would double-count.
+    general = model_stats.get("GENERAL", {})
+    images_labeled = general.get("images", 0) if general.get("status") == "DONE" else sum(
+        m.get("images", 0) for m in model_stats.values()
+        if m.get("status") == "DONE" and m.get("model_type") != "GENERAL"
     )
 
     return {

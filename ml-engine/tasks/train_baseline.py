@@ -40,6 +40,28 @@ def _count_images(img_dir: Path) -> int:
     return sum(1 for p in img_dir.iterdir() if p.suffix.lower() in IMG_EXTS)
 
 
+def _make_epoch_callback(run_id: int, total_epochs: int):
+    def on_fit_epoch_end(trainer):
+        try:
+            m = trainer.metrics or {}
+            progress = {
+                "epoch":    trainer.epoch + 1,
+                "epochs":   total_epochs,
+                "map50":    round(float(m.get("metrics/mAP50(B)", 0)), 4),
+                "box_loss": round(float(trainer.loss_items[0]), 4) if getattr(trainer, "loss_items", None) is not None else None,
+                "cls_loss": round(float(trainer.loss_items[1]), 4) if getattr(trainer, "loss_items", None) is not None else None,
+            }
+            with get_session() as session:
+                run = session.get(TrainingRun, run_id)
+                if run:
+                    combined = dict(run.metrics or {})
+                    combined["epoch_progress"] = progress
+                    run.metrics = combined
+        except Exception:
+            pass
+    return on_fit_epoch_end
+
+
 @celery_app.task(
     bind=True,
     name="tasks.train_baseline.train_baseline",
@@ -106,6 +128,7 @@ def train_baseline(self, training_run_id: int, weights: str = None) -> dict:
             name=run_name,
             weights=weights,
             resume=False,
+            extra_callbacks={"on_fit_epoch_end": _make_epoch_callback(training_run_id, settings.YOLO_EPOCHS_BASELINE)},
         )
 
         all_metrics = _extract_metrics(results)

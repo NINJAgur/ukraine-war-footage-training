@@ -2,6 +2,7 @@
   <section class="hero">
 
     <video
+      v-if="heroVideoSrc"
       autoplay muted loop playsinline
       :src="heroVideoSrc"
       style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0.42;z-index:1"
@@ -54,7 +55,7 @@ import { GENERALIST_CAT } from '../data/constants.js'
 
 import { ref, onMounted } from 'vue'
 
-const heroVideoSrc = ref('/hero.mp4')
+const heroVideoSrc = ref(null)
 const stats = ref([
   { num: '—', label: 'Clips archived' },
   { num: '—', label: 'Training images' },
@@ -78,7 +79,7 @@ onMounted(async () => {
     if (clipsRes.ok) {
       const clips = await clipsRes.json()
       // Prefer most recent GENERAL clip, fall back to any clip
-      const best = clips.find(c => c.det_class === 'GENERAL') ?? clips[0]
+      const best = clips.find(c => c.detClass === 'GENERAL')
       if (best?.videoUrl) heroVideoSrc.value = best.videoUrl
     }
   } catch {}

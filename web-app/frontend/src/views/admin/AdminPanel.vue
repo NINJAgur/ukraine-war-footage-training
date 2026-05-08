@@ -28,11 +28,24 @@
           <div v-for="m in MODELS" :key="m" class="model-card" :data-model="m">
             <div class="model-card-top">
               <div class="mono" style="font-size:10px;letter-spacing:0.2em;color:var(--cat-color)">{{ m }}</div>
-              <div :class="['run-status', latestRun(m)?.status?.toLowerCase()]" class="mono">
-                {{ latestRun(m)?.status ?? 'NO RUNS' }}
+              <div :class="['run-status', liveStatus(m) ?? latestRun(m)?.status?.toLowerCase()]" class="mono">
+                {{ liveStatus(m)?.toUpperCase() ?? latestRun(m)?.status ?? 'NO RUNS' }}
               </div>
             </div>
-            <div v-if="latestRun(m)?.map50 != null" class="mono" style="font-size:16px;font-weight:300;color:var(--fg-0);letter-spacing:-0.02em;margin:2px 0">
+            <div v-if="liveProgress(m)" class="train-progress">
+              <div class="mono" style="font-size:10px;color:var(--amber);margin-bottom:4px">
+                EPOCH {{ liveProgress(m).epoch }}/{{ liveProgress(m).epochs }}
+                <span v-if="liveProgress(m).map50" style="color:var(--fg-1);margin-left:8px">mAP50 {{ liveProgress(m).map50.toFixed(3) }}</span>
+              </div>
+              <div class="progress-bar">
+                <div class="progress-fill" :style="{ width: (liveProgress(m).epoch / liveProgress(m).epochs * 100) + '%' }"></div>
+              </div>
+              <div class="mono" style="font-size:9px;color:var(--fg-3);margin-top:3px">
+                <span v-if="liveProgress(m).box_loss">box {{ liveProgress(m).box_loss }}</span>
+                <span v-if="liveProgress(m).cls_loss" style="margin-left:8px">cls {{ liveProgress(m).cls_loss }}</span>
+              </div>
+            </div>
+            <div v-else-if="latestRun(m)?.map50 != null" class="mono" style="font-size:16px;font-weight:300;color:var(--fg-0);letter-spacing:-0.02em;margin:2px 0">
               {{ latestRun(m).map50.toFixed(3) }}
               <span style="font-size:10px;color:var(--fg-3);letter-spacing:0.1em">mAP50</span>
             </div>
@@ -104,17 +117,19 @@
           <tbody>
             <tr v-for="c in clips" :key="c.id">
               <td class="mono dim">#{{ c.id }}</td>
-              <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ c.title ?? c.url }}</td>
+              <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ c.title ?? c.url }}</td>
               <td class="mono dim">{{ c.source }}</td>
               <td><span :class="['clip-status', c.status.toLowerCase()]" class="mono">{{ c.status }}</span></td>
               <td class="mono dim">{{ c.duration_seconds ? fmtDur(c.duration_seconds) : '—' }}</td>
               <td class="mono dim">{{ fmtDate(c.created_at) }}</td>
-              <td>
+              <td style="display:flex;gap:6px;align-items:center">
+                <button class="preview-btn mono" @click.stop="openPreview(c)" title="Preview">&#9654;</button>
                 <button v-if="c.status === 'REVIEW'" class="approve-btn mono" @click="approveClip(c.id)">APPROVE</button>
+                <button v-if="c.status === 'REVIEW'" class="decline-btn mono" @click="declineClip(c.id)">DECLINE</button>
               </td>
             </tr>
             <tr v-if="!clips.length">
-              <td colspan="6" class="mono dim" style="text-align:center;padding:10px">NO CLIPS FOUND</td>
+              <td colspan="7" class="mono dim" style="text-align:center;padding:10px">NO CLIPS FOUND</td>
             </tr>
           </tbody>
         </table>
@@ -126,11 +141,46 @@
       </section>
 
     </main>
+
+    <!-- ── CLIP PREVIEW MODAL ── -->
+    <Teleport to="body">
+      <div v-if="previewClip" class="preview-backdrop" @click="previewClip = null">
+        <div class="preview-panel" @click.stop>
+          <div class="preview-header">
+            <div style="min-width:0;flex:1;overflow:hidden;margin-right:16px">
+              <div class="mono" style="font-size:9px;letter-spacing:0.15em;color:var(--amber);margin-bottom:3px">{{ previewClip.source?.toUpperCase() }} · {{ previewClip.status }}</div>
+              <div style="font-size:14px;font-weight:600;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ previewClip.title ?? previewClip.url_hash }}</div>
+            </div>
+            <button class="preview-close mono" @click="previewClip = null">[ CLOSE ]</button>
+          </div>
+          <div class="preview-body">
+            <video
+              v-if="previewClip.video_url"
+              :src="previewClip.video_url"
+              class="preview-video"
+              controls autoplay muted playsinline
+            />
+            <div v-else class="preview-no-video">
+              <div class="mono" style="font-size:10px;letter-spacing:0.2em;color:var(--fg-3);margin-bottom:12px">VIDEO NOT YET DOWNLOADED</div>
+              <a :href="previewClip.url" target="_blank" rel="noopener" class="preview-url-link mono">
+                &#8599; OPEN ORIGINAL SOURCE
+              </a>
+              <div v-if="previewClip.description" class="preview-desc">{{ previewClip.description }}</div>
+            </div>
+          </div>
+          <div class="preview-meta">
+            <div class="preview-meta-cell"><span class="mono dim">URL</span><a :href="previewClip.url" target="_blank" rel="noopener" class="preview-url-mini mono">{{ previewClip.url }}</a></div>
+            <div class="preview-meta-cell"><span class="mono dim">ADDED</span><span class="mono">{{ fmtDate(previewClip.created_at) }}</span></div>
+            <div v-if="previewClip.det_class" class="preview-meta-cell"><span class="mono dim">CLASS</span><span class="mono">{{ previewClip.det_class }}</span></div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
@@ -155,8 +205,39 @@ const clipsPage    = ref(1)
 const clipsTotal   = ref(0)
 const clipStatus   = ref('')
 
-const launching = ref(null)
-const trainMsg  = ref('')
+const launching   = ref(null)
+const trainMsg    = ref('')
+const previewClip = ref(null)
+
+// model → { status, epoch_progress } from WebSocket
+const wsData = ref({})
+// model → WebSocket instance
+const wsSockets = {}
+
+function liveStatus(m) { return wsData.value[m]?.status?.toLowerCase() ?? null }
+function liveProgress(m) {
+  const d = wsData.value[m]
+  return d?.status === 'running' ? (d.metrics?.epoch_progress ?? null) : null
+}
+
+function openWs(modelType, runId) {
+  if (wsSockets[modelType]) { wsSockets[modelType].close(); delete wsSockets[modelType] }
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+  const ws = new WebSocket(`${proto}://${location.host}/ws/training/${runId}`)
+  wsSockets[modelType] = ws
+  ws.onmessage = (e) => {
+    const d = JSON.parse(e.data)
+    wsData.value[modelType] = d
+    if (d.status === 'done' || d.status === 'error') {
+      ws.close()
+      delete wsSockets[modelType]
+      loadRuns()
+    }
+  }
+  ws.onerror = () => { delete wsSockets[modelType] }
+}
+
+onUnmounted(() => { Object.values(wsSockets).forEach(ws => ws.close()) })
 
 function token() { return localStorage.getItem('token') }
 
@@ -203,7 +284,9 @@ async function queueTrain(modelType, stage) {
       body: JSON.stringify({ model_type: modelType, stage }),
     })
     if (res.ok) {
+      const d = await res.json()
       trainMsg.value = `QUEUED: ${modelType} ${stage}`
+      openWs(modelType, d.training_run_id)
       await loadRuns()
       setTimeout(() => { trainMsg.value = '' }, 4000)
     } else {
@@ -216,8 +299,23 @@ async function queueTrain(modelType, stage) {
   }
 }
 
+function openPreview(clip) {
+  previewClip.value = clip
+}
+
 async function approveClip(clipId) {
   await apiFetch(`/api/admin/clips/${clipId}/approve`, { method: 'POST' })
+  await loadClips()
+}
+
+async function declineClip(clipId) {
+  const res = await apiFetch(`/api/admin/clips/${clipId}`, { method: 'DELETE' })
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}))
+    trainMsg.value = `DECLINE ERROR ${res.status}: ${d.detail ?? 'unknown'}`
+    setTimeout(() => { trainMsg.value = '' }, 8000)
+    return
+  }
   await loadClips()
 }
 
@@ -311,6 +409,18 @@ onMounted(() => { loadRuns(); loadClips() })
   justify-content: space-between;
   align-items: flex-start;
   margin-bottom: 2px;
+}
+
+.train-progress { margin: 4px 0; }
+.progress-bar {
+  height: 2px;
+  background: var(--fg-3);
+  width: 100%;
+}
+.progress-fill {
+  height: 100%;
+  background: var(--amber);
+  transition: width 0.5s ease;
 }
 
 .train-btn {
@@ -452,4 +562,85 @@ onMounted(() => { loadRuns(); loadClips() })
   background: var(--amber);
   clip-path: polygon(50% 0%, 100% 100%, 0% 100%);
 }
+
+.decline-btn {
+  background: none;
+  border: 1px solid var(--red);
+  color: var(--red);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.decline-btn:hover { background: rgba(210,40,40,0.1); }
+
+.preview-btn {
+  background: none;
+  border: 1px solid var(--fg-3);
+  color: var(--fg-2);
+  font-size: 10px;
+  padding: 2px 7px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.preview-btn:hover { border-color: var(--amber-border); color: var(--amber); }
+
+.preview-backdrop {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(0,0,0,0.75);
+  display: flex; align-items: center; justify-content: center;
+}
+.preview-panel {
+  background: var(--bg-1);
+  border: 1px solid var(--fg-3);
+  width: min(860px, 95vw);
+  max-height: 90vh;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.preview-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--fg-3);
+  flex-shrink: 0;
+}
+.preview-close {
+  background: none; border: 1px solid var(--fg-3); color: var(--fg-2);
+  font-size: 10px; letter-spacing: 0.15em; padding: 4px 10px; cursor: pointer;
+  flex-shrink: 0;
+}
+.preview-close:hover { border-color: var(--fg-1); color: var(--fg-0); }
+.preview-body { flex: 1; overflow: hidden; min-height: 0; }
+.preview-video { width: 100%; max-height: 55vh; display: block; background: #000; }
+.preview-no-video {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-height: 200px; padding: 32px;
+  background: var(--bg-0);
+}
+.preview-url-link {
+  font-size: 11px; letter-spacing: 0.1em;
+  color: var(--amber); border: 1px solid var(--amber-border);
+  padding: 8px 16px; text-decoration: none;
+}
+.preview-url-link:hover { background: rgba(217,119,6,0.1); }
+.preview-desc { margin-top: 16px; font-size: 12px; color: var(--fg-2); max-width: 500px; text-align: center; }
+.preview-meta {
+  display: flex; flex-wrap: wrap; gap: 0;
+  border-top: 1px solid var(--fg-3);
+  flex-shrink: 0;
+}
+.preview-meta-cell {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 10px 18px;
+  border-right: 1px solid var(--fg-3);
+  min-width: 0; flex: 1;
+}
+.preview-meta-cell .mono.dim { font-size: 9px; letter-spacing: 0.15em; color: var(--fg-3); }
+.preview-meta-cell .mono:not(.dim) { font-size: 11px; color: var(--fg-0); }
+.preview-url-mini {
+  font-size: 10px; color: var(--amber); white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; text-decoration: none; max-width: 200px; display: block;
+}
+.preview-url-mini:hover { text-decoration: underline; }
 </style>

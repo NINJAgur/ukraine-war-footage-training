@@ -1,6 +1,6 @@
 # PROJECT_PLAN.md — Ukraine Combat Footage Web Application
 > **Source of Truth** — All phases, structure, and decisions are tracked here.
-> Last updated: 2026-05-07
+> Last updated: 2026-05-08
 
 ---
 
@@ -238,7 +238,7 @@ yolo-training-template/                  ← monorepo root
 │       ├── test_scrape_sample.py        ← Phase 1 sample test (max_count/max_incidents)
 │       └── test_scrape_24h.py           ← Phase 1 24h window test (calls _since functions)
 │
-├── ml-engine/                           ← PHASE 2: ML Pipeline 🔄 Next
+├── ml-engine/                           ← PHASE 2: ML Pipeline ✅ Complete
 │   ├── Dockerfile
 │   ├── requirements.txt
 │   ├── celery_app.py
@@ -262,7 +262,7 @@ yolo-training-template/                  ← monorepo root
 │       ├── session.py
 │       └── models.py
 │
-├── web-app/                             ← PHASE 3: Web Application ⏳ Pending
+├── web-app/                             ← PHASE 3: Web Application 🔄 In Progress
 │   ├── backend/
 │   │   ├── Dockerfile
 │   │   ├── requirements.txt
@@ -470,11 +470,11 @@ yolo-training-template/                  ← monorepo root
 - [x] **2.36b** `ml-engine/scripts/aircraft_pipeline.py` — scrape→validate→annotate pipeline; `validate_clip()` in `core/inference.py` (generic, any model); detection-rate gate (≥15% frames with detections, 30 samples); 4 annotated MP4s produced (2 Funker530, 2 GeoConfirmed: Mi-28 hit 67%, Shahed building strike 17%)
 - [x] **2.37** Run `test_baseline_train.py --model-type VEHICLE --epochs 10 --keep` — mAP50=0.8712 @ epoch 10 (run 25, 86,945 images) ✅
 - [x] **2.38** Run `test_baseline_train.py --model-type PERSONNEL --epochs 10 --keep` — mAP50=0.780 @ epoch 10 (run 29, 8,433 images) ✅ (run 28 was contaminated amad-5 data)
-- [ ] **2.39** Evaluate each: mAP50 > 0.4 = acceptable; increase epochs if below
+- [x] **2.39** All 3 specialists evaluated: all mAP50 > 0.4 ✅
 
 #### Step 3 — Train generalist
 
-- [ ] **2.40** All 3 specialists pass → run `test_baseline_train.py --model-type GENERAL --epochs 10 --keep`
+- [x] **2.40** Run `test_baseline_train.py --model-type GENERAL --epochs 10 --keep` — mAP50=0.784 @ epoch 10 (run 30, 175K images) ✅
 
 #### Step 4 — Tests
 
@@ -533,19 +533,30 @@ yolo-training-template/                  ← monorepo root
 - [x] **3.29** Pipeline conf threshold fix: all 3 pipelines pass `conf_thresh=CONF_THRESH` (0.15) to `infer_video_multi_model`; added zero-detection guard (clip rejected + raw deleted if full inference produces 0 boxes)
 - [x] **3.30** Annotated output path: `media/annotated/<model>/<date>/<hash>_annotated.mp4`; temp files written to same dir during inference, renamed on completion; `ClipOut.video_url` extracts relative subpath from `annotated/` segment; `public.py` uses `mp4.relative_to(_ANNOTATED_DIR)` for correct URL construction
 - [x] **3.31** Raw file cleanup on reject: all 3 pipelines now delete raw `.mp4` on both reject paths (failed validation + zero-detection inference)
+- [x] **3.33** GENERAL pipeline: `_run_general()` added to `annotate_clips` task as 4th step — catch-all for remaining DOWNLOADED clips after specialists; sets `det_class='GENERAL'`; standalone script `scripts/general_pipeline.py` also added
+- [x] **3.34** Admin DECLINE: `DELETE /api/admin/clips/{clip_id}` endpoint; AdminPanel DECLINE button (REVIEW clips only); clip preview modal (video for ANNOTATED, external URL link for REVIEW)
+- [x] **3.35** `FootageCard.vue` hover-play: `ref="videoEl"` + `pointer-events: none` on `.card-overlay` (was blocking mouseenter); `@click.stop` on video now also emits `open`
+- [x] **3.36** `GET /api/stats` `images_labeled` fixed: uses GENERAL image count only (175,627) instead of summing all 4 models (was 354,005)
+- [x] **3.37** `HeroSection.vue` shows blank when no GENERAL annotated clip exists (no fallback to placeholder)
 
 #### Backend ↔ ML Engine Integration
 
 - [x] **3.21** `POST /api/admin/train` → create `TrainingRun(QUEUED)` in DB → dispatch Celery task `train_baseline` with `model_type` + `run_id` on gpu queue; task updates status/metrics/weights in DB on finish
 - [x] **3.22a** Pipeline reorganization: `annotate_clips` task (sequential AIRCRAFT→VEHICLE→PERSONNEL, Beat daily 04:00 UTC) replaces old GDINO chain. `_filter.py` moved to `scraper-engine/utils/`. Old GDINO tasks quarantined to `ml-engine/tasks/legacy/`. Kaggle download removed from Celery — CLI-only via `scripts/download_new_datasets.py`. Scrape Beat changed to daily 00:00 UTC.
-- [ ] **3.22b** Wire fine-tune loop: after `annotate_clips` accumulates enough clips, dispatch `build_scraped_dataset` → `train_finetune`
-- [ ] **3.23** `TickerBar.vue` items pulled from DB: total clip count, scrape status, model mAP50 scores — `GET /api/stats` endpoint returning live counts
+- [x] **3.22b** Fine-tune auto-trigger: `_maybe_trigger_finetune()` in `annotate_clips.py` — counts PACKAGED datasets (≥5 threshold), queues `train_finetune` Celery task; `train_finetune` marks datasets as `TRAINED` after completion
+- [x] **3.23** `TickerBar.vue` items pulled from DB: total clip count, scrape status, model mAP50 scores — `GET /api/stats` endpoint returning live counts
 
 #### Training Progress (WebSocket)
 
 - [ ] **3.14** FastAPI WebSocket endpoint `ws://localhost:8000/ws/training/{run_id}` — Celery task writes epoch metrics to Redis pub/sub channel; backend subscribes and forwards to connected clients
 - [ ] **3.14b** `AdminPanel.vue` — open WebSocket on active `RUNNING` run; update progress bar + epoch/loss display in real time; close on `DONE`/`ERROR`
 
+- [x] **3.32** Test suite implemented across all 4 services:
+  - `scraper-engine/tests/unit/` — `_filter.py` unit tests (21 tests: equipment scoring, negative gate, POV detection)
+  - `ml-engine/tests/unit/` — epoch callback DB writes, fine-tune trigger logic
+  - `web-app/backend/tests/unit/` + `tests/integration/` — public + admin API endpoints via FastAPI TestClient
+  - `web-app/frontend/tests/unit/` — Vitest + `@vue/test-utils` component tests (HeroSection, MLCard)
+  - pytest marks: `unit`, `integration`, `network`, `gpu`, `smoke`, `slow`; default run skips gpu/slow/network/integration
 - [ ] **3.15** Integration test — scrape 1 clip → full pipeline → clip appears in archive with playable video; train button queues a run → status updates in admin panel
 
 ---
@@ -566,38 +577,21 @@ yolo-training-template/                  ← monorepo root
 
 ## 5. Next Steps
 
-Phase 0 ✅, Phase 1 ✅, Phase 2a–2e (code) ✅, GDINO installed ✅, datasets prepped ✅.
-Phase 3 frontend + admin wiring largely complete (3.10–3.11, 3.16–3.21, 3.23 done ✅).
+Phase 0 ✅, Phase 1 ✅, Phase 2 ✅ (all 4 models trained), Phase 3 🔄 (core wired; WebSocket pending).
 
-**Specialist training progress:**
+**All baseline training complete:**
 - AIRCRAFT: mAP50=0.929 ✅ (run 13, 83K images)
 - VEHICLE:  mAP50=0.871 ✅ (run 25, 87K images)
 - PERSONNEL: mAP50=0.780 ✅ (run 29, 8,433 images)
-- GENERAL: ⏳ ready — all 3 specialists passed mAP50 > 0.4
+- GENERAL:  mAP50=0.784 ✅ (run 30, 175K images, 2026-05-08)
 
-**Step A — Finish specialist training (Phase 2)**
-```bash
-cd ml-engine
-python tests/test_baseline_train.py --model-type PERSONNEL --epochs 10 --keep   # ~1h, ~25K images
-python tests/test_baseline_train.py --model-type GENERAL   --epochs 10 --keep   # ~5h, ~175K images
-# Target: mAP50 > 0.4 per model
-```
+**Remaining Phase 3 tasks:**
+- **3.14/3.14b** (optional) — WebSocket training progress in AdminPanel
+- **3.15** Integration smoke: scrape 1 clip → full pipeline → archive entry
+- **2.41** `test_pipeline_e2e.py` with trained weights → verify annotated MP4 quality
+- **Celery worker verification** — start worker, verify `POST /api/admin/train` executes end-to-end
 
-**Step B — Celery scrape→annotate pipeline (3.22)**
-- `render_annotated` task writes `mp4_path` + `status=ANNOTATED` back to Clip row
-- Start Celery worker: `celery -A celery_app worker -Q gpu --concurrency=1`
-- Verify `POST /api/admin/train` → worker picks up and executes
-
-**Step C — Optional: WebSocket training progress (3.14–3.14b)**
-- FastAPI WebSocket `ws://localhost:8000/ws/training/{run_id}`
-- AdminPanel live epoch progress bar
-
-**Step D — Backend ↔ ML Engine Celery pipeline (3.21–3.22)**
-- `POST /api/admin/train` → Celery task → `TrainingRun` DB lifecycle
-- Full scrape→render_annotated pipeline → `Clip.mp4_path` in DB
-
-**Step E — WebSocket training progress (3.14–3.14b)**
-- Redis pub/sub → FastAPI WS → AdminPanel live epoch chart
+**Phase 4 (deferred):** Cloud + DevOps — Docker, GCP, CI/CD
 
 ---
 
