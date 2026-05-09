@@ -2,9 +2,24 @@
 Integration tests for public API endpoints.
 Uses TestClient — requires live DB connection.
 """
+import logging
 import uuid
 
 import pytest
+
+logger = logging.getLogger("test_public_api")
+
+
+def _delete_clip_by_id(clip_id: int) -> None:
+    """Delete a test clip directly from DB by id."""
+    from sqlalchemy import create_engine, text
+    from config import settings
+    engine = create_engine(settings.DATABASE_SYNC_URL)
+    with engine.connect() as conn:
+        conn.execute(text("DELETE FROM clips WHERE id = :id"), {"id": clip_id})
+        conn.commit()
+    engine.dispose()
+    logger.info(f"Cleanup: deleted clip id={clip_id}")
 
 
 @pytest.mark.integration
@@ -77,18 +92,31 @@ def test_feed_returns_200(client):
 
 @pytest.mark.integration
 def test_submit_new_url_returns_201_or_409(client):
-    # A fresh UUID URL should be new (201) or already exist (409) — both valid
     url = f"https://example.com/test/{uuid.uuid4()}"
-    resp = client.post("/api/submit", json={"url": url, "title": "Test clip"})
-    assert resp.status_code in (201, 409)
+    clip_id = None
+    try:
+        resp = client.post("/api/submit", json={"url": url, "title": "Test clip"})
+        assert resp.status_code in (201, 409)
+        if resp.status_code == 201:
+            clip_id = resp.json()["id"]
+            logger.info(f"Submitted clip id={clip_id} url={url}")
+    finally:
+        if clip_id is not None:
+            _delete_clip_by_id(clip_id)
 
 
 @pytest.mark.integration
 def test_submit_duplicate_returns_409(client):
     url = f"https://example.com/duplicate-test/{uuid.uuid4()}"
-    # First submit
-    r1 = client.post("/api/submit", json={"url": url, "title": "First"})
-    assert r1.status_code == 201
-    # Duplicate
-    r2 = client.post("/api/submit", json={"url": url, "title": "Second"})
-    assert r2.status_code == 409
+    clip_id = None
+    try:
+        r1 = client.post("/api/submit", json={"url": url, "title": "First"})
+        assert r1.status_code == 201
+        clip_id = r1.json()["id"]
+        logger.info(f"Submitted clip id={clip_id}")
+        r2 = client.post("/api/submit", json={"url": url, "title": "Second"})
+        assert r2.status_code == 409
+        logger.info("Duplicate correctly returned 409")
+    finally:
+        if clip_id is not None:
+            _delete_clip_by_id(clip_id)

@@ -25,7 +25,7 @@ SCRAPER_ENGINE_DIR = str(Path(__file__).resolve().parent.parent)
 sys.path.insert(0, SCRAPER_ENGINE_DIR)
 
 
-def test_funker530_date(since: datetime) -> list[dict]:
+def run_funker530_date(since: datetime) -> list[dict]:
     logger.info("=" * 60)
     logger.info(f"TEST: Funker530 — date window since {since.strftime('%Y-%m-%d %H:%M UTC')}")
     logger.info("=" * 60)
@@ -44,7 +44,7 @@ def test_funker530_date(since: datetime) -> list[dict]:
     return posts
 
 
-def test_geoconfirmed_date(since: datetime) -> list[dict]:
+def run_geoconfirmed_date(since: datetime) -> list[dict]:
     logger.info("=" * 60)
     logger.info(f"TEST: GeoConfirmed — date window since {since.strftime('%Y-%m-%d %H:%M UTC')}")
     logger.info("=" * 60)
@@ -74,8 +74,8 @@ if __name__ == "__main__":
     failed: list[str] = []
 
     for name, fn in [
-        ("funker530_date", lambda: test_funker530_date(since)),
-        ("geoconfirmed_date", lambda: test_geoconfirmed_date(since)),
+        ("funker530_date", lambda: run_funker530_date(since)),
+        ("geoconfirmed_date", lambda: run_geoconfirmed_date(since)),
     ]:
         try:
             fn()

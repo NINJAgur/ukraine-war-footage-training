@@ -35,32 +35,29 @@ def test_inserted_clip_is_retrievable():
 
     test_url = "https://test.example.com/scraper-integration-test-clip"
     url_hash = hashlib.sha256(test_url.encode()).hexdigest()
+    inserted = False
 
-    # Insert
-    with get_session() as session:
-        existing = session.query(Clip).filter_by(url_hash=url_hash).first()
-        if existing is None:
-            clip = Clip(
-                url=test_url,
-                url_hash=url_hash,
-                source=ClipSource.FUNKER530,
-                status=ClipStatus.PENDING,
-                title="Integration test clip",
-            )
-            session.add(clip)
+    try:
+        with get_session() as session:
+            if session.query(Clip).filter_by(url_hash=url_hash).first() is None:
+                session.add(Clip(
+                    url=test_url, url_hash=url_hash,
+                    source=ClipSource.FUNKER530, status=ClipStatus.PENDING,
+                    title="Integration test clip",
+                ))
+                inserted = True
 
-    # Verify retrievable
-    with get_session() as session:
-        result = session.query(Clip).filter_by(url_hash=url_hash).first()
-        assert result is not None
-        assert result.url == test_url
-        assert result.url_hash == url_hash
-
-    # Teardown
-    with get_session() as session:
-        clip = session.query(Clip).filter_by(url_hash=url_hash).first()
-        if clip:
-            session.delete(clip)
+        with get_session() as session:
+            result = session.query(Clip).filter_by(url_hash=url_hash).first()
+            assert result is not None
+            assert result.url == test_url
+            assert result.url_hash == url_hash
+    finally:
+        if inserted:
+            with get_session() as session:
+                clip = session.query(Clip).filter_by(url_hash=url_hash).first()
+                if clip:
+                    session.delete(clip)
 
 
 @pytest.mark.integration
@@ -72,28 +69,27 @@ def test_clip_status_can_be_updated():
 
     test_url = "https://test.example.com/scraper-status-update-test"
     url_hash = hashlib.sha256(test_url.encode()).hexdigest()
+    inserted = False
 
-    with get_session() as session:
-        existing = session.query(Clip).filter_by(url_hash=url_hash).first()
-        if existing is None:
-            clip = Clip(
-                url=test_url,
-                url_hash=url_hash,
-                source=ClipSource.GEOCONFIRMED,
-                status=ClipStatus.PENDING,
-            )
-            session.add(clip)
+    try:
+        with get_session() as session:
+            if session.query(Clip).filter_by(url_hash=url_hash).first() is None:
+                session.add(Clip(
+                    url=test_url, url_hash=url_hash,
+                    source=ClipSource.GEOCONFIRMED, status=ClipStatus.PENDING,
+                ))
+                inserted = True
 
-    with get_session() as session:
-        clip = session.query(Clip).filter_by(url_hash=url_hash).first()
-        clip.status = ClipStatus.DOWNLOADED
+        with get_session() as session:
+            clip = session.query(Clip).filter_by(url_hash=url_hash).first()
+            clip.status = ClipStatus.DOWNLOADED
 
-    with get_session() as session:
-        clip = session.query(Clip).filter_by(url_hash=url_hash).first()
-        assert clip.status == ClipStatus.DOWNLOADED
-
-    # Teardown
-    with get_session() as session:
-        clip = session.query(Clip).filter_by(url_hash=url_hash).first()
-        if clip:
-            session.delete(clip)
+        with get_session() as session:
+            clip = session.query(Clip).filter_by(url_hash=url_hash).first()
+            assert clip.status == ClipStatus.DOWNLOADED
+    finally:
+        if inserted:
+            with get_session() as session:
+                clip = session.query(Clip).filter_by(url_hash=url_hash).first()
+                if clip:
+                    session.delete(clip)

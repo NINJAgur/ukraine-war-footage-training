@@ -204,6 +204,15 @@ If a senior engineer would want to glance at it before merging — spawn. Roughl
 
 ---
 
+## Test Rules (Non-Negotiable)
+
+1. **Never touch existing DB rows** — a test only operates on rows it inserted itself, tracked by ID from the moment of insertion
+2. **Clean up everything in `finally`** — every DB row inserted, every file written to disk, unconditionally, even on failure
+3. **Log all relevant output** — every URL scraped, every file downloaded with name/size/duration, every DB row inserted/deleted, every model result with detection counts
+4. **Never bulk-query by source/status to find "your" rows** — always filter by the IDs you tracked at insert time
+
+---
+
 ## Do NOT
 
 - Use Docker locally (Phase 4 only)

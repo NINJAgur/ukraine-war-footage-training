@@ -19,6 +19,8 @@ Run from ml-engine/:
     python tests/test_pipeline_e2e.py
     python tests/test_pipeline_e2e.py --keep
 """
+from __future__ import annotations
+
 import argparse
 import logging
 import sys
