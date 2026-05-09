@@ -126,34 +126,41 @@ async def _model_stats(db: AsyncSession) -> dict:
             result[model] = {"status": "QUEUED", "map50": None, "images": 0}
             continue
 
-        stmt = (
+        # Best completed run — source of truth for mAP and image count
+        done_run = (await db.execute(
             select(TrainingRun)
-            .where(TrainingRun.model_type == mtype)
+            .where(TrainingRun.model_type == mtype, TrainingRun.status == TrainingStatus.DONE)
             .order_by(TrainingRun.id.desc())
             .limit(1)
-        )
-        run = (await db.execute(stmt)).scalar_one_or_none()
+        )).scalar_one_or_none()
 
-        if run is None:
+        # Active run — determines displayed status
+        active_run = (await db.execute(
+            select(TrainingRun)
+            .where(TrainingRun.model_type == mtype, TrainingRun.status == TrainingStatus.RUNNING)
+            .order_by(TrainingRun.id.desc())
+            .limit(1)
+        )).scalar_one_or_none()
+
+        if done_run is None and active_run is None:
             result[model] = {"status": "QUEUED", "map50": None, "images": 0}
             continue
 
-        metrics = run.metrics or {}
-        images = metrics.get("total_train_images") or 0
-
-        if run.status == TrainingStatus.DONE:
+        # mAP and images always come from the best DONE run
+        map50 = None
+        images = 0
+        if done_run:
+            metrics = done_run.metrics or {}
+            images = metrics.get("total_train_images") or 0
             key = next((k for k in metrics if "map50" in k.lower() and "map50-95" not in k.lower()), None)
-            map50 = None
             if key:
                 try: map50 = round(float(metrics[key]), 3)
                 except (ValueError, TypeError): pass
-            result[model] = {"status": "DONE", "map50": map50, "images": images}
-        elif run.status == TrainingStatus.RUNNING:
-            result[model] = {"status": "TRAINING", "map50": _live_map50(model), "images": images}
-        elif run.status == TrainingStatus.ERROR:
-            result[model] = {"status": "ERROR", "map50": _live_map50(model), "images": images}
+
+        if active_run:
+            result[model] = {"status": "TRAINING", "map50": map50, "images": images}
         else:
-            result[model] = {"status": "QUEUED", "map50": None, "images": images}
+            result[model] = {"status": "DONE", "map50": map50, "images": images}
 
     return result
 
@@ -172,7 +179,9 @@ def _dir_gb(base: Path) -> float:
 
 @router.get("/stats")
 async def get_stats(db: AsyncSession = Depends(get_db)) -> dict:
-    clips_total = (await db.execute(text("SELECT COUNT(*) FROM clips"))).scalar() or 0
+    clips_total = (await db.execute(
+        select(func.count()).where(Clip.status == ClipStatus.ANNOTATED)
+    )).scalar() or 0
 
     annotated_mp4s = len(list(_ANNOTATED_DIR.glob("**/*.mp4"))) if _ANNOTATED_DIR.exists() else 0
     raw_gb      = _dir_gb(_RAW_DIR)      if _RAW_DIR.exists()      else 0.0

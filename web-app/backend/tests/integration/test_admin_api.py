@@ -2,9 +2,12 @@
 Integration tests for admin API endpoints.
 Requires auth_headers fixture (session-scoped login).
 """
+import logging
 import pytest
 
 from db.models import ModelType, TrainingStage
+
+logger = logging.getLogger("test_admin_api")
 
 
 @pytest.mark.integration
@@ -78,7 +81,7 @@ def test_admin_decline_nonexistent_clip_returns_404(client, auth_headers):
 
 @pytest.mark.integration
 def test_admin_decline_non_review_clip_returns_409(client, auth_headers):
-    # Fetch any annotated clip and try to decline it — should be rejected
+    # Fetch any annotated clip and try to decline it — should be rejected (read-only probe)
     resp = client.get("/api/admin/clips?status=ANNOTATED&per_page=1", headers=auth_headers)
     items = resp.json().get("items", [])
     if not items:
@@ -96,5 +99,25 @@ def test_admin_train_general_baseline_returns_409_already_active(client, auth_he
         json={"model_type": "GENERAL", "stage": "BASELINE"},
         headers=auth_headers,
     )
-    # 409 = already active; 202 = newly queued (both valid — depends on DB state)
+    # 409 = already active (no run created); 202 = newly queued
     assert resp.status_code in (409, 202)
+
+    run_id = None
+    try:
+        if resp.status_code == 202:
+            run_id = resp.json().get("training_run_id")
+            logger.info(f"POST /api/admin/train returned 202, run_id={run_id}")
+        else:
+            logger.info("POST /api/admin/train returned 409 — no run created, nothing to clean up")
+    finally:
+        if run_id is not None:
+            from sqlalchemy import create_engine, text
+            from config import settings
+            engine = create_engine(settings.DATABASE_SYNC_URL)
+            try:
+                with engine.connect() as conn:
+                    conn.execute(text("DELETE FROM training_runs WHERE id = :id"), {"id": run_id})
+                    conn.commit()
+                logger.info(f"Cleanup: deleted training_run id={run_id}")
+            finally:
+                engine.dispose()

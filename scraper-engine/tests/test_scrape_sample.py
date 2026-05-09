@@ -5,6 +5,7 @@ Covers three things:
   1. Funker530 — REST API fetch (Ukraine categoryId=16, video URL resolution)
   2. GeoConfirmed — REST API fetch (returns real video incidents)
   3. DB write — inserts Clip rows into PostgreSQL and verifies they exist
+  4. Download — downloads clips inserted by this test only, cleans up in finally
 
 Run from repo root:
     cd scraper-engine && python tests/test_scrape_sample.py
@@ -13,6 +14,8 @@ import sys
 import os
 import logging
 from pathlib import Path
+
+import pytest
 
 logging.basicConfig(
     level=logging.INFO,
@@ -24,13 +27,10 @@ logger = logging.getLogger("test_scrape_sample")
 SCRAPER_ENGINE_DIR = str(Path(__file__).resolve().parent.parent)
 sys.path.insert(0, SCRAPER_ENGINE_DIR)
 
-# Module-level cache — populated by the individual tests, reused by test_db_write
-_funker_posts: list[dict] = []
-_geo_incidents: list[dict] = []
-
 
 # ── Funker530 ─────────────────────────────────────────────────────────
 
+@pytest.mark.network
 def test_funker530() -> None:
     logger.info("=" * 60)
     logger.info("TEST: Funker530 — REST API Ukraine video post fetch")
@@ -38,9 +38,7 @@ def test_funker530() -> None:
 
     from tasks.scrape_funker530 import fetch_ukraine_posts_sample
 
-    global _funker_posts
     posts = fetch_ukraine_posts_sample(max_count=5)
-    _funker_posts = posts
     logger.info(f"Funker530: fetched {len(posts)} Ukraine video posts")
     for p in posts:
         logger.info(
@@ -56,6 +54,7 @@ def test_funker530() -> None:
 
 # ── GeoConfirmed ──────────────────────────────────────────────────────
 
+@pytest.mark.network
 def test_geoconfirmed() -> None:
     logger.info("=" * 60)
     logger.info("TEST: GeoConfirmed — REST API video incident fetch")
@@ -63,9 +62,7 @@ def test_geoconfirmed() -> None:
 
     from tasks.scrape_geoconfirmed import extract_video_incidents_sample
 
-    global _geo_incidents
     incidents = extract_video_incidents_sample(max_incidents=5)
-    _geo_incidents = incidents
     logger.info(f"GeoConfirmed: fetched {len(incidents)} video incidents")
     logger.info("  Filter: origin='VID' on GeoConfirmed Ukraine map + equipment keyword preference")
     for inc in incidents:
@@ -82,93 +79,109 @@ def test_geoconfirmed() -> None:
 
 # ── DB write ──────────────────────────────────────────────────────────
 
+@pytest.mark.network
 def test_db_write() -> None:
     """
-    Run both scrapers end-to-end and write Clip rows to PostgreSQL.
-    Verifies rows exist in DB after insertion.
+    Fetch posts fresh inside the test, insert Clip rows, verify only those IDs,
+    then delete them in finally. Does not touch any pre-existing DB rows.
     """
     logger.info("=" * 60)
     logger.info("TEST: DB write — Funker530 + GeoConfirmed → PostgreSQL")
     logger.info("=" * 60)
 
+    from tasks.scrape_funker530 import fetch_ukraine_posts_sample
+    from tasks.scrape_geoconfirmed import extract_video_incidents_sample
     from sqlalchemy.dialects.postgresql import insert as pg_insert
     from db.models import Clip, ClipSource, ClipStatus
     from db.session import get_session
 
-    # Reuse data already fetched by the earlier tests — no second HTTP round-trip
-    funker_posts = _funker_posts
-    geo_incidents = _geo_incidents
-    logger.info(f"Funker530 posts available: {len(funker_posts)}")
-    logger.info(f"GeoConfirmed incidents available: {len(geo_incidents)}")
+    funker_posts = fetch_ukraine_posts_sample(max_count=5)
+    geo_incidents = extract_video_incidents_sample(max_incidents=5)
+    logger.info(f"Funker530 posts fetched: {len(funker_posts)}")
+    logger.info(f"GeoConfirmed incidents fetched: {len(geo_incidents)}")
 
-    # ── Insert all into DB ────────────────────────────────────────────
-    new_funker = new_geo = skipped = 0
+    inserted_ids: list[int] = []
 
-    with get_session() as session:
-        for post in funker_posts:
-            stmt = (
-                pg_insert(Clip)
-                .values(
-                    url=post["page_url"],
-                    url_hash=post["url_hash"],
-                    source=ClipSource.FUNKER530,
-                    title=post["title"] or None,
-                    description=post["description"] or None,
-                    published_at=post["published_at"],
-                    status=ClipStatus.PENDING,
-                    **post.get("scores", {}),
+    try:
+        new_funker = new_geo = skipped = 0
+
+        with get_session() as session:
+            for post in funker_posts:
+                stmt = (
+                    pg_insert(Clip)
+                    .values(
+                        url=post["page_url"],
+                        url_hash=post["url_hash"],
+                        source=ClipSource.FUNKER530,
+                        title=post["title"] or None,
+                        description=post["description"] or None,
+                        published_at=post["published_at"],
+                        status=ClipStatus.PENDING,
+                        **post.get("scores", {}),
+                    )
+                    .on_conflict_do_nothing(index_elements=["url_hash"])
+                    .returning(Clip.id)
                 )
-                .on_conflict_do_nothing(index_elements=["url_hash"])
-                .returning(Clip.id)
-            )
-            row = session.execute(stmt).fetchone()
-            if row:
-                new_funker += 1
-                logger.info(f"  INSERT funker530 Clip id={row[0]}  {post['page_url'][:70]}")
-            else:
-                skipped += 1
+                row = session.execute(stmt).fetchone()
+                if row:
+                    new_funker += 1
+                    inserted_ids.append(row[0])
+                    logger.info(f"  INSERT funker530 Clip id={row[0]}  {post['page_url'][:70]}")
+                else:
+                    skipped += 1
+                    logger.info(f"  SKIP funker530 (conflict)  {post['page_url'][:70]}")
 
-        for inc in geo_incidents:
-            stmt = (
-                pg_insert(Clip)
-                .values(
-                    url=inc["url"],
-                    url_hash=inc["url_hash"],
-                    source=ClipSource.GEOCONFIRMED,
-                    title=inc["title"] or None,
-                    description=inc["description"] or None,
-                    published_at=inc["published_at"],
-                    status=ClipStatus.PENDING,
-                    **inc.get("scores", {}),
+            for inc in geo_incidents:
+                stmt = (
+                    pg_insert(Clip)
+                    .values(
+                        url=inc["url"],
+                        url_hash=inc["url_hash"],
+                        source=ClipSource.GEOCONFIRMED,
+                        title=inc["title"] or None,
+                        description=inc["description"] or None,
+                        published_at=inc["published_at"],
+                        status=ClipStatus.PENDING,
+                        **inc.get("scores", {}),
+                    )
+                    .on_conflict_do_nothing(index_elements=["url_hash"])
+                    .returning(Clip.id)
                 )
-                .on_conflict_do_nothing(index_elements=["url_hash"])
-                .returning(Clip.id)
-            )
-            row = session.execute(stmt).fetchone()
-            if row:
-                new_geo += 1
-                logger.info(f"  INSERT geoconfirmed Clip id={row[0]}  {inc['url'][:70]}")
-            else:
-                skipped += 1
+                row = session.execute(stmt).fetchone()
+                if row:
+                    new_geo += 1
+                    inserted_ids.append(row[0])
+                    logger.info(f"  INSERT geoconfirmed Clip id={row[0]}  {inc['url'][:70]}")
+                else:
+                    skipped += 1
+                    logger.info(f"  SKIP geoconfirmed (conflict)  {inc['url'][:70]}")
 
-    # ── Verify rows in DB ─────────────────────────────────────────────
-    with get_session() as session:
-        total = session.query(Clip).count()
-        f_count = session.query(Clip).filter(Clip.source == ClipSource.FUNKER530).count()
-        g_count = session.query(Clip).filter(Clip.source == ClipSource.GEOCONFIRMED).count()
+        logger.info(
+            f"Inserted this run: funker530={new_funker}  geoconfirmed={new_geo}  skipped={skipped}"
+        )
 
-    logger.info(f"DB state: total={total}  funker530={f_count}  geoconfirmed={g_count}")
-    logger.info(f"Inserted this run: funker530={new_funker}  geoconfirmed={new_geo}  skipped={skipped}")
+        # Verify only the rows this test inserted
+        with get_session() as session:
+            found = session.query(Clip).filter(Clip.id.in_(inserted_ids)).count()
+        logger.info(f"Verified {found}/{len(inserted_ids)} inserted rows exist in DB")
+        assert found == len(inserted_ids), f"Expected {len(inserted_ids)} rows, found {found}"
+        assert len(inserted_ids) > 0, "Expected ≥1 insert — got 0 (all conflicts?)"
 
-    assert total > 0, "Expected ≥1 Clip in DB after scrape — got 0"
+    finally:
+        if inserted_ids:
+            with get_session() as session:
+                session.query(Clip).filter(Clip.id.in_(inserted_ids)).delete(
+                    synchronize_session=False
+                )
+            logger.info(f"Cleanup: deleted {len(inserted_ids)} test Clip rows {inserted_ids}")
+
     logger.info("PASS: DB write\n")
 
 
 # ── Download all scraped videos ───────────────────────────────────────
 
-def _download_clip(clip_id: int, video_url: str, source_label: str, download_fn, output_fn) -> bool:
-    """Download one clip; returns True on success, False on failure (logs error)."""
-    from pathlib import Path
+def _download_clip(clip_id: int, video_url: str, source_label: str, download_fn, output_fn) -> "Path | None":
+    """Download one clip; returns the file Path on success, None on failure."""
     from db.models import Clip, ClipStatus
     from db.session import get_session
 
@@ -182,12 +195,12 @@ def _download_clip(clip_id: int, video_url: str, source_label: str, download_fn,
             if clip:
                 clip.status = ClipStatus.ERROR
                 clip.error_message = str(exc)[:1000]
-        return False
+        return None
 
     file_path = Path(meta["file_path"])
     if not file_path.exists():
         logger.error(f"[{source_label}] clip_id={clip_id} file not on disk: {file_path}")
-        return False
+        return None
 
     size_mb = file_path.stat().st_size / 1024 / 1024
     logger.info(
@@ -203,116 +216,162 @@ def _download_clip(clip_id: int, video_url: str, source_label: str, download_fn,
             clip.duration_seconds = meta["duration_seconds"]
             clip.width = meta["width"]
             clip.height = meta["height"]
-    return True
+    return file_path
 
 
+@pytest.mark.network
 def test_download_video() -> None:
     """
-    Download ALL scraped clips (all Funker530 + all GeoConfirmed rows in DB).
-    Each video is saved to scraper-engine/media/<source>/<hash>_clip.mp4.
-    Clip.status is updated to DOWNLOADED or ERROR per row.
-    Asserts ≥1 successful download per source.
+    Fetch posts fresh, insert clips, download ONLY those clips (filtered by ID),
+    then delete all inserted DB rows and downloaded files in finally.
     """
     logger.info("=" * 60)
-    logger.info("TEST: Download all Funker530 + GeoConfirmed clips → media/<source>/")
+    logger.info("TEST: Download Funker530 + GeoConfirmed clips → media/<source>/")
     logger.info("=" * 60)
 
+    from tasks.scrape_funker530 import fetch_ukraine_posts_sample
+    from tasks.scrape_geoconfirmed import extract_video_incidents_sample
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
     from db.models import Clip, ClipSource, ClipStatus
     from db.session import get_session
     from tasks.scrape_geoconfirmed import _download_video as geo_dl, get_output_path as geo_path
     from tasks.scrape_funker530 import _download_video as f530_dl, get_output_path as f530_path
 
-    if not _funker_posts:
-        raise AssertionError("_funker_posts cache is empty — run test_funker530 first")
+    funker_posts = fetch_ukraine_posts_sample(max_count=5)
+    geo_incidents = extract_video_incidents_sample(max_incidents=5)
+    logger.info(f"Funker530 posts fetched: {len(funker_posts)}")
+    logger.info(f"GeoConfirmed incidents fetched: {len(geo_incidents)}")
 
-    # Build page_url → video_url map from in-memory cache
-    page_to_video: dict[str, str] = {p["page_url"]: p["video_url"] for p in _funker_posts}
+    # page_url → video_url map for funker (video_url is separate from page_url)
+    page_to_video: dict[str, str] = {p["page_url"]: p["video_url"] for p in funker_posts}
 
-    # ── Funker530 ─────────────────────────────────────────────────────────
-    with get_session() as session:
-        f_clips = (
-            session.query(Clip)
-            .filter(Clip.source == ClipSource.FUNKER530)
-            .order_by(Clip.id)
-            .all()
+    inserted_ids: list[int] = []
+    downloaded_files: list[Path] = []
+
+    try:
+        # ── Insert rows ───────────────────────────────────────────────
+        with get_session() as session:
+            for post in funker_posts:
+                stmt = (
+                    pg_insert(Clip)
+                    .values(
+                        url=post["page_url"],
+                        url_hash=post["url_hash"],
+                        source=ClipSource.FUNKER530,
+                        title=post["title"] or None,
+                        description=post["description"] or None,
+                        published_at=post["published_at"],
+                        status=ClipStatus.PENDING,
+                        **post.get("scores", {}),
+                    )
+                    .on_conflict_do_nothing(index_elements=["url_hash"])
+                    .returning(Clip.id)
+                )
+                row = session.execute(stmt).fetchone()
+                if row:
+                    inserted_ids.append(row[0])
+                    logger.info(f"  INSERT funker530 Clip id={row[0]}  {post['page_url'][:70]}")
+                else:
+                    logger.info(f"  SKIP funker530 (conflict)  {post['page_url'][:70]}")
+
+            for inc in geo_incidents:
+                stmt = (
+                    pg_insert(Clip)
+                    .values(
+                        url=inc["url"],
+                        url_hash=inc["url_hash"],
+                        source=ClipSource.GEOCONFIRMED,
+                        title=inc["title"] or None,
+                        description=inc["description"] or None,
+                        published_at=inc["published_at"],
+                        status=ClipStatus.PENDING,
+                        **inc.get("scores", {}),
+                    )
+                    .on_conflict_do_nothing(index_elements=["url_hash"])
+                    .returning(Clip.id)
+                )
+                row = session.execute(stmt).fetchone()
+                if row:
+                    inserted_ids.append(row[0])
+                    logger.info(f"  INSERT geoconfirmed Clip id={row[0]}  {inc['url'][:70]}")
+                else:
+                    logger.info(f"  SKIP geoconfirmed (conflict)  {inc['url'][:70]}")
+
+        logger.info(f"Inserted {len(inserted_ids)} rows: {inserted_ids}")
+
+        # ── Mark only our rows as DOWNLOADING ────────────────────────
+        with get_session() as session:
+            session.query(Clip).filter(Clip.id.in_(inserted_ids)).update(
+                {Clip.status: ClipStatus.DOWNLOADING}, synchronize_session=False
+            )
+
+        # ── Fetch only our rows, split by source ─────────────────────
+        with get_session() as session:
+            our_clips = (
+                session.query(Clip)
+                .filter(Clip.id.in_(inserted_ids))
+                .order_by(Clip.id)
+                .all()
+            )
+            rows = [(c.id, c.url, c.source, c.title) for c in our_clips]
+
+        # ── Download ──────────────────────────────────────────────────
+        f_ok = f_fail = 0
+        g_ok = g_fail = 0
+
+        for clip_id, url, source, title in rows:
+            if source == ClipSource.FUNKER530:
+                video_url = page_to_video.get(url)
+                if not video_url:
+                    logger.warning(f"[funker530] clip_id={clip_id} no video URL in cache — skip")
+                    f_fail += 1
+                    continue
+                logger.info(f"[funker530] clip_id={clip_id}  {(title or '')[:80]!r}")
+                result = _download_clip(clip_id, video_url, "funker530", f530_dl, f530_path)
+                if result:
+                    downloaded_files.append(result)
+                    f_ok += 1
+                else:
+                    f_fail += 1
+
+            elif source == ClipSource.GEOCONFIRMED:
+                # For geoconfirmed, c.url IS the video url
+                logger.info(f"[geoconfirmed] clip_id={clip_id}  {(title or '')[:80]!r}")
+                result = _download_clip(clip_id, url, "geoconfirmed", geo_dl, geo_path)
+                if result:
+                    downloaded_files.append(result)
+                    g_ok += 1
+                else:
+                    g_fail += 1
+
+        logger.info(
+            f"Download summary: funker530={f_ok} ok / {f_fail} fail  |  "
+            f"geoconfirmed={g_ok} ok / {g_fail} fail"
         )
-        f_rows = [(c.id, c.url, c.title) for c in f_clips]
-        for c in f_clips:
-            c.status = ClipStatus.DOWNLOADING
+        assert f_ok >= 1, f"Expected ≥1 Funker530 download — got 0"
+        assert g_ok >= 1, f"Expected ≥1 GeoConfirmed download — got 0"
 
-    f_ok = f_fail = 0
-    for clip_id, page_url, title in f_rows:
-        video_url = page_to_video.get(page_url)
-        if not video_url:
-            logger.warning(f"[funker530] clip_id={clip_id} no video URL in cache — skip")
-            f_fail += 1
-            continue
-        logger.info(f"[funker530] clip_id={clip_id}  {title!r}")
-        if _download_clip(clip_id, video_url, "funker530", f530_dl, f530_path):
-            f_ok += 1
-        else:
-            f_fail += 1
+    finally:
+        if inserted_ids:
+            with get_session() as session:
+                session.query(Clip).filter(Clip.id.in_(inserted_ids)).delete(
+                    synchronize_session=False
+                )
+            logger.info(f"Cleanup: deleted {len(inserted_ids)} test Clip rows {inserted_ids}")
 
-    # ── GeoConfirmed ──────────────────────────────────────────────────────
-    with get_session() as session:
-        g_clips = (
-            session.query(Clip)
-            .filter(Clip.source == ClipSource.GEOCONFIRMED)
-            .order_by(Clip.id)
-            .all()
-        )
-        g_rows = [(c.id, c.url, c.title) for c in g_clips]
-        for c in g_clips:
-            c.status = ClipStatus.DOWNLOADING
+        for fp in downloaded_files:
+            try:
+                fp.unlink(missing_ok=True)
+                logger.info(f"Cleanup: deleted file {fp.name}")
+            except Exception as exc:
+                logger.warning(f"Cleanup: could not delete {fp}: {exc}")
 
-    g_ok = g_fail = 0
-    for clip_id, video_url, title in g_rows:
-        logger.info(f"[geoconfirmed] clip_id={clip_id}  {(title or '')[:80]!r}")
-        if _download_clip(clip_id, video_url, "geoconfirmed", geo_dl, geo_path):
-            g_ok += 1
-        else:
-            g_fail += 1
-
-    logger.info(
-        f"Download summary: funker530={f_ok} ok / {f_fail} fail  |  "
-        f"geoconfirmed={g_ok} ok / {g_fail} fail"
-    )
-    assert f_ok >= 1, f"Expected ≥1 Funker530 download — got 0"
-    assert g_ok >= 1, f"Expected ≥1 GeoConfirmed download — got 0"
     logger.info("PASS: download_video\n")
-
-
-# ── Pre-test cleanup ──────────────────────────────────────────────────
-
-def _cleanup() -> None:
-    """Wipe DB clips table and raw video dirs before each full run."""
-    import shutil
-    from pathlib import Path
-
-    sys.path.insert(0, SCRAPER_ENGINE_DIR)
-    from db.session import get_session
-    from db.models import Clip
-
-    with get_session() as session:
-        # Delete datasets first to avoid FK violation (datasets.clip_id → clips.id)
-        from sqlalchemy import text
-        session.execute(text("DELETE FROM datasets WHERE clip_id IN (SELECT id FROM clips)"))
-        deleted = session.query(Clip).delete()
-        logger.info(f"Cleanup: deleted {deleted} Clip rows from DB")
-
-    scraper_engine_dir = Path(__file__).resolve().parent.parent
-    for subdir in ["funker530", "geoconfirmed"]:
-        raw_dir = scraper_engine_dir / "media" / subdir
-        if raw_dir.exists():
-            shutil.rmtree(raw_dir)
-            logger.info(f"Cleanup: removed {raw_dir}")
 
 
 # ── Runner ────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    _cleanup()
-
     passed: list[str] = []
     failed: list[str] = []
 

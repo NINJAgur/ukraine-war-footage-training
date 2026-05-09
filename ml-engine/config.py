@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     YOLO_MODEL: str = "yolov8m.pt"      # base model for Stage 1 baseline
     YOLO_BATCH_SIZE: int = 8            # max for 8GB VRAM with yolov8m
     YOLO_IMG_SIZE: int = 640
-    YOLO_EPOCHS_BASELINE: int = 10   # increase as model quality improves
+    YOLO_EPOCHS_BASELINE: int = 1    # increase as model quality improves
     YOLO_EPOCHS_FINETUNE: int = 10   # increase as model quality improves
 
     # ── Auto-labeling ─────────────────────────────────────────────────

@@ -31,20 +31,32 @@ BATCH_SIZE = 10
 FINETUNE_MIN_DATASETS = 5
 
 
+def _best_map50(metrics: dict) -> float:
+    if not metrics:
+        return 0.0
+    for key in ("mAP50(B)", "metrics/mAP50(B)", "mAP50"):
+        if key in metrics:
+            return float(metrics[key])
+    return 0.0
+
+
 def _latest_weights(model_name: str) -> Path:
-    runs_dir = ML_ENGINE_DIR / "runs/baseline" / model_name
-    if not runs_dir.exists():
-        raise FileNotFoundError(f"No runs directory: {runs_dir}")
-    candidates = sorted(
-        (d for d in runs_dir.iterdir() if d.is_dir()),
-        key=lambda d: int(d.name.rsplit("_", 1)[-1]) if d.name.rsplit("_", 1)[-1].isdigit() else 0,
-        reverse=True,
-    )
-    for run_dir in candidates:
-        w = run_dir / "weights" / "best.pt"
+    with get_session() as session:
+        runs = (
+            session.query(TrainingRun)
+            .filter(
+                TrainingRun.model_type == ModelType[model_name],
+                TrainingRun.status == TrainingStatus.DONE,
+                TrainingRun.weights_path.isnot(None),
+            )
+            .all()
+        )
+    runs_by_map = sorted(runs, key=lambda r: _best_map50(r.metrics), reverse=True)
+    for run in runs_by_map:
+        w = Path(run.weights_path)
         if w.exists():
             return w
-    raise FileNotFoundError(f"No best.pt found in {runs_dir}")
+    raise FileNotFoundError(f"No usable weights for {model_name} in DB")
 
 
 def _finalize(clip: Clip, temp_path: Path) -> str:
