@@ -104,6 +104,7 @@ def main():
 
     run_id = None
     passed = False
+    weights_path = None
     try:
         token = get_token()
         run_id = dispatch_run(token, args.model_type)
@@ -123,8 +124,9 @@ def main():
         map50 = float(run.metrics[map50_key])
         assert map50 > 0, f"mAP50={map50} — model did not learn"
 
+        weights_path = run.weights_path
         logger.info(
-            f"CELERY E2E PASSED — run_id={run_id} status=DONE mAP50={map50:.4f} weights={run.weights_path}"
+            f"CELERY E2E PASSED — run_id={run_id} status=DONE mAP50={map50:.4f} weights={weights_path}"
         )
         passed = True
 
@@ -133,14 +135,21 @@ def main():
         sys.exit(1)
     finally:
         settings.YOLO_EPOCHS_BASELINE = original
-        # --keep only preserves the run on SUCCESS — always clean up on timeout/error
-        should_keep = args.keep and passed
-        if not should_keep and run_id is not None:
+        # Always delete the DB row — test runs don't belong in production DB.
+        # --keep only preserves the weights directory on disk (for inspection).
+        if run_id is not None:
             with get_session() as s:
                 run = s.query(TrainingRun).filter(TrainingRun.id == run_id).first()
                 if run:
+                    weights_path = weights_path or run.weights_path
                     s.delete(run)
             logger.info(f"Cleanup: deleted training_run id={run_id}")
+            if not (args.keep and passed) and weights_path:
+                import shutil
+                weights_dir = Path(weights_path).parent.parent
+                if weights_dir.exists():
+                    shutil.rmtree(weights_dir, ignore_errors=True)
+                    logger.info(f"Cleanup: deleted weights dir {weights_dir}")
 
 
 if __name__ == "__main__":

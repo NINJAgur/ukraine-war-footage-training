@@ -78,9 +78,8 @@ onMounted(async () => {
     }
     if (clipsRes.ok) {
       const clips = await clipsRes.json()
-      // Prefer most recent GENERAL clip, fall back to any clip
-      const best = clips.find(c => c.detClass === 'GENERAL')
-      if (best?.videoUrl) heroVideoSrc.value = best.videoUrl
+      const clip = clips.find(c => c.detClass === 'GENERAL') ?? clips[0]
+      if (clip?.videoUrl) heroVideoSrc.value = clip.videoUrl
     }
   } catch {}
 })

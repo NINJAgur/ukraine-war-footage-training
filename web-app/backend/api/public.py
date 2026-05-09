@@ -126,13 +126,19 @@ async def _model_stats(db: AsyncSession) -> dict:
             result[model] = {"status": "QUEUED", "map50": None, "images": 0}
             continue
 
-        # Best completed run — source of truth for mAP and image count
-        done_run = (await db.execute(
+        # Best completed run by mAP50 — source of truth for mAP and image count
+        done_runs = (await db.execute(
             select(TrainingRun)
             .where(TrainingRun.model_type == mtype, TrainingRun.status == TrainingStatus.DONE)
-            .order_by(TrainingRun.id.desc())
-            .limit(1)
-        )).scalar_one_or_none()
+        )).scalars().all()
+
+        def _run_map50(r: TrainingRun) -> float:
+            m = r.metrics or {}
+            k = next((k for k in m if "map50" in k.lower() and "map50-95" not in k.lower()), None)
+            try: return float(m[k]) if k else 0.0
+            except (ValueError, TypeError): return 0.0
+
+        done_run = max(done_runs, key=_run_map50) if done_runs else None
 
         # Active run — determines displayed status
         active_run = (await db.execute(

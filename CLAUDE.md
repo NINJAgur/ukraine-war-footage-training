@@ -158,7 +158,7 @@ Run Phase 2 test: `cd ml-engine && python tests/test_pipeline_e2e.py`
 | 0 | Agentic workspace | ✅ Complete |
 | 1 | Scraper engine | ✅ Complete |
 | 2 | ML pipeline — baseline training | ✅ Complete (AIRCRAFT 0.929, VEHICLE 0.871, PERSONNEL 0.780, GENERAL 0.784) |
-| 3 | Web application | 🔄 In progress (core wired; WebSocket + full Celery pipeline pending) |
+| 3 | Web application | 🔄 In progress (Celery E2E ✅, hero video ✅; WebSocket progress pending) |
 | 4 | Cloud & DevOps | ⏳ Pending |
 
 ---
