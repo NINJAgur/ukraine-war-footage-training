@@ -1,4 +1,22 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="3" fill="#080a0b"/>
-  <text x="16" y="22" font-family="monospace" font-weight="700" font-size="15" fill="#df6900" text-anchor="middle">UA</text>
+  <rect width="32" height="32" fill="#080a0b"/>
+
+  <!-- bounding box border -->
+  <rect x="1" y="1" width="30" height="30" fill="none" stroke="#df6900" stroke-width="1.5"/>
+
+  <!-- confidence label -->
+  <rect x="1" y="1" width="10" height="6" fill="#df6900"/>
+  <text x="6" y="6" font-family="monospace" font-weight="700" font-size="4.5" fill="#080a0b" text-anchor="middle">87%</text>
+
+  <!-- tracks -->
+  <rect x="3" y="23" width="26" height="5" rx="2.5" fill="#df6900"/>
+
+  <!-- hull (angled front + rear) -->
+  <polygon points="3,23 28,23 30,20 27,17 4,17 3,20" fill="#df6900"/>
+
+  <!-- turret (asymmetric taper, mantlet protrusion) -->
+  <polygon points="9,17 22,17 24,13 21,11 10,11" fill="#df6900"/>
+
+  <!-- barrel -->
+  <rect x="23" y="12.5" width="7" height="2" rx="1" fill="#df6900"/>
 </svg>

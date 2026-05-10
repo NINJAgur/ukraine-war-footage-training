@@ -34,11 +34,12 @@
             </div>
             <div v-if="liveProgress(m)" class="train-progress">
               <div class="mono" style="font-size:10px;color:var(--amber);margin-bottom:4px">
-                EPOCH {{ liveProgress(m).epoch }}/{{ liveProgress(m).epochs }}
+                <span v-if="liveProgress(m).epochs != null">EPOCH {{ liveProgress(m).epoch - 1 }}/{{ liveProgress(m).epochs }}</span>
+                <span v-else>INITIALIZING...</span>
                 <span v-if="liveProgress(m).map50" style="color:var(--fg-1);margin-left:8px">mAP50 {{ liveProgress(m).map50.toFixed(3) }}</span>
               </div>
               <div class="progress-bar">
-                <div class="progress-fill" :style="{ width: (liveProgress(m).epoch / liveProgress(m).epochs * 100) + '%' }"></div>
+                <div class="progress-fill" :style="{ width: liveProgress(m).epochs ? ((liveProgress(m).epoch - 1) / liveProgress(m).epochs * 100) + '%' : '5%' }"></div>
               </div>
               <div class="mono" style="font-size:9px;color:var(--fg-3);margin-top:3px">
                 <span v-if="liveProgress(m).box_loss">box {{ liveProgress(m).box_loss }}</span>
@@ -217,7 +218,8 @@ const wsSockets = {}
 function liveStatus(m) { return wsData.value[m]?.status?.toLowerCase() ?? null }
 function liveProgress(m) {
   const d = wsData.value[m]
-  return d?.status === 'running' ? (d.metrics?.epoch_progress ?? null) : null
+  if (d?.status?.toLowerCase() !== 'running') return null
+  return d.metrics?.epoch_progress ?? { epoch: 0, epochs: null, map50: null, box_loss: null, cls_loss: null }
 }
 
 function openWs(modelType, runId) {
@@ -228,7 +230,7 @@ function openWs(modelType, runId) {
   ws.onmessage = (e) => {
     const d = JSON.parse(e.data)
     wsData.value[modelType] = d
-    if (d.status === 'done' || d.status === 'error') {
+    if (d.status?.toLowerCase() === 'done' || d.status?.toLowerCase() === 'error') {
       ws.close()
       delete wsSockets[modelType]
       loadRuns()
@@ -257,6 +259,11 @@ async function loadRuns() {
     const res = await apiFetch(`/api/admin/training-runs?page=${runsPage.value}&per_page=20`)
     const data = await res.json()
     runs.value = data.items
+    for (const r of runs.value) {
+      if (r.status === 'RUNNING' && !wsSockets[r.model_type]) {
+        openWs(r.model_type, r.id)
+      }
+    }
   } finally {
     runsLoading.value = false
   }
