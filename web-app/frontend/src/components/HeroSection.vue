@@ -78,7 +78,7 @@ onMounted(async () => {
     }
     if (clipsRes.ok) {
       const clips = await clipsRes.json()
-      const clip = clips.find(c => c.detClass === 'GENERAL') ?? clips[0]
+      const clip = clips.find(c => c.detClass === 'GENERAL')
       if (clip?.videoUrl) heroVideoSrc.value = clip.videoUrl
     }
   } catch {}
