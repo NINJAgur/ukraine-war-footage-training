@@ -20,7 +20,6 @@ log = logging.getLogger("scrape_daily")
 
 SCRAPER_ENGINE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SCRAPER_ENGINE_DIR))
-sys.path.insert(0, str(SCRAPER_ENGINE_DIR.parent / "shared"))
 
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
@@ -37,7 +36,7 @@ from tasks.scrape_geoconfirmed import (
 )
 
 
-def _insert_clip(session, values: dict, source: ClipSource) -> int | None:
+def _insert_clip(session, values: dict, source: ClipSource):
     stmt = (
         pg_insert(Clip)
         .values(**values)

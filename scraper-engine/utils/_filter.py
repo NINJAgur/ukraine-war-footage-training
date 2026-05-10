@@ -42,7 +42,7 @@ _ARMORED_VEHICLES = [
     "btr-82", "btr-4", "bmd", "bmd-2", "bmd-4", "bradley", "m2a2", "marder", 
     "cv90", "stryker", "m113", "mt-lb", "mrap", "maxxpro", "humvee", "hmmwv", 
     "tigr", "typhoon", "kozak", "spartan", "kirpi", "senator", "ifv", "apc", 
-    "armored vehicle", "armoured vehicle"
+    "armored vehicle", "armoured vehicle", "UGV", "armor"
 ]
 
 _ARTILLERY_AIR_DEFENSE = [
@@ -114,6 +114,7 @@ NEGATIVE_KEYWORDS = [
     # Civilian Commercial, Public & Infrastructure
     "mall", "shopping center", "supermarket", "grocery", "market", "museum", "library",
     "park", "train", "railway", "water treatment", "plant", "power plant", "bridge", "oil depot",
+    "dispatch station", "production line",
     
     # Aftermath states
     "aftermath", "ruins", "rubble", "wreckage", "debris", "remains",
@@ -126,7 +127,7 @@ NEGATIVE_KEYWORDS = [
     
     # Damage assessment language (editorial framing = not raw action footage)
     "bomb damage", "battle damage", "battle damage assessment", 
-    "damages", "following the strike", "following the attack", "result of", "post-strike", 
+    "damages", "following the strike", "following the attack", "post-strike", 
     "war damage",
 ]
 
