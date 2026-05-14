@@ -7,8 +7,6 @@ Each specialist processes up to BATCH_SIZE candidates, validates detection rate,
 saves annotated MP4 to ANNOTATED_VIDEO_DIR, deletes raw file, updates DB.
 """
 import logging
-import os
-import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -59,18 +57,7 @@ def _latest_weights(model_name: str) -> Path:
     raise FileNotFoundError(f"No usable weights for {model_name} in DB")
 
 
-def _finalize(clip: Clip, temp_path: Path) -> str:
-    clean_name = temp_path.stem.removeprefix("temp_").replace("_clip", "") + "_annotated.mp4"
-    perm_path = temp_path.parent / clean_name
-    shutil.move(str(temp_path), str(perm_path))
-    if clip.file_path:
-        if os.path.exists(clip.file_path):
-            try:
-                os.remove(clip.file_path)
-            except PermissionError:
-                logger.warning(f"Could not delete raw file (Windows lock): {clip.file_path}")
-        clip.file_path = None
-    return str(perm_path)
+from core.storage import finalize_clip
 
 
 def _run_specialist(
@@ -145,7 +132,7 @@ def _run_specialist(
                 rejected += 1
                 continue
 
-            clip.mp4_path = _finalize(clip, temp_out)
+            clip.mp4_path = finalize_clip(clip, temp_out, model_name)
             clip.det_class = model_name
             clip.status = ClipStatus.ANNOTATED
             clip.updated_at = datetime.now(timezone.utc)
@@ -230,7 +217,7 @@ def _run_general() -> dict:
                 rejected += 1
                 continue
 
-            clip.mp4_path = _finalize(clip, temp_out)
+            clip.mp4_path = finalize_clip(clip, temp_out, "GENERAL")
             clip.det_class = "GENERAL"
             clip.status = ClipStatus.ANNOTATED
             clip.updated_at = datetime.now(timezone.utc)
@@ -243,38 +230,52 @@ def _run_general() -> dict:
 
 
 def _maybe_trigger_finetune() -> None:
-    """Dispatch a GENERAL fine-tune run when enough PACKAGED datasets have accumulated."""
+    """Dispatch fine-tune runs for any model type with enough PACKAGED datasets."""
+    for model_type in [ModelType.AIRCRAFT, ModelType.VEHICLE, ModelType.PERSONNEL, ModelType.GENERAL]:
+        _trigger_model_finetune(model_type)
+
+
+def _trigger_model_finetune(model_type: ModelType) -> None:
     with get_session() as session:
         active = (
             session.query(TrainingRun)
             .filter(TrainingRun.stage == TrainingStage.FINETUNE)
-            .filter(TrainingRun.model_type == ModelType.GENERAL)
+            .filter(TrainingRun.model_type == model_type)
             .filter(TrainingRun.status.in_([TrainingStatus.QUEUED, TrainingStatus.RUNNING]))
             .first()
         )
         if active:
-            logger.info(f"[finetune] GENERAL finetune already active (run_id={active.id}) — skipping")
+            logger.info(f"[finetune] {model_type.value} already active (run_id={active.id})")
             return
 
-        packaged = (
+        all_packaged = (
             session.query(Dataset)
             .filter(Dataset.status == DatasetStatus.PACKAGED)
             .all()
         )
-        if len(packaged) < FINETUNE_MIN_DATASETS:
-            logger.info(f"[finetune] {len(packaged)} PACKAGED datasets — need {FINETUNE_MIN_DATASETS} to trigger")
+
+        if model_type == ModelType.GENERAL:
+            relevant = all_packaged
+        else:
+            relevant = [
+                d for d in all_packaged
+                if model_type.value in (d.detected_model_types or [])
+            ]
+
+        if len(relevant) < FINETUNE_MIN_DATASETS:
+            logger.info(f"[finetune] {model_type.value}: {len(relevant)}/{FINETUNE_MIN_DATASETS} PACKAGED datasets")
             return
 
-        dataset_ids = [d.id for d in packaged]
+        dataset_ids = [d.id for d in relevant]
         try:
-            baseline_weights = str(_latest_weights("GENERAL"))
+            baseline_weights = str(_latest_weights(model_type.value))
         except FileNotFoundError:
             baseline_weights = None
-            logger.warning("[finetune] No GENERAL baseline weights found — will use yolov8m.pt")
+            logger.warning(f"[finetune] No {model_type.value} baseline weights — will use yolov8m.pt")
 
         run = TrainingRun(
             stage=TrainingStage.FINETUNE,
-            model_type=ModelType.GENERAL,
+            model_type=model_type,
             status=TrainingStatus.QUEUED,
             dataset_ids=dataset_ids,
             baseline_weights=baseline_weights,
@@ -285,7 +286,7 @@ def _maybe_trigger_finetune() -> None:
 
     from tasks.train_finetune import train_finetune
     train_finetune.delay(training_run_id=run_id)
-    logger.info(f"[finetune] Dispatched GENERAL finetune run_id={run_id} with {len(dataset_ids)} PACKAGED datasets")
+    logger.info(f"[finetune] Dispatched {model_type.value} run_id={run_id} with {len(dataset_ids)} datasets")
 
 
 @celery_app.task(

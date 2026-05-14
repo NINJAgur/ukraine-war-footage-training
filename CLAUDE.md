@@ -135,6 +135,10 @@ All services import via re-export stubs (`ml-engine/db/models.py`, `scraper-engi
 | PERSONNEL pipeline (DB-driven) | `ml-engine/scripts/personnel_pipeline.py` |
 | GENERAL pipeline (DB-driven) | `ml-engine/scripts/general_pipeline.py` |
 | Annotate clips Celery task | `ml-engine/tasks/annotate_clips.py` |
+| GCS / local storage finalize | `ml-engine/core/storage.py` |
+| Docker entrypoint (weight download) | `ml-engine/entrypoint.sh` |
+| One-time dataset setup | `ml-engine/scripts/setup_datasets.sh` |
+| Start all Celery workers (dev) | `start_workers.sh` |
 | Funker530 scraper | `scraper-engine/tasks/scrape_funker530.py` |
 | GeoConfirmed scraper | `scraper-engine/tasks/scrape_geoconfirmed.py` |
 | Content filter + scoring | `scraper-engine/utils/_filter.py` |
@@ -159,7 +163,7 @@ Run Phase 2 test: `cd ml-engine && python tests/test_pipeline_e2e.py`
 | 1 | Scraper engine | ✅ Complete |
 | 2 | ML pipeline — baseline training | ✅ Complete (AIRCRAFT 0.929, VEHICLE 0.871, PERSONNEL 0.780, GENERAL 0.784) |
 | 3 | Web application | ✅ Complete (Celery E2E, hero video, WebSocket progress bar, integration smoke test — 25 annotated clips) |
-| 4 | Cloud & DevOps | ⏳ Pending |
+| 4 | Cloud & DevOps | 🔄 In progress (Dockerfiles + compose done; GCP Terraform + CI/CD remaining) |
 
 ---
 

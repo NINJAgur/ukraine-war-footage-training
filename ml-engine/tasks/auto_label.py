@@ -21,7 +21,7 @@ from celery_app import celery_app
 from config import settings
 from db.models import Clip, ClipStatus, Dataset, DatasetStatus
 
-_RUNNABLE_STATUSES = {ClipStatus.DOWNLOADED, ClipStatus.QUEUED}
+_RUNNABLE_STATUSES = {ClipStatus.DOWNLOADED}
 from db.session import get_session
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "core"))
@@ -91,6 +91,10 @@ def auto_label_clip(self, clip_id: int) -> dict:
                 f"(already processed or in wrong state)"
             )
             return {"status": "skipped", "clip_id": clip_id, "reason": clip.status}
+        existing_ds = session.query(Dataset).filter_by(clip_id=clip_id).first()
+        if existing_ds:
+            logger.info(f"[{self.request.id}] Clip {clip_id} already has dataset {existing_ds.id} — skipping")
+            return {"status": "skipped", "clip_id": clip_id, "reason": "dataset_exists"}
         if not clip.file_path or not Path(clip.file_path).exists():
             raise ValueError(f"Clip {clip_id} has no file on disk: {clip.file_path}")
         video_path = Path(clip.file_path)
@@ -195,11 +199,8 @@ def auto_label_clip(self, clip_id: int) -> dict:
         session.flush()
         dataset_id = dataset.id
 
-        clip = session.get(Clip, clip_id)
-        clip.status = ClipStatus.LABELED
-
     logger.info(
-        f"[{self.request.id}] Dataset id={dataset_id} created  clip_id={clip_id} → LABELED"
+        f"[{self.request.id}] Dataset id={dataset_id} created for clip_id={clip_id} (clip stays DOWNLOADED)"
     )
 
     from tasks.package_dataset import package_dataset
@@ -225,22 +226,22 @@ _BATCH_SIZE = 10
 )
 def auto_label_batch(self) -> dict:
     """
-    Find all DOWNLOADED clips and dispatch auto_label_clip for each.
-    Marks clips QUEUED before dispatch to prevent double-processing on next Beat fire.
-    Runs daily at 02:00 UTC, giving scrapers 2h to finish yt-dlp downloads.
+    Find DOWNLOADED clips without an existing Dataset and dispatch auto_label_clip for each.
+    Clips stay DOWNLOADED so annotate_clips can also run YOLO on them at 04:00 UTC.
     """
     with get_session() as session:
+        from sqlalchemy import exists as sa_exists
         clips = (
             session.query(Clip)
             .filter(Clip.status == ClipStatus.DOWNLOADED)
             .filter(Clip.file_path.isnot(None))
+            .filter(~sa_exists().where(Dataset.clip_id == Clip.id))
             .order_by(Clip.created_at.asc())
             .limit(_BATCH_SIZE)
             .all()
         )
         clip_ids = [c.id for c in clips]
-        for clip in clips:
-            clip.status = ClipStatus.QUEUED
+        # No status change — clips stay DOWNLOADED so annotate_clips can run YOLO on them
 
     logger.info(f"[{self.request.id}] auto_label_batch dispatching {len(clip_ids)} clips")
     for clip_id in clip_ids:

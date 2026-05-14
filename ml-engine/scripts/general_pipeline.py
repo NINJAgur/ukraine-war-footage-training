@@ -12,8 +12,6 @@ Usage (from repo root):
     cd ml-engine && python scripts/general_pipeline.py
 """
 import sys
-import os
-import shutil
 import logging
 from pathlib import Path
 from datetime import datetime, timezone
@@ -29,6 +27,7 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from sqlalchemy import or_
 from core.inference import validate_clip, infer_video_multi_model
+from core.storage import finalize_clip
 from db.session import get_session
 from shared.db.models import Clip, ClipStatus
 from config import settings
@@ -54,28 +53,6 @@ def _latest_weights(model_name: str) -> Path:
     raise FileNotFoundError(f"No best.pt found in {runs_dir}")
 
 
-def finalize_storage(clip: Clip, temp_path: Path) -> str:
-    storage_mode = getattr(settings, "STORAGE_MODE", "local")
-    if storage_mode == "remote":
-        bucket = getattr(settings, "REMOTE_STORAGE_BUCKET", "my-bucket")
-        final_url = f"https://storage.googleapis.com/{bucket}/general/{temp_path.name}"
-        if temp_path.exists():
-            os.remove(temp_path)
-    else:
-        clean_name = temp_path.stem.removeprefix("temp_").replace("_clip", "") + "_annotated.mp4"
-        perm_path = temp_path.parent / clean_name
-        shutil.move(str(temp_path), str(perm_path))
-        final_url = str(perm_path)
-
-    if clip.file_path:
-        if os.path.exists(clip.file_path):
-            try:
-                os.remove(clip.file_path)
-            except PermissionError:
-                log.warning(f"Could not delete raw file (Windows lock): {clip.file_path}")
-        clip.file_path = None
-
-    return final_url
 
 
 if __name__ == "__main__":
@@ -161,7 +138,7 @@ if __name__ == "__main__":
                 continue
 
             total_detections += clip_dets
-            clip.mp4_path = finalize_storage(clip, temp_out)
+            clip.mp4_path = finalize_clip(clip, temp_out, "GENERAL")
             clip.det_class = "GENERAL"
             clip.status = ClipStatus.ANNOTATED
             clip.updated_at = datetime.now(timezone.utc)
