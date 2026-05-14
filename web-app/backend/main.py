@@ -19,6 +19,15 @@ from config import settings
 
 app = FastAPI(title="Ukraine Combat Footage API", version="0.1.0")
 
+
+@app.on_event("startup")
+def create_tables() -> None:
+    from sqlalchemy import create_engine
+    from shared.db.models import Base
+    engine = create_engine(settings.DATABASE_SYNC_URL)
+    Base.metadata.create_all(bind=engine)
+    engine.dispose()
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS.split(","),

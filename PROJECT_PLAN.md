@@ -571,11 +571,14 @@ yolo-training-template/                  ← monorepo root
 - [x] **4.3c** `setup_datasets.sh` — one-time Kaggle download + merge into specialist folders
 - [x] **4.3d** `core/storage.py` — real GCS upload for annotated MP4s when `STORAGE_MODE=remote`; replaces dead stub in all 4 pipeline scripts + `annotate_clips.py`
 - [x] **4.3e** Fine-tune pipeline: fixed GDINO/YOLO pipeline conflict (clips stay DOWNLOADED after GDINO); `_maybe_trigger_finetune` now triggers all 4 models; 10 epochs/run × 4 runs per model
-- [ ] **4.4** Write `infra/gcp/main.tf`
-- [ ] **4.5** Write `.github/workflows/ci.yml`
-- [ ] **4.6** Write `.github/workflows/deploy.yml`
-- [ ] **4.7** Configure GCS CORS + bucket ACL for public video serving
-- [ ] **4.8** End-to-end smoke test on GCP
+- [x] **4.3f** Inference box labels: `infer_video_multi_model` now uses `model.names[cls_id]` for each box label (was hardcoded to model name, e.g. "GENERAL")
+- [x] **4.3g** Docker pre-flight fixes: `JWT_SECRET` field alignment, `init_db()` on startup for all 3 services, GDINO config path resolved via installed package, Playwright removed from scraper-engine (unused)
+- [ ] **4.4** Docker Desktop smoke test — `docker compose up --build`, verify all 7 services healthy, scrape + annotate one clip end-to-end
+- [ ] **4.5** Write `infra/gcp/main.tf`
+- [ ] **4.6** Write `.github/workflows/ci.yml`
+- [ ] **4.7** Write `.github/workflows/deploy.yml`
+- [ ] **4.8** Configure GCS CORS + bucket ACL for public video serving
+- [ ] **4.9** End-to-end smoke test on GCP
 
 ---
 
@@ -596,7 +599,7 @@ Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 ✅, Phase 4 ⏳
 - Stats: `images_labeled` = 175,627 (GENERAL count), `clips_annotated` = 25
 - Integration smoke test: 25 ANNOTATED clips in DB, all pipelines verified end-to-end
 
-**Phase 4 (in progress):** Dockerfiles + docker-compose done ✅. Remaining: GCP Terraform, CI/CD, GCS bucket setup, smoke test on GCP.
+**Phase 4 (in progress):** Dockerfiles + docker-compose done ✅. Docker Desktop local smoke test next (4.4), then GCP Terraform + CI/CD. Strategy: get the full stack flawless on Docker Desktop before any cloud deployment.
 
 ---
 

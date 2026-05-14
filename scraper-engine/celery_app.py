@@ -47,3 +47,11 @@ celery_app.conf.update(
 # Import and register Beat schedule
 from beat_schedule import BEAT_SCHEDULE  # noqa: E402
 celery_app.conf.beat_schedule = BEAT_SCHEDULE
+
+from celery.signals import worker_ready  # noqa: E402
+
+
+@worker_ready.connect
+def on_worker_ready(**kwargs):
+    from db.session import init_db
+    init_db()

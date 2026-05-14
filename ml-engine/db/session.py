@@ -20,6 +20,11 @@ engine = create_engine(
 SyncSessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
 
+def init_db() -> None:
+    from db.models import Base
+    Base.metadata.create_all(bind=engine)
+
+
 @contextmanager
 def get_session() -> Generator[Session, None, None]:
     session = SyncSessionLocal()

@@ -16,7 +16,7 @@ async def login(body: LoginRequest) -> Token:
     expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     token = jwt.encode(
         {"sub": body.username, "exp": expire},
-        settings.SECRET_KEY,
+        settings.JWT_SECRET,
         algorithm=settings.ALGORITHM,
     )
     return Token(access_token=token)

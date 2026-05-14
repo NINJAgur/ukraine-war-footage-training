@@ -93,6 +93,17 @@ class Settings(BaseSettings):
     }
 
     def model_post_init(self, __context):
+        # Resolve GDINO config via installed package — the default relative path
+        # "groundingdino/config/..." doesn't exist inside Docker containers.
+        cfg = Path(self.GDINO_CONFIG)
+        if not cfg.is_absolute() or not cfg.exists():
+            try:
+                import groundingdino
+                self.GDINO_CONFIG = str(
+                    Path(groundingdino.__file__).parent / "config" / "GroundingDINO_SwinT_OGC.py"
+                )
+            except ImportError:
+                pass  # not in ml-engine context; GDINO_CONFIG unused here
         for d in [
             self.ANNOTATED_VIDEO_DIR,
             self.FRAMES_DIR,
