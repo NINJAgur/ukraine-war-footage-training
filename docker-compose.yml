@@ -84,9 +84,15 @@ services:
       context: .
       dockerfile: ml-engine/Dockerfile
     restart: unless-stopped
-    runtime: nvidia
     environment:
       NVIDIA_VISIBLE_DEVICES: all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
       DATABASE_SYNC_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/ukraine_footage
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
