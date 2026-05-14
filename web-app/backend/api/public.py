@@ -17,6 +17,19 @@ router = APIRouter(prefix="/api", tags=["public"])
 _ANNOTATED_DIR = Path(__file__).parent.parent.parent.parent / "ml-engine" / "media" / "annotated"
 _RAW_DIR       = Path(__file__).parent.parent.parent.parent / "scraper-engine" / "media"
 
+
+def _resolve_mp4_path(raw: str) -> Path:
+    """Translate Windows absolute paths stored in DB to container/local paths."""
+    p = Path(raw)
+    if p.exists():
+        return p
+    normalized = raw.replace("\\", "/")
+    marker = "ml-engine/media/annotated/"
+    if marker in normalized:
+        rel = normalized[normalized.index(marker) + len(marker):]
+        return _ANNOTATED_DIR / rel
+    return p
+
 _SOURCE_DISPLAY = {
     "funker530":    "Funker530",
     "geoconfirmed": "GeoConfirmed",
@@ -52,7 +65,7 @@ async def get_annotated_clips(db: AsyncSession = Depends(get_db)) -> list[dict]:
             # For remote files, rely on DB duration rather than OpenCV scanning
             duration_str = f"00:00:{clip.duration_seconds:02d}" if clip.duration_seconds else "00:00:00"
         else:
-            mp4 = Path(clip.mp4_path)
+            mp4 = _resolve_mp4_path(clip.mp4_path)
             if not mp4.exists():
                 continue
             # videoUrl uses the category subdir path
