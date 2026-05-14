@@ -27,6 +27,7 @@ CONF_THRESH = 0.15
 MIN_RATE = 0.10
 BATCH_SIZE = 10
 FINETUNE_MIN_DATASETS = 5
+FINETUNE_MAX_CYCLES = settings.YOLO_FINETUNE_MAX_CYCLES
 
 
 def _best_map50(metrics: dict) -> float:
@@ -237,6 +238,20 @@ def _maybe_trigger_finetune() -> None:
 
 def _trigger_model_finetune(model_type: ModelType) -> None:
     with get_session() as session:
+        done_cycles = (
+            session.query(TrainingRun)
+            .filter(TrainingRun.stage == TrainingStage.FINETUNE)
+            .filter(TrainingRun.model_type == model_type)
+            .filter(TrainingRun.status == TrainingStatus.DONE)
+            .count()
+        )
+        if done_cycles >= FINETUNE_MAX_CYCLES:
+            logger.info(
+                f"[finetune] {model_type.value}: max cycles reached "
+                f"({done_cycles}/{FINETUNE_MAX_CYCLES}) — 50 total epochs complete"
+            )
+            return
+
         active = (
             session.query(TrainingRun)
             .filter(TrainingRun.stage == TrainingStage.FINETUNE)

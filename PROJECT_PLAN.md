@@ -571,7 +571,10 @@ yolo-training-template/                  ← monorepo root
 - [x] **4.3b** `.dockerignore` — exclude all data/weights; `entrypoint.sh` downloads GDINO + YOLO base weights on cold start
 - [x] **4.3c** `setup_datasets.sh` — one-time Kaggle download + merge into specialist folders
 - [x] **4.3d** `core/storage.py` — real GCS upload for annotated MP4s when `STORAGE_MODE=remote`; replaces dead stub in all 4 pipeline scripts + `annotate_clips.py`
-- [x] **4.3e** Fine-tune pipeline: fixed GDINO/YOLO pipeline conflict (clips stay DOWNLOADED after GDINO); `_maybe_trigger_finetune` now triggers all 4 models; 10 epochs/run × 4 runs per model
+- [x] **4.3e** Fine-tune pipeline: fixed GDINO/YOLO pipeline conflict (clips stay DOWNLOADED after GDINO); `_maybe_trigger_finetune` now triggers all 4 models
+  - **Training strategy:** baseline(10 epochs) + 4 fine-tune cycles(10 epochs each) = **50 total epochs per model**
+  - `YOLO_FINETUNE_MAX_CYCLES=4` in config; `_trigger_model_finetune` counts DONE fine-tune runs and stops at 4
+  - Each fine-tune loads the best existing weights, so epochs are cumulative: 10→20→30→40→50
 - [x] **4.3f** Inference box labels: `infer_video_multi_model` now uses `model.names[cls_id]` for each box label (was hardcoded to model name, e.g. "GENERAL")
 - [x] **4.3g** Docker pre-flight fixes: `JWT_SECRET` field alignment, `init_db()` on startup for all 3 services, GDINO config path resolved via installed package, Playwright removed from scraper-engine (unused)
 - [ ] **4.4** Docker Desktop smoke test — `docker compose up --build`, verify all 7 services healthy, scrape + annotate one clip end-to-end
