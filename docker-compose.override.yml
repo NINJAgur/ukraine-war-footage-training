@@ -1,0 +1,24 @@
+# docker-compose.override.yml — Local Docker Desktop development
+#
+# Automatically merged by `docker compose up`. Appends bind-mounts so the
+# containers use the datasets, runs, and media already on your local disk
+# (the bind-mount shadows the named volume when both target the same path).
+#
+# On a fresh machine without local data, delete this file and run:
+#   docker compose run --rm ml-worker bash scripts/setup_datasets.sh
+
+services:
+
+  scraper-worker:
+    volumes:
+      - ./scraper-engine/media:/app/scraper-engine/media
+
+  ml-worker:
+    volumes:
+      - ./scraper-engine/media:/app/scraper-engine/media:ro
+      - ./ml-engine/media:/app/ml-engine/media
+      - ./ml-engine/runs:/app/ml-engine/runs
+
+  backend:
+    volumes:
+      - ./ml-engine/media:/app/ml-engine/media:ro
