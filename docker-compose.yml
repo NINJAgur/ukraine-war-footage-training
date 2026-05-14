@@ -1,14 +1,15 @@
 # docker-compose.yml — Ukraine Combat Footage Web Application
 #
-# PHASE 0/1/2/3: Only postgres and redis services are active.
-# Uncomment application services as each phase is completed.
+# Phase 4: All services active. Requires NVIDIA Container Toolkit for ml-worker.
+# All service builds use repo root as context so shared/ is accessible in every image.
 #
-# PHASE 4: All services active. ml-engine uses NVIDIA Container Toolkit.
-# Requires: Docker Desktop with WSL2 backend + NVIDIA Container Toolkit installed.
+# First-time setup:
+#   cp .env.example .env   # fill in secrets
+#   docker compose up --build
 
 services:
 
-  # ── Infrastructure Services (active from Phase 0) ──────────────────
+  # ── Infrastructure ────────────────────────────────────────────────────
 
   postgres:
     image: postgres:16-alpine
@@ -41,86 +42,129 @@ services:
       timeout: 5s
       retries: 5
 
-  # ── Phase 1: Scraper Engine ─────────────────────────────────────────
-  # Uncomment after completing Phase 1 tasks.
+  # ── Scraper Engine ────────────────────────────────────────────────────
 
-  # scraper-worker:
-  #   build:
-  #     context: ./scraper-engine
-  #     dockerfile: Dockerfile
-  #   restart: unless-stopped
-  #   env_file: .env
-  #   command: celery -A celery_app worker -Q default --loglevel=info --concurrency=4
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #     redis:
-  #       condition: service_healthy
-  #   volumes:
-  #     - ./media:/app/media
+  scraper-worker:
+    build:
+      context: .
+      dockerfile: scraper-engine/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_SYNC_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/ukraine_footage
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+    command: celery -A celery_app worker -Q default --loglevel=info --concurrency=4
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - scraper_media:/app/scraper-engine/media
 
-  # scraper-beat:
-  #   build:
-  #     context: ./scraper-engine
-  #     dockerfile: Dockerfile
-  #   restart: unless-stopped
-  #   env_file: .env
-  #   command: celery -A celery_app beat --loglevel=info
-  #   depends_on:
-  #     - scraper-worker
+  scraper-beat:
+    build:
+      context: .
+      dockerfile: scraper-engine/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_SYNC_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/ukraine_footage
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+    command: celery -A celery_app beat --loglevel=info
+    depends_on:
+      - scraper-worker
 
-  # ── Phase 2: ML Engine ─────────────────────────────────────────────
-  # Uncomment after completing Phase 2 tasks.
-  # Requires NVIDIA Container Toolkit (Phase 4 prerequisite).
+  # ── ML Engine ─────────────────────────────────────────────────────────
 
-  # ml-worker:
-  #   build:
-  #     context: ./ml-engine
-  #     dockerfile: Dockerfile
-  #   restart: unless-stopped
-  #   runtime: nvidia
-  #   environment:
-  #     NVIDIA_VISIBLE_DEVICES: all
-  #   env_file: .env
-  #   command: celery -A celery_app worker -Q gpu --loglevel=info --concurrency=1
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #     redis:
-  #       condition: service_healthy
-  #   volumes:
-  #     - ./media:/app/media
-  #     - ./runs:/app/runs
+  ml-worker:
+    build:
+      context: .
+      dockerfile: ml-engine/Dockerfile
+    restart: unless-stopped
+    runtime: nvidia
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      DATABASE_SYNC_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/ukraine_footage
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      GDINO_CHECKPOINT: /checkpoints/groundingdino_swint_ogc.pth
+      YOLO_MODEL: /checkpoints/yolov8m.pt
+      CHECKPOINTS_DIR: /checkpoints
+      KAGGLE_CACHE: /app/ml-engine/media/kaggle_datasets
+      KAGGLEHUB_CACHE: /app/ml-engine/media/kaggle_datasets
+      # Set to "remote" to upload annotated MP4s to GCS instead of keeping on disk
+      STORAGE_MODE: ${STORAGE_MODE:-local}
+      REMOTE_STORAGE_BUCKET: ${REMOTE_STORAGE_BUCKET:-ukraine-footage-bucket}
+    env_file: .env
+    command: celery -A celery_app worker -Q gpu --loglevel=info --concurrency=1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - scraper_media:/app/scraper-engine/media:ro
+      - ml_media:/app/ml-engine/media
+      - ml_runs:/app/ml-engine/runs
+      - ml_checkpoints:/checkpoints
 
-  # ── Phase 3: Web Application ────────────────────────────────────────
-  # Uncomment after completing Phase 3 tasks.
+  ml-beat:
+    build:
+      context: .
+      dockerfile: ml-engine/Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_SYNC_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/ukraine_footage
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      CHECKPOINTS_DIR: /checkpoints
+    env_file: .env
+    command: celery -A celery_app beat --loglevel=info
+    depends_on:
+      - ml-worker
+    volumes:
+      - ml_checkpoints:/checkpoints
 
-  # backend:
-  #   build:
-  #     context: ./web-app/backend
-  #     dockerfile: Dockerfile
-  #   restart: unless-stopped
-  #   env_file: .env
-  #   ports:
-  #     - "8000:8000"
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #     redis:
-  #       condition: service_healthy
-  #   volumes:
-  #     - ./media:/app/media
+  # ── Web Application ───────────────────────────────────────────────────
 
-  # frontend:
-  #   build:
-  #     context: ./web-app/frontend
-  #     dockerfile: Dockerfile
-  #   restart: unless-stopped
-  #   ports:
-  #     - "80:80"
-  #   depends_on:
-  #     - backend
+  backend:
+    build:
+      context: .
+      dockerfile: web-app/backend/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/ukraine_footage
+      DATABASE_SYNC_URL: postgresql+psycopg2://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/ukraine_footage
+      REDIS_URL: redis://redis:6379/0
+      CORS_ORIGINS: http://localhost,http://frontend
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ml_media:/app/ml-engine/media:ro
+
+  frontend:
+    build:
+      context: .
+      dockerfile: web-app/frontend/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
 
 volumes:
   postgres_data:
   redis_data:
+  scraper_media:     # funker530/ geoconfirmed/ — scraper-worker writes, ml-worker reads
+  ml_media:          # annotated/ scraped_datasets/ — ml-worker writes, backend reads
+  ml_runs:           # training runs and best.pt weights — persisted across restarts
+  ml_checkpoints:    # GDINO + YOLO base weights — downloaded once by entrypoint.sh

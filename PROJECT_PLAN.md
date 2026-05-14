@@ -564,15 +564,18 @@ yolo-training-template/                  ← monorepo root
 
 ### Phase 4 — Cloud & DevOps
 
-- [ ] **4.1** Install Docker Desktop + NVIDIA Container Toolkit
-- [ ] **4.2** Write production Dockerfiles for all services
-- [ ] **4.3** Write production `docker-compose.yml`
+- [x] **4.1** Install Docker Desktop + NVIDIA Container Toolkit
+- [x] **4.2** Write production Dockerfiles for all services (scraper, ml-engine, backend, frontend)
+- [x] **4.3** Write production `docker-compose.yml` (all services, named volumes, ml-beat added)
+- [x] **4.3b** `.dockerignore` — exclude all data/weights; `entrypoint.sh` downloads GDINO + YOLO base weights on cold start
+- [x] **4.3c** `setup_datasets.sh` — one-time Kaggle download + merge into specialist folders
+- [x] **4.3d** `core/storage.py` — real GCS upload for annotated MP4s when `STORAGE_MODE=remote`; replaces dead stub in all 4 pipeline scripts + `annotate_clips.py`
+- [x] **4.3e** Fine-tune pipeline: fixed GDINO/YOLO pipeline conflict (clips stay DOWNLOADED after GDINO); `_maybe_trigger_finetune` now triggers all 4 models; 10 epochs/run × 4 runs per model
 - [ ] **4.4** Write `infra/gcp/main.tf`
-- [ ] **4.5** Write `infra/nginx/nginx.conf`
-- [ ] **4.6** Write `.github/workflows/ci.yml`
-- [ ] **4.7** Write `.github/workflows/deploy.yml`
-- [ ] **4.8** Configure GCS CORS
-- [ ] **4.9** End-to-end smoke test on GCP
+- [ ] **4.5** Write `.github/workflows/ci.yml`
+- [ ] **4.6** Write `.github/workflows/deploy.yml`
+- [ ] **4.7** Configure GCS CORS + bucket ACL for public video serving
+- [ ] **4.8** End-to-end smoke test on GCP
 
 ---
 
@@ -593,7 +596,7 @@ Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 ✅, Phase 4 ⏳
 - Stats: `images_labeled` = 175,627 (GENERAL count), `clips_annotated` = 25
 - Integration smoke test: 25 ANNOTATED clips in DB, all pipelines verified end-to-end
 
-**Phase 4 (next):** Cloud + DevOps — Docker, GCP Terraform, NGINX, CI/CD
+**Phase 4 (in progress):** Dockerfiles + docker-compose done ✅. Remaining: GCP Terraform, CI/CD, GCS bucket setup, smoke test on GCP.
 
 ---
 

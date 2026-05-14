@@ -1,0 +1,27 @@
+# Python
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/.pytest_cache/
+**/venv/
+**/.venv/
+
+# Model weights and checkpoints — downloaded at container startup into volumes
+ml-engine/*.pth
+ml-engine/*.pt
+
+# Large data directories — served via named volumes in production
+ml-engine/runs/
+ml-engine/media/
+scraper-engine/media/
+
+# Frontend build artifacts and deps
+web-app/frontend/node_modules/
+web-app/frontend/dist/
+
+# Git
+.git/
+
+# Local dev secrets (injected via docker-compose env_file)
+.env
+web-app/backend/.env

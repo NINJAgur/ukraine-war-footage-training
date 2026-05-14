@@ -34,12 +34,6 @@ class Settings(BaseSettings):
     GEOCONFIRMED_DIR: Path = Path(__file__).resolve().parent / "media" / "geoconfirmed"
     COMBINED_DIR: Path = Path(__file__).resolve().parent / "media" / "combined"
 
-    # ── Storage Mode (local or remote) ────────────────────────────────
-    # 'local' leaves annotated files in ml-engine/media/annotated.
-    # 'remote' implies upload to GCP/S3/Azure and deletes local annotated copy.
-    STORAGE_MODE: str = "local" 
-    REMOTE_STORAGE_BUCKET: str = "ukraine-footage-bucket"
-
     # ── Scraping ──────────────────────────────────────────────────────
     FUNKER530_BASE_URL: str = "https://funker530.com"
     SCRAPE_MAX_PAGES: int = 10
