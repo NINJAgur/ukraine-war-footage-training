@@ -181,7 +181,8 @@ def infer_video_multi_model(
             for box in results[0].boxes:
                 x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
                 conf_val = float(box.conf[0])
-                dets.append((x1, y1, x2, y2, conf_val, label_prefix))
+                cls_name = model.names[int(box.cls[0])]
+                dets.append((x1, y1, x2, y2, conf_val, cls_name))
             frame_dets[idx] = dets
             idx += 1
         cap2.release()
