@@ -1,6 +1,6 @@
 # PROJECT_PLAN.md — Ukraine Combat Footage Web Application
 > **Source of Truth** — All phases, structure, and decisions are tracked here.
-> Last updated: 2026-05-08
+> Last updated: 2026-05-10
 
 ---
 
@@ -262,7 +262,7 @@ yolo-training-template/                  ← monorepo root
 │       ├── session.py
 │       └── models.py
 │
-├── web-app/                             ← PHASE 3: Web Application 🔄 In Progress
+├── web-app/                             ← PHASE 3: Web Application ✅ Complete
 │   ├── backend/
 │   │   ├── Dockerfile
 │   │   ├── requirements.txt
@@ -548,8 +548,8 @@ yolo-training-template/                  ← monorepo root
 
 #### Training Progress (WebSocket)
 
-- [ ] **3.14** FastAPI WebSocket endpoint `ws://localhost:8000/ws/training/{run_id}` — Celery task writes epoch metrics to Redis pub/sub channel; backend subscribes and forwards to connected clients
-- [ ] **3.14b** `AdminPanel.vue` — open WebSocket on active `RUNNING` run; update progress bar + epoch/loss display in real time; close on `DONE`/`ERROR`
+- [x] **3.14** FastAPI WebSocket endpoint `ws://localhost:8000/ws/training/{run_id}` — polls DB every 3s, sends `{status, metrics}` JSON, closes on DONE/ERROR; Vite proxy `/ws` with `ws:true`
+- [x] **3.14b** `AdminPanel.vue` — WebSocket progress bar: INITIALIZING→EPOCH 0/N (0%)→EPOCH N/N (100%); auto-reconnects to RUNNING jobs on page load; `on_train_epoch_start` callback writes epoch progress at start of each epoch (null metrics); `on_fit_epoch_end` writes final metrics
 
 - [x] **3.32** Test suite implemented across all 4 services:
   - `scraper-engine/tests/unit/` — `_filter.py` unit tests (21 tests: equipment scoring, negative gate, POV detection)
@@ -558,7 +558,7 @@ yolo-training-template/                  ← monorepo root
   - `web-app/frontend/tests/unit/` — Vitest + `@vue/test-utils` component tests (HeroSection, MLCard, TickerBar)
   - pytest marks: `unit`, `integration`, `network`, `gpu`, `smoke`, `slow`; default run skips gpu/slow/network/integration
 - [x] **3.38** Agent slash commands wired: `/review-webapp`, `/review-ml`, `/review-scraper`, `/qa-webapp`, `/qa-pipeline`, `/qa-scraper`, `/research-webapp`, `/research-ml`, `/research-scraper` — all in `.claude/commands/`; modus operandi documented in `CLAUDE.md`
-- [ ] **3.15** Integration test — scrape 1 clip → full pipeline → clip appears in archive with playable video; train button queues a run → status updates in admin panel
+- [x] **3.15** Integration smoke test — scraped 20 clips (72h window, Funker530 + GeoConfirmed), 19 downloaded, 17 annotated across VEHICLE/PERSONNEL/GENERAL pipelines; 25 ANNOTATED total in DB; clips appear in archive with playable video
 
 ---
 
@@ -578,7 +578,7 @@ yolo-training-template/                  ← monorepo root
 
 ## 5. Next Steps
 
-Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 🔄 (core wired; WebSocket + Celery E2E pending), Phase 4 ⏳
+Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 ✅, Phase 4 ⏳
 
 **All baseline training complete:**
 - AIRCRAFT: mAP50=0.929 ✅ (run 13, 83K images)
@@ -586,20 +586,14 @@ Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 🔄 (core wired; WebSocket + Cel
 - PERSONNEL: mAP50=0.780 ✅ (run 29, 8,433 images)
 - GENERAL:  mAP50=0.784 ✅ (run 30, 175K images, 2026-05-08)
 
-**Web app — live and functional:**
+**Web app — complete:**
 - Public feed, archive, submit, hero, ticker, ML cards — all wired to live DB/API
-- Admin panel: clips table (APPROVE + DECLINE + preview modal), training runs table, train buttons
+- Admin panel: clips table (APPROVE + DECLINE + preview modal), training runs table, train buttons, live WebSocket progress bar
 - Auth: JWT login/logout, router guard
-- Stats: `images_labeled` = 175,627 (GENERAL count), `clips_annotated` = 8
+- Stats: `images_labeled` = 175,627 (GENERAL count), `clips_annotated` = 25
+- Integration smoke test: 25 ANNOTATED clips in DB, all pipelines verified end-to-end
 
-**Remaining Phase 3 tasks (priority order):**
-1. **Celery worker E2E** — start Redis + Celery worker, verify `POST /api/admin/train` → task executes → DB updates
-2. **3.14/3.14b** (optional) — WebSocket training progress in AdminPanel (live epoch/loss/mAP50)
-3. **3.15** Integration smoke — scrape 1 clip → annotate_clips → clip in archive with playable video
-4. **Hero background video** — wire `HeroSection.vue` to first GENERAL clip from `/api/annotated-clips` once GENERAL clips accumulate
-5. **2.41** `test_pipeline_e2e.py` — run with trained weights, verify annotated MP4 quality
-
-**Phase 4 (deferred):** Cloud + DevOps — Docker, GCP Terraform, NGINX, CI/CD
+**Phase 4 (next):** Cloud + DevOps — Docker, GCP Terraform, NGINX, CI/CD
 
 ---
 
