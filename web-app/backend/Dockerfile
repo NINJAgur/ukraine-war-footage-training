@@ -2,6 +2,7 @@ FROM python:3.11-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
+    libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Build context is repo root — shared/ must be at /app/shared,

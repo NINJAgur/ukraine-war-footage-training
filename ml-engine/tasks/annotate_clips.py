@@ -39,6 +39,21 @@ def _best_map50(metrics: dict) -> float:
     return 0.0
 
 
+def _resolve_weights_path(raw: str) -> Path:
+    """Handle Windows absolute paths stored in DB when running inside a Linux container."""
+    w = Path(raw)
+    if w.exists():
+        return w
+    # Windows path (D:\...\ml-engine\runs\...) inside Linux container:
+    # bind-mount maps ml-engine/runs → /app/ml-engine/runs
+    normalized = raw.replace("\\", "/")
+    marker = "ml-engine/runs/"
+    if marker in normalized:
+        rel = normalized[normalized.index(marker) + len("ml-engine/"):]
+        return ML_ENGINE_DIR / rel
+    return w
+
+
 def _latest_weights(model_name: str) -> Path:
     with get_session() as session:
         runs = (
@@ -52,7 +67,7 @@ def _latest_weights(model_name: str) -> Path:
         )
     runs_by_map = sorted(runs, key=lambda r: _best_map50(r.metrics), reverse=True)
     for run in runs_by_map:
-        w = Path(run.weights_path)
+        w = _resolve_weights_path(run.weights_path)
         if w.exists():
             return w
     raise FileNotFoundError(f"No usable weights for {model_name} in DB")

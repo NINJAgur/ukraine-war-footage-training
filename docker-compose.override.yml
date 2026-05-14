@@ -4,8 +4,11 @@
 # containers use the datasets, runs, and media already on your local disk
 # (the bind-mount shadows the named volume when both target the same path).
 #
+# ml-worker bind-mounts only apply when running with --profile gpu:
+#   docker compose --profile gpu up --build
+#
 # On a fresh machine without local data, delete this file and run:
-#   docker compose run --rm ml-worker bash scripts/setup_datasets.sh
+#   docker compose --profile gpu run --rm ml-worker bash scripts/setup_datasets.sh
 
 services:
 

@@ -83,14 +83,47 @@ All models use the same 3-class canonical vocabulary, aligned with `_filter.py` 
 
 Weights land at: `runs/baseline/<MODEL_TYPE>/baseline_<MODEL>_<run_id>/weights/best.pt`
 
-### kiit-mita Class Remapping
-- 0 Artillery → 1 (VEHICLE)
-- 1 Missile → 0 (AIRCRAFT)
-- 2 Radar → 1 (VEHICLE)
-- 3 M.RocketLauncher → 1 (VEHICLE)
-- 4 Soldier → 2 (PERSONNEL)
-- 5 Tank → 1 (VEHICLE)
-- 6 Vehicle → 1 (VEHICLE)
+### Dataset Class Remapping (applied in build_specialist_datasets.py — source files never modified)
+
+**mihprofi** (nc=2): 0 Dron→AIRCRAFT, 1 Dron2→AIRCRAFT
+
+**shakedlevnat** (nc=83): all 0–82 aircraft model names → AIRCRAFT
+
+**nzigulic** (nc=11, anonymous): 0–3→VEHICLE, 4–7→AIRCRAFT, 8–10→VEHICLE (from visual inspection, commit 6d1d8d5)
+
+**kiit-mita** (nc=7):
+- 0 Artilary → VEHICLE
+- 1 Missile → AIRCRAFT
+- 2 Radar → VEHICLE
+- 3 M. Rocket Launcher → VEHICLE
+- 4 Soldier → PERSONNEL
+- 5 Tank → VEHICLE
+- 6 Vehicle → VEHICLE
+
+**rookieengg** (nc=43): all 0–42 aircraft model names → AIRCRAFT
+
+**rawsi18** (nc=12):
+- 0 camouflage_soldier → PERSONNEL
+- 1 weapon → SKIP
+- 2 military_tank → VEHICLE
+- 3 military_truck → VEHICLE
+- 4 military_vehicle → VEHICLE
+- 5 civilian → SKIP
+- 6 soldier → PERSONNEL
+- 7 civilian_vehicle → SKIP
+- 8 military_artillery → VEHICLE
+- 9 trench → SKIP
+- 10 military_aircraft → AIRCRAFT
+- 11 military_warship → SKIP
+
+**amad-5** (nc=5, original Kaggle classes):
+- 0 military_tank → VEHICLE
+- 1 military_vehicle → VEHICLE
+- 2 civilian → SKIP
+- 3 soldier → PERSONNEL
+- 4 civilian_vehicle → SKIP
+
+**piterfm** (nc=3, canonical pass-through): 0→AIRCRAFT, 1→VEHICLE, 2→PERSONNEL
 
 ### nzigulic + piterfm GDINO Auto-Label Pipeline
 - Run GDINO on raw image folders with 3-class prompt

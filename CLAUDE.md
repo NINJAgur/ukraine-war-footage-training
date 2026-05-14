@@ -40,12 +40,12 @@
 - `2=PERSONNEL` — soldiers, fighters, RPG/ATGM operators
 
 **Cold-start training order (8 Kaggle datasets total):**
-1. Dataset prep: nzigulic mapped nc=11→nc=3 ✅; piterfm GDINO labeled ✅; rookieengg, rawsi18, amad-5 added ✅
-2. Pre-build merged folders once via `scripts/build_specialist_datasets.py` ✅ — all future training reads from these
-3. AIRCRAFT baseline: mAP50=0.929 @ 10 epochs, run 13 ✅ (retraining on clean merged/)
-4. VEHICLE baseline: mAP50=0.871 @ 10 epochs, run 25 ✅ (retraining on clean merged/)
-5. PERSONNEL baseline: mAP50=0.780 @ 10 epochs, run 29 ✅ (clean merged/, 8,433 images)
-6. GENERAL: mAP50=0.784 @ 10 epochs, run 30 ✅ (175K images, 2026-05-08)
+1. Dataset prep: all 8 datasets downloaded fresh; class remapping applied in build script (source files never modified); nzigulic + rookieengg reorganized to standard train/val layout ✅
+2. Merged folders rebuilt clean via `scripts/build_specialist_datasets.py` ✅ — in-memory class remapping + specialist class filter; verified 0 bad class IDs across all models
+3. AIRCRAFT baseline: mAP50=0.929 @ 10 epochs, run 13 ✅ (stale — retraining needed on clean merged/, 65,557 train images)
+4. VEHICLE baseline: mAP50=0.871 @ 10 epochs, run 25 ✅ (stale — retraining needed on clean merged/, 56,440 train images)
+5. PERSONNEL baseline: mAP50=0.780 @ 10 epochs, run 29 ✅ (stale — retraining needed on clean merged/, 10,962 train images, expected run ~59)
+6. GENERAL: mAP50=0.784 @ 10 epochs, run 30 ✅ (stale — retraining needed on clean merged/, 144,466 train images)
 
 **Scraped dataset pipeline (GDINO → fine-tune):**
 
@@ -98,7 +98,7 @@ All services import via re-export stubs (`ml-engine/db/models.py`, `scraper-engi
 | Service | Directory | Phase |
 |---------|-----------|-------|
 | Scraper Engine | `scraper-engine/` | 1 ✅ |
-| ML Engine | `ml-engine/` | 2 ✅ (AIRCRAFT ✅ 0.929, VEHICLE ✅ 0.871, PERSONNEL ✅ 0.780, GENERAL ✅ 0.784) |
+| ML Engine | `ml-engine/` | 2 ⚠️ (runs 13/25/29/30 stale — merged datasets rebuilt clean 2026-05-14, all 4 baselines need retraining) |
 | Backend API | `web-app/backend/` | 3 ✅ |
 | Frontend | `web-app/frontend/` | 3 ✅ |
 

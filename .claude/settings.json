@@ -20,6 +20,8 @@
       "Bash(ruff *)",
       "Bash(curl *)",
       "Bash(uvicorn *)",
+      "Bash(docker *)",
+      "Bash(docker compose *)",
       "Bash(powershell -Command \"Get-Content *\")",
       "Bash(powershell -Command \"Get-Process *\")",
       "Bash(powershell -Command \"Get-NetTCPConnection *\")",
@@ -32,9 +34,7 @@
       "Bash(powershell -Command \"netstat*\")"
     ],
     "deny": [
-      "Bash(rm -rf /*)",
-      "Bash(docker:*)",
-      "Bash(gcloud:*)"
+      "Bash(rm -rf /*)"
     ]
   },
   "env": {
@@ -42,7 +42,6 @@
     "PYTHONDONTWRITEBYTECODE": "1"
   },
   "notes": {
-    "docker": "Docker is Phase 4 only — do not use docker commands during local development",
     "gcloud": "GCP commands are Phase 4 only",
     "gpu": "GPU tasks use concurrency=1 on dedicated 'gpu' Celery queue to protect 8GB VRAM"
   }
