@@ -99,8 +99,8 @@ All services import via re-export stubs (`ml-engine/db/models.py`, `scraper-engi
 |---------|-----------|-------|
 | Scraper Engine | `scraper-engine/` | 1 ✅ |
 | ML Engine | `ml-engine/` | 2 ✅ (AIRCRAFT ✅ 0.929, VEHICLE ✅ 0.871, PERSONNEL ✅ 0.780, GENERAL ✅ 0.784) |
-| Backend API | `web-app/backend/` | 3 🔄 |
-| Frontend | `web-app/frontend/` | 3 🔄 |
+| Backend API | `web-app/backend/` | 3 ✅ |
+| Frontend | `web-app/frontend/` | 3 ✅ |
 
 ---
 
@@ -158,7 +158,7 @@ Run Phase 2 test: `cd ml-engine && python tests/test_pipeline_e2e.py`
 | 0 | Agentic workspace | ✅ Complete |
 | 1 | Scraper engine | ✅ Complete |
 | 2 | ML pipeline — baseline training | ✅ Complete (AIRCRAFT 0.929, VEHICLE 0.871, PERSONNEL 0.780, GENERAL 0.784) |
-| 3 | Web application | 🔄 In progress (Celery E2E ✅, hero video ✅; WebSocket progress pending) |
+| 3 | Web application | ✅ Complete (Celery E2E, hero video, WebSocket progress bar, integration smoke test — 25 annotated clips) |
 | 4 | Cloud & DevOps | ⏳ Pending |
 
 ---
