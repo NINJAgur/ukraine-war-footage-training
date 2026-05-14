@@ -444,38 +444,38 @@ yolo-training-template/                  ← monorepo root
 
 #### Dataset Inventory (8 datasets, all on disk)
 
-| Kaggle handle | nc | Images | Labels | Notes |
-|---|---|---|---|---|
-| `mihprofi/drone-detect` | 2 | 37,900 | 37,900 | Both classes → AIRCRAFT |
-| `shakedlevnat/military-aircraft-database` | 83 | 19,958 | 19,958 | All → AIRCRAFT |
-| `nzigulic/military-equipment` | 11 | 16,809 | 16,809 | Visually mapped → nc=3 |
-| `piterfm/2022-ukraine-russia-war-equipment-losses-oryx` | 3 | 26,197 | 26,118 | GDINO category-aware labels |
-| `sudipchakrabarty/kiit-mita` | 7 | 1,700 | 1,700 | YOLO remapped → nc=3 |
-| `rookieengg/military-aircraft-detection` | 43 | 11,788 | 11,788 | All 43 classes → AIRCRAFT |
-| `rawsi18/military-assets-dataset-12-classes` | 12 | 26,315 | 26,315 | YOLO remapped → nc=3 |
-| `rupankarmajumdar/amad-5` | 5 | 34,960 | 34,960 | YOLO remapped → nc=3 |
-| **TOTAL** | | **175,627** | **175,548** | |
+| Kaggle handle | nc | Images | Notes |
+|---|---|---|---|
+| `mihprofi/drone-detect` | 2 | 36,013 | Both classes → AIRCRAFT; fresh download 2026-05-14 |
+| `shakedlevnat/military-aircraft-database` | 83 | 17,962 | All 83 → AIRCRAFT; fresh download 2026-05-14 |
+| `nzigulic/military-equipment` | 11 | 13,448 | Anonymous nc=11: 4-7→AIRCRAFT, 0-3/8-10→VEHICLE; reorganized to train/val layout |
+| `piterfm/2022-ukraine-russia-war-equipment-losses-oryx` | 3 | 26,197 | Canonical nc=3 pass-through; GDINO labels |
+| `sudipchakrabarty/kiit-mita` | 7 | 1,530 | 7-class remap → nc=3; fresh download 2026-05-14 |
+| `rookieengg/military-aircraft-detection` | 43 | 11,788 | All 43 → AIRCRAFT; reorganized to train/val layout |
+| `rawsi18/military-assets-dataset-12-classes` | 12 | 24,919 | 12-class remap → nc=3 (4 classes skipped); fresh download 2026-05-14 |
+| `rupankarmajumdar/amad-5` | 5 | 32,529 | 5-class remap → nc=3 (civilians skipped); fresh download 2026-05-14 |
+| **TOTAL** | | **164,386** | Source files never modified — remapping in build script only |
 
-#### Per-Model Dataset Mapping
+#### Per-Model Merged Dataset (post-filter counts, 2026-05-14 rebuild)
 
-| Model | Source Datasets | ~Images |
-|---|---|---|
-| **AIRCRAFT** | mihprofi, shakedlevnat, nzigulic, piterfm, rookieengg, rawsi18 | ~115K |
-| **VEHICLE** | kiit-mita, nzigulic, piterfm, rawsi18, amad-5 | ~87K |
-| **PERSONNEL** | kiit-mita, rawsi18, amad-5 | ~25K |
-| **GENERAL** | all 8 | ~175K |
+| Model | Source Datasets | Train | Val |
+|---|---|---|---|
+| **AIRCRAFT** | mihprofi, shakedlevnat, nzigulic, piterfm, rookieengg, rawsi18 | 65,557 | 9,382 |
+| **VEHICLE** | kiit-mita, nzigulic, piterfm, rawsi18, amad-5 | 56,440 | 6,638 |
+| **PERSONNEL** | kiit-mita, rawsi18, amad-5 | 10,962 | 1,302 |
+| **GENERAL** | all 8 | 144,466 | 19,920 |
 
 #### Step 2 — Train specialists (8 Kaggle datasets as corpus)
 
-- [x] **2.36** Run `test_baseline_train.py --model-type AIRCRAFT --epochs 10 --keep` — mAP50=0.9269 @ epoch 10 (run 13, 83K images) ✅
+- [x] **2.36** Run `test_baseline_train.py --model-type AIRCRAFT --epochs 10 --keep` — mAP50=0.9269 @ epoch 10 (run 13, 83K images) ✅ ⚠️ stale — retraining needed on clean merged/
 - [x] **2.36b** `ml-engine/scripts/aircraft_pipeline.py` — scrape→validate→annotate pipeline; `validate_clip()` in `core/inference.py` (generic, any model); detection-rate gate (≥15% frames with detections, 30 samples); 4 annotated MP4s produced (2 Funker530, 2 GeoConfirmed: Mi-28 hit 67%, Shahed building strike 17%)
-- [x] **2.37** Run `test_baseline_train.py --model-type VEHICLE --epochs 10 --keep` — mAP50=0.8712 @ epoch 10 (run 25, 86,945 images) ✅
-- [x] **2.38** Run `test_baseline_train.py --model-type PERSONNEL --epochs 10 --keep` — mAP50=0.780 @ epoch 10 (run 29, 8,433 images) ✅ (run 28 was contaminated amad-5 data)
+- [x] **2.37** Run `test_baseline_train.py --model-type VEHICLE --epochs 10 --keep` — mAP50=0.8712 @ epoch 10 (run 25, 86,945 images) ✅ ⚠️ stale — retraining needed on clean merged/
+- [x] **2.38** Run `test_baseline_train.py --model-type PERSONNEL --epochs 10 --keep` — mAP50=0.780 @ epoch 10 (run 29, 8,433 images) ✅ ⚠️ stale — retraining needed on clean merged/ (expected run ~59)
 - [x] **2.39** All 3 specialists evaluated: all mAP50 > 0.4 ✅
 
 #### Step 3 — Train generalist
 
-- [x] **2.40** Run `test_baseline_train.py --model-type GENERAL --epochs 10 --keep` — mAP50=0.784 @ epoch 10 (run 30, 175K images) ✅
+- [x] **2.40** Run `test_baseline_train.py --model-type GENERAL --epochs 10 --keep` — mAP50=0.784 @ epoch 10 (run 30, 175K images) ✅ ⚠️ stale — retraining needed on clean merged/
 
 #### Step 4 — Tests
 
@@ -633,10 +633,11 @@ docker compose exec ml-worker celery -A celery_app call tasks.annotate_clips.ann
 Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 ✅, Phase 4 ⏳
 
 **All baseline training complete:**
-- AIRCRAFT: mAP50=0.929 ✅ (run 13, 83K images)
-- VEHICLE:  mAP50=0.871 ✅ (run 25, 87K images)
-- PERSONNEL: mAP50=0.780 ✅ (run 29, 8,433 images)
-- GENERAL:  mAP50=0.784 ✅ (run 30, 175K images, 2026-05-08)
+- AIRCRAFT: mAP50=0.929 (run 13, 83K images) ⚠️ stale — needs retraining on clean merged/ (65,557 train)
+- VEHICLE:  mAP50=0.871 (run 25, 87K images) ⚠️ stale — needs retraining on clean merged/ (56,440 train)
+- PERSONNEL: mAP50=0.780 (run 29, 8,433 images) ⚠️ stale — needs retraining on clean merged/ (10,962 train, expected run ~59)
+- GENERAL:  mAP50=0.784 (run 30, 175K images) ⚠️ stale — needs retraining on clean merged/ (144,466 train)
+- Merged datasets rebuilt clean 2026-05-14: all 8 datasets fresh, in-memory class remapping, 0 bad class IDs verified
 
 **Web app — complete:**
 - Public feed, archive, submit, hero, ticker, ML cards — all wired to live DB/API

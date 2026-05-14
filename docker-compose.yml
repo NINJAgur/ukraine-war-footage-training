@@ -1,11 +1,13 @@
 # docker-compose.yml — Ukraine Combat Footage Web Application
 #
-# Phase 4: All services active. Requires NVIDIA Container Toolkit for ml-worker.
-# All service builds use repo root as context so shared/ is accessible in every image.
+# ml-worker and ml-beat require GPU (NVIDIA Container Toolkit).
+# They are gated behind the "gpu" profile — omitted from the default smoke test.
+#
+# Default (no GPU):   docker compose up --build
+# Full stack w/ GPU:  docker compose --profile gpu up --build
 #
 # First-time setup:
 #   cp .env.example .env   # fill in secrets
-#   docker compose up --build
 
 services:
 
@@ -80,19 +82,13 @@ services:
   # ── ML Engine ─────────────────────────────────────────────────────────
 
   ml-worker:
+    profiles: [gpu]
     build:
       context: .
       dockerfile: ml-engine/Dockerfile
     restart: unless-stopped
     environment:
       NVIDIA_VISIBLE_DEVICES: all
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
       DATABASE_SYNC_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/ukraine_footage
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
@@ -101,9 +97,15 @@ services:
       CHECKPOINTS_DIR: /checkpoints
       KAGGLE_CACHE: /app/ml-engine/media/kaggle_datasets
       KAGGLEHUB_CACHE: /app/ml-engine/media/kaggle_datasets
-      # Set to "remote" to upload annotated MP4s to GCS instead of keeping on disk
       STORAGE_MODE: ${STORAGE_MODE:-local}
       REMOTE_STORAGE_BUCKET: ${REMOTE_STORAGE_BUCKET:-ukraine-footage-bucket}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     env_file: .env
     command: celery -A celery_app worker -Q gpu --loglevel=info --concurrency=1
     depends_on:
@@ -118,6 +120,7 @@ services:
       - ml_checkpoints:/checkpoints
 
   ml-beat:
+    profiles: [gpu]
     build:
       context: .
       dockerfile: ml-engine/Dockerfile
