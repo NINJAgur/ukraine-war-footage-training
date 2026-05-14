@@ -9,11 +9,6 @@
 set -e
 cd "$(dirname "$0")/.."
 
-if [ -z "$KAGGLE_USERNAME" ] || [ -z "$KAGGLE_KEY" ]; then
-    echo "ERROR: KAGGLE_USERNAME and KAGGLE_KEY must be set (in .env or environment)."
-    exit 1
-fi
-
 MERGED_DIR="media/kaggle_datasets/merged"
 if [ -d "$MERGED_DIR/GENERAL/train/images" ] && [ -n "$(ls -A "$MERGED_DIR/GENERAL/train/images" 2>/dev/null)" ]; then
     echo "[setup_datasets] Merged datasets already present — nothing to do."

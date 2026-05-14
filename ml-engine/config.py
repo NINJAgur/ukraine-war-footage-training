@@ -53,6 +53,7 @@ class Settings(BaseSettings):
     YOLO_IMG_SIZE: int = 640
     YOLO_EPOCHS_BASELINE: int = 10
     YOLO_EPOCHS_FINETUNE: int = 10
+    YOLO_FINETUNE_MAX_CYCLES: int = 4   # baseline(10) + 4×finetune(10) = 50 total epochs
 
     # ── Auto-labeling ─────────────────────────────────────────────────
     GDINO_CONFIG: str = "groundingdino/config/GroundingDINO_SwinT_OGC.py"
