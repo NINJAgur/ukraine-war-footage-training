@@ -9,7 +9,8 @@
 2. [Host Machine Setup Guide](#2-host-machine-setup-guide)
 3. [Directory Structure](#3-directory-structure)
 4. [Master To-Do List](#4-master-to-do-list)
-5. [Next Steps](#5-next-steps)
+5. [Docker Desktop Quick-Start](#5-docker-desktop-quick-start)
+6. [Next Steps](#6-next-steps)
 
 ---
 
@@ -306,14 +307,14 @@ yolo-training-template/                  ← monorepo root
 │               ├── SiteFooter.vue
 │               └── ... (see 3.9 for full list)
 │
-├── infra/                               ← PHASE 4: Cloud & DevOps ⏳ Pending
+├── infra/                               ← NOT YET CREATED (tasks 4.5–4.9: GCP Terraform + CI/CD)
 │   ├── gcp/
 │   │   ├── main.tf
 │   │   └── variables.tf
 │   └── nginx/
 │       └── nginx.conf
 │
-├── .github/
+├── .github/                             ← NOT YET CREATED (tasks 4.6–4.7: GitHub Actions)
 │   └── workflows/
 │       ├── ci.yml
 │       └── deploy.yml
@@ -582,7 +583,49 @@ yolo-training-template/                  ← monorepo root
 
 ---
 
-## 5. Next Steps
+## 5. Docker Desktop Quick-Start
+
+### First run (local dev, you already have the data)
+
+```bash
+# 1. Create .env — only 3 values required
+cp .env.example .env
+# Edit .env: set POSTGRES_PASSWORD, JWT_SECRET, ADMIN_PASSWORD
+
+# 2. Build and start all 7 services
+#    docker-compose.override.yml is auto-merged — bind-mounts your existing
+#    ml-engine/media/, ml-engine/runs/, scraper-engine/media/ into containers
+docker compose up --build
+```
+
+- Frontend: http://localhost
+- Backend API: http://localhost:8000
+- The `ml_checkpoints` volume is populated automatically by `entrypoint.sh`
+  (downloads GDINO .pth + yolov8m.pt on first start, ~750 MB)
+
+### Fresh machine (no local datasets)
+
+```bash
+cp .env.example .env
+# Also set KAGGLE_USERNAME and KAGGLE_KEY in .env
+docker compose up --build -d postgres redis
+docker compose run --rm ml-worker bash scripts/setup_datasets.sh   # ~10 GB, 30-60 min
+docker compose up
+```
+
+### Running the pipeline manually
+
+```bash
+# Trigger a scrape now (instead of waiting for 00:00 UTC Beat schedule)
+docker compose exec scraper-worker celery -A celery_app call tasks.scrape_funker530.scrape_funker530
+
+# Trigger YOLO annotation now
+docker compose exec ml-worker celery -A celery_app call tasks.annotate_clips.annotate_clips
+```
+
+---
+
+## 6. Next Steps
 
 Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 ✅, Phase 4 ⏳
 
