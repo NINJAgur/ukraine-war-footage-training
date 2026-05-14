@@ -26,6 +26,15 @@ celery_app = Celery(
     ],
 )
 
+from celery.signals import worker_ready
+
+
+@worker_ready.connect
+def on_worker_ready(**kwargs):
+    from db.session import init_db
+    init_db()
+
+
 celery_app.conf.update(
     task_serializer="json",
     result_serializer="json",

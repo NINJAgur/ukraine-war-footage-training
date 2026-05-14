@@ -9,7 +9,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 async def get_current_admin(token: str = Depends(oauth2_scheme)) -> dict:
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.ALGORITHM])
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
     return payload
