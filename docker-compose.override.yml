@@ -1,8 +1,10 @@
 # docker-compose.override.yml — Local Docker Desktop development
 #
-# Automatically merged by `docker compose up`. Appends bind-mounts so the
-# containers use the datasets, runs, and media already on your local disk
-# (the bind-mount shadows the named volume when both target the same path).
+# Automatically merged by `docker compose up`. Appends bind-mounts and env
+# overrides so containers use local disk data and the host Postgres instance
+# (which holds real clips, training runs, and annotated media).
+#
+# host.docker.internal resolves to the host machine from inside a container.
 #
 # ml-worker bind-mounts only apply when running with --profile gpu:
 #   docker compose --profile gpu up --build
@@ -13,15 +15,22 @@
 services:
 
   scraper-worker:
+    environment:
+      DATABASE_SYNC_URL: postgresql://postgres:postgres@host.docker.internal:5432/ukraine_footage
     volumes:
       - ./scraper-engine/media:/app/scraper-engine/media
 
   ml-worker:
+    environment:
+      DATABASE_SYNC_URL: postgresql://postgres:postgres@host.docker.internal:5432/ukraine_footage
     volumes:
       - ./scraper-engine/media:/app/scraper-engine/media:ro
       - ./ml-engine/media:/app/ml-engine/media
       - ./ml-engine/runs:/app/ml-engine/runs
 
   backend:
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@host.docker.internal:5432/ukraine_footage
+      DATABASE_SYNC_URL: postgresql+psycopg2://postgres:postgres@host.docker.internal:5432/ukraine_footage
     volumes:
       - ./ml-engine/media:/app/ml-engine/media:ro
