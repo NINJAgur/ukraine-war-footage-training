@@ -103,6 +103,7 @@ NEGATIVE_KEYWORDS = [
     # Civilian Personnel
     "civilian", "civilians", "child", "children", "kid", "kids", "woman", "women",
     "elderly", "non-combatant", "bystander", "pedestrian", "resident", "citizen", "paramedic",
+    "police",
     
     # Civilian Residential & Medical
     "apartment", "apartments", "residential", "neighborhood", "hospital", "clinic",
@@ -126,8 +127,8 @@ NEGATIVE_KEYWORDS = [
     "smoke plume", "on fire", "explosion",
     
     # Damage assessment language (editorial framing = not raw action footage)
-    "bomb damage", "battle damage", "battle damage assessment", 
-    "damages", "following the strike", "following the attack", "post-strike", 
+    "bomb damage", "battle damage", "battle damage assessment",
+    "damages", "following the strike", "following the attack", "following a reported", "post-strike",
     "war damage",
 ]
 
