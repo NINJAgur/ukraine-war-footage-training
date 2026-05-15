@@ -153,6 +153,9 @@ if __name__ == "__main__":
             clip.det_class = "GENERAL"
             clip.status = ClipStatus.ANNOTATED
             clip.updated_at = datetime.now(timezone.utc)
+            if raw_path.exists():
+                raw_path.unlink()
+            clip.file_path = None
             accepted += 1
 
             log.info(
