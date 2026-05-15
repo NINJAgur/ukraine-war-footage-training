@@ -65,7 +65,7 @@ const modalItem    = ref(null)
 onMounted(async () => {
   try {
     const res = await fetch('/api/annotated-clips')
-    if (res.ok) items.value = await res.json()
+    if (res.ok) items.value = (await res.json()).slice(0, 10)
   } catch {}
 })
 

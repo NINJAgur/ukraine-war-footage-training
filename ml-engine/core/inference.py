@@ -176,7 +176,7 @@ def infer_video_multi_model(
             ret, frame = cap2.read()
             if not ret:
                 break
-            results = model(frame, conf=conf_thresh, verbose=False)
+            results = model(frame, conf=conf_thresh, iou=0.45, verbose=False)
             dets = []
             for box in results[0].boxes:
                 x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
@@ -247,7 +247,7 @@ def validate_clip(model, path, conf_thresh: float = 0.35,
         ret, frame = cap.read()
         if not ret:
             continue
-        results = model(frame, conf=conf_thresh, verbose=False)
+        results = model(frame, conf=conf_thresh, iou=0.45, verbose=False)
         if len(results[0].boxes) > 0:
             detected += 1
         sampled += 1

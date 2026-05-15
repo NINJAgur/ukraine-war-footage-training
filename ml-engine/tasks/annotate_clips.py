@@ -22,8 +22,9 @@ from db.session import get_session
 logger = logging.getLogger(__name__)
 
 ML_ENGINE_DIR = Path(__file__).resolve().parents[1]
+PROJECT_DIR = ML_ENGINE_DIR.parent
 
-CONF_THRESH = 0.15
+CONF_THRESH = 0.25
 MIN_RATE = 0.10
 BATCH_SIZE = 10
 FINETUNE_MIN_DATASETS = 5
@@ -54,6 +55,20 @@ def _resolve_weights_path(raw: str) -> Path:
     return w
 
 
+def _resolve_clip_path(raw: str) -> Path:
+    """Map container paths (/app/scraper-engine/media/...) to local filesystem."""
+    p = Path(raw)
+    if p.exists():
+        return p
+    # Container path: /app/scraper-engine/media/... → <project>/scraper-engine/media/...
+    normalized = raw.replace("\\", "/")
+    marker = "scraper-engine/media/"
+    if marker in normalized:
+        rel = normalized[normalized.index(marker):]
+        return PROJECT_DIR / rel
+    return p
+
+
 def _latest_weights(model_name: str) -> Path:
     with get_session() as session:
         runs = (
@@ -65,9 +80,10 @@ def _latest_weights(model_name: str) -> Path:
             )
             .all()
         )
-    runs_by_map = sorted(runs, key=lambda r: _best_map50(r.metrics), reverse=True)
-    for run in runs_by_map:
-        w = _resolve_weights_path(run.weights_path)
+        runs_by_map = sorted(runs, key=lambda r: _best_map50(r.metrics), reverse=True)
+        ranked = [(r.weights_path, _best_map50(r.metrics)) for r in runs_by_map]
+    for weights_path, _ in ranked:
+        w = _resolve_weights_path(weights_path)
         if w.exists():
             return w
     raise FileNotFoundError(f"No usable weights for {model_name} in DB")
@@ -109,7 +125,7 @@ def _run_specialist(
         logger.info(f"[{model_name}] {total} candidates")
 
         for clip in candidates:
-            raw_path = Path(clip.file_path)
+            raw_path = _resolve_clip_path(clip.file_path)
 
             if not raw_path.exists():
                 logger.warning(f"[{model_name}] clip_id={clip.id} file missing: {raw_path}")
@@ -127,7 +143,7 @@ def _run_specialist(
                 rejected += 1
                 continue
 
-            date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            date_str = (clip.published_at or datetime.now(timezone.utc)).strftime("%Y-%m-%d")
             out_dir = settings.ANNOTATED_VIDEO_DIR / model_name.lower() / date_str
             out_dir.mkdir(parents=True, exist_ok=True)
             temp_out = out_dir / f"temp_{raw_path.name}"
@@ -194,7 +210,7 @@ def _run_general() -> dict:
         logger.info(f"[GENERAL] {total} candidates (leftovers from specialists)")
 
         for clip in candidates:
-            raw_path = Path(clip.file_path)
+            raw_path = _resolve_clip_path(clip.file_path)
 
             if not raw_path.exists():
                 logger.warning(f"[GENERAL] clip_id={clip.id} file missing: {raw_path}")
@@ -212,7 +228,7 @@ def _run_general() -> dict:
                 rejected += 1
                 continue
 
-            date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            date_str = (clip.published_at or datetime.now(timezone.utc)).strftime("%Y-%m-%d")
             out_dir = settings.ANNOTATED_VIDEO_DIR / "general" / date_str
             out_dir.mkdir(parents=True, exist_ok=True)
             temp_out = out_dir / f"temp_{raw_path.name}"

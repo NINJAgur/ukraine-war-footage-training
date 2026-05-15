@@ -31,8 +31,9 @@
 - `get_equipment_scores(title, desc)` in `_filter.py` is the single source of scoring truth
 - `is_pov_noise(scores)` in `_filter.py` blocks pure FPV clips with zero class scores from entering DB
 - Scrapers have two function variants: `_since(since_date)` for Celery/daily runs, `_sample(max_count/max_incidents)` for tests
-- Annotated output: `media/annotated/<model>/<date>/<hash>_annotated.mp4` — temp files also written to same dir during inference, renamed on completion
-- Pipeline conf threshold: `CONF_THRESH=0.15` used for both `validate_clip` and `infer_video_multi_model` — same standard for gate and box drawing
+- Annotated output: `media/annotated/<model>/<publish_date>/<hash>_annotated.mp4` — date is `clip.published_at`, falling back to today; temp files written to same dir, renamed on completion
+- Pipeline conf threshold: `CONF_THRESH=0.25` for both `validate_clip` and `infer_video_multi_model`; `iou=0.45` passed to all `model()` calls in `inference.py` to suppress overlapping boxes
+- **Container path resolution:** scraper-worker (Docker) writes `/app/scraper-engine/media/...` paths to DB; pipeline scripts running natively call `_resolve_path()` to map these to Windows paths via `REPO_ROOT / rel`
 
 **3 universal classes (aligned with `_filter.py`):**
 - `0=AIRCRAFT` — drones, helicopters, fixed-wing, missiles
@@ -106,7 +107,8 @@ All services import via re-export stubs (`ml-engine/db/models.py`, `scraper-engi
 
 ## Hard Constraints
 
-- **OS:** Windows 11 native Python — no Docker until Phase 4
+- **OS:** Windows 11 native Python for ML engine; Docker Desktop for scraper/backend/frontend (Phase 4)
+- **ML engine always runs natively** — no Docker GPU passthrough on Windows without NVIDIA Container Toolkit (Linux-only)
 - **GPU:** RTX 3060 Ti, 8GB VRAM — `batch_size≤8`, always `device='cuda:0'`
 - **FastAPI:** `async def` routes, `AsyncSession`, Pydantic v2 `ConfigDict`
 - **Vue 3:** `<script setup>` only, Pinia, Tailwind dark theme (slate/zinc + `#22c55e` / `#ef4444`)
@@ -162,8 +164,8 @@ Run Phase 2 test: `cd ml-engine && python tests/test_pipeline_e2e.py`
 | 0 | Agentic workspace | ✅ Complete |
 | 1 | Scraper engine | ✅ Complete |
 | 2 | ML pipeline — baseline training | ✅ Complete (AIRCRAFT 0.929, VEHICLE 0.871, PERSONNEL 0.780, GENERAL 0.784) |
-| 3 | Web application | ✅ Complete (Celery E2E, hero video, WebSocket progress bar, integration smoke test — 25 annotated clips) |
-| 4 | Cloud & DevOps | 🔄 In progress (Dockerfiles + compose done; Docker Desktop smoke test next, then GCP) |
+| 3 | Web application | ✅ Complete (Celery E2E, hero video, WebSocket progress bar, integration smoke test — 58 annotated clips) |
+| 4 | Cloud & DevOps | 🔄 In progress (docker-compose.yml = local dev only; scraper/backend/frontend in Docker Desktop ✅; ml-worker runs natively on Windows; GCP prod compose next) |
 
 ---
 
@@ -219,7 +221,7 @@ If a senior engineer would want to glance at it before merging — spawn. Roughl
 
 ## Do NOT
 
-- Use Docker locally (Phase 4 only)
+- Run ml-worker in Docker locally — GPU passthrough requires NVIDIA Container Toolkit (Linux only)
 - Use Options API or Vuex in Vue components
 - Use sync SQLAlchemy in FastAPI routes
 - Use `print()` in production code — use `logging`

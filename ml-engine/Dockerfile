@@ -14,10 +14,8 @@ COPY shared/ ./shared/
 
 WORKDIR /app/ml-engine
 COPY ml-engine/requirements.txt .
-# Install groundingdino-py from requirements, then upgrade to IDEA-Research source for full CUDA support
 RUN pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir --force-reinstall \
-        git+https://github.com/IDEA-Research/GroundingDINO.git
+    pip install --no-cache-dir --no-deps groundingdino-py==0.4.0
 
 COPY ml-engine/ .
 

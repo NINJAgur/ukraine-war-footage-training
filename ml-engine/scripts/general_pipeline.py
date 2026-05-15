@@ -33,8 +33,19 @@ from shared.db.models import Clip, ClipStatus
 from config import settings
 
 COLOR = settings.MODEL_COLORS["GENERAL"]
-CONF_THRESH = 0.15
+CONF_THRESH = 0.25
 MIN_RATE    = 0.10
+
+
+def _resolve_path(raw: str) -> Path:
+    p = Path(raw)
+    if p.exists():
+        return p
+    normalized = raw.replace("\\", "/")
+    marker = "scraper-engine/media/"
+    if marker in normalized:
+        return REPO_ROOT / normalized[normalized.index(marker):]
+    return p
 
 
 def _latest_weights(model_name: str) -> Path:
@@ -87,7 +98,7 @@ if __name__ == "__main__":
         total_detections = 0
 
         for clip in candidates:
-            raw_path = Path(clip.file_path)
+            raw_path = _resolve_path(clip.file_path)
 
             log.info(
                 f"[clip_id={clip.id}] {clip.source.value if hasattr(clip.source, 'value') else clip.source}\n"
@@ -116,7 +127,7 @@ if __name__ == "__main__":
 
             log.info(f"  ACCEPT — detection rate {rate:.0%} — running full inference...")
 
-            date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            date_str = (clip.published_at or datetime.now(timezone.utc)).strftime("%Y-%m-%d")
             out_dir = settings.ANNOTATED_VIDEO_DIR / "general" / date_str
             out_dir.mkdir(parents=True, exist_ok=True)
             temp_out = out_dir / f"temp_{raw_path.name}"

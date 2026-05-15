@@ -13,9 +13,7 @@ pydantic-settings==2.3.4
 ultralytics==8.2.34
 opencv-python-headless==4.9.0.80
 
-# GroundingDINO (zero-shot auto-labeling)
-# Install from source: pip install git+https://github.com/IDEA-Research/GroundingDINO.git
-groundingdino-py==0.4.0
+# GroundingDINO installed from source in Dockerfile (avoids supervision version conflict)
 
 kagglehub==0.3.4
 google-cloud-storage==2.17.0
