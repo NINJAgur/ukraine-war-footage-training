@@ -23,6 +23,7 @@ from celery_app import celery_app
 from config import settings
 from db.models import Dataset, DatasetStatus, ModelType, TrainingRun, TrainingStage, TrainingStatus
 from db.session import get_session
+from tasks.train_baseline import _make_epoch_callbacks
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "core"))
 
@@ -50,7 +51,7 @@ def _filter_label_file(src: Path, dst: Path, remap: dict[int, int]) -> int:
 
 
 def _merge_datasets(
-    datasets: list[Dataset],
+    datasets: list[tuple[int, str]],
     merged_dir: Path,
     model_type: ModelType,
 ) -> Path:
@@ -66,13 +67,13 @@ def _merge_datasets(
         (merged_dir / split / "images").mkdir(parents=True, exist_ok=True)
         (merged_dir / split / "labels").mkdir(parents=True, exist_ok=True)
 
-    for ds in datasets:
-        ds_dir = Path(ds.yolo_dir_path)
+    for ds_id, ds_yolo_dir in datasets:
+        ds_dir = Path(ds_yolo_dir)
         for split in ("train", "val"):
             for src_img in (ds_dir / split / "images").glob("*.jpg"):
-                shutil.copy2(src_img, merged_dir / split / "images" / f"{ds.id}_{src_img.name}")
+                shutil.copy2(src_img, merged_dir / split / "images" / f"{ds_id}_{src_img.name}")
             for src_lbl in (ds_dir / split / "labels").glob("*.txt"):
-                dst_lbl = merged_dir / split / "labels" / f"{ds.id}_{src_lbl.name}"
+                dst_lbl = merged_dir / split / "labels" / f"{ds_id}_{src_lbl.name}"
                 _filter_label_file(src_lbl, dst_lbl, remap)
 
     yaml_path = merged_dir / "data.yaml"
@@ -124,19 +125,22 @@ def train_finetune(self, training_run_id: int) -> dict:
         dataset_ids = run.dataset_ids or []
         baseline_weights = run.baseline_weights or settings.YOLO_MODEL
 
-        datasets = session.query(Dataset).filter(Dataset.id.in_(dataset_ids)).all()
-        if not datasets:
-            raise ValueError(f"No datasets found for ids: {dataset_ids}")
-        not_packaged = [d.id for d in datasets if d.status != DatasetStatus.PACKAGED]
-        if not_packaged:
-            raise ValueError(f"Datasets not yet packaged: {not_packaged}")
+        if dataset_ids:
+            datasets = session.query(Dataset).filter(Dataset.id.in_(dataset_ids)).all()
+            if not datasets:
+                raise ValueError(f"No datasets found for ids: {dataset_ids}")
+            not_packaged = [d.id for d in datasets if d.status != DatasetStatus.PACKAGED]
+            if not_packaged:
+                raise ValueError(f"Datasets not yet packaged: {not_packaged}")
+            datasets_snapshot = [(d.id, d.yolo_dir_path) for d in datasets]
+        else:
+            datasets_snapshot = []
 
         run.status = TrainingStatus.RUNNING
         run.celery_task_id = self.request.id
         run.started_at = datetime.utcnow()
-        datasets_snapshot = [(d.id, d.yolo_dir_path) for d in datasets]
 
-    from main import train_model
+    from core.main import train_model
 
     run_dir = settings.RUNS_DIR / "finetune" / model_type.value
     run_name = f"finetune_{model_type.value}_{training_run_id}"
@@ -144,14 +148,28 @@ def train_finetune(self, training_run_id: int) -> dict:
     merged_dir = settings.DATASETS_DIR / f"merged_{model_type.value}_{training_run_id}"
 
     try:
-        with get_session() as session:
-            datasets = [session.get(Dataset, did) for did, _ in datasets_snapshot]
+        import os
+        os.chdir(Path(__file__).parent.parent)  # ensure CWD = ml-engine/ so YOLO writes runs/ there
 
-        yaml_path = _merge_datasets(datasets, merged_dir, model_type)
-        total_train = len(list((merged_dir / "train" / "images").glob("*.jpg")))
-        total_val   = len(list((merged_dir / "val"   / "images").glob("*.jpg")))
+        if not datasets_snapshot:
+            # No custom datasets — fine-tune on the same pre-built merged Kaggle folder as baseline
+            yaml_path = settings.KAGGLE_CACHE_DIR / "merged" / model_type.value / "dataset.yaml"
+            if not yaml_path.exists():
+                raise FileNotFoundError(f"Pre-built merged dataset not found: {yaml_path}")
+            logger.info(f"[{self.request.id}] [{model_type.value}] Fine-tuning on merged Kaggle dataset: {yaml_path}")
+        elif len(datasets_snapshot) == 1:
+            ds_id, ds_yolo_dir = datasets_snapshot[0]
+            candidate = Path(ds_yolo_dir) / "dataset.yaml"
+            yaml_path = candidate if candidate.exists() else _merge_datasets(datasets_snapshot, merged_dir, model_type)
+        else:
+            yaml_path = _merge_datasets(datasets_snapshot, merged_dir, model_type)
+
+        dataset_root = yaml_path.parent
+        total_train = len(list((dataset_root / "train" / "images").glob("*.jpg")))
+        total_val   = len(list((dataset_root / "val"   / "images").glob("*.jpg")))
         logger.info(
-            f"[{self.request.id}] [{model_type.value}] Merged {len(datasets)} datasets: "
+            f"[{self.request.id}] [{model_type.value}] Dataset ready "
+            f"({'merged Kaggle' if not datasets_snapshot else f'{len(datasets_snapshot)} custom dataset(s)'}): "
             f"train={total_train}  val={total_val}"
         )
 
@@ -165,6 +183,10 @@ def train_finetune(self, training_run_id: int) -> dict:
             name=run_name,
             weights=baseline_weights,
             resume=False,
+            extra_callbacks=dict(zip(
+                ("on_train_epoch_start", "on_fit_epoch_end"),
+                _make_epoch_callbacks(training_run_id, settings.YOLO_EPOCHS_FINETUNE),
+            )),
         )
 
         if not weights_path.exists():
@@ -191,7 +213,7 @@ def train_finetune(self, training_run_id: int) -> dict:
             "model_type": model_type.value,
             "weights_path": str(weights_path),
             "metrics": metrics,
-            "datasets_used": len(datasets),
+            "datasets_used": len(datasets_snapshot),
         }
 
     except Exception as exc:
@@ -203,3 +225,59 @@ def train_finetune(self, training_run_id: int) -> dict:
                 run.error_message = str(exc)[:2000]
                 run.completed_at = datetime.utcnow()
         raise
+
+
+if __name__ == "__main__":
+    import sys
+    import os
+    import logging as _logging
+
+    _logging.basicConfig(level=_logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+
+    if len(sys.argv) < 2:
+        print("Usage: python tasks/train_finetune.py <MODEL_TYPE>")
+        print("  MODEL_TYPE: AIRCRAFT | VEHICLE | PERSONNEL | GENERAL")
+        sys.exit(1)
+
+    _model_type = ModelType(sys.argv[1].upper())
+
+    # Find latest weights: prefer previous finetune, fall back to baseline
+    def _latest_weights_for(model: ModelType):
+        for stage in ("finetune", "baseline"):
+            runs_dir = settings.RUNS_DIR / stage / model.value
+            if not runs_dir.exists():
+                continue
+            candidates = sorted(
+                (d for d in runs_dir.iterdir() if d.is_dir()),
+                key=lambda d: int(d.name.rsplit("_", 1)[-1]) if d.name.rsplit("_", 1)[-1].isdigit() else 0,
+                reverse=True,
+            )
+            for run_dir in candidates:
+                w = run_dir / "weights" / "best.pt"
+                if w.exists():
+                    return str(w)
+        return None
+
+    _weights = _latest_weights_for(_model_type)
+    if not _weights:
+        print(f"ERROR: no baseline weights found for {_model_type.value} — run baseline first")
+        sys.exit(1)
+
+    print(f"Model:   {_model_type.value}")
+    print(f"Weights: {_weights}")
+
+    with get_session() as _session:
+        _run = TrainingRun(
+            stage=TrainingStage.FINETUNE,
+            model_type=_model_type,
+            status=TrainingStatus.QUEUED,
+            baseline_weights=_weights,
+            created_at=datetime.utcnow(),
+        )
+        _session.add(_run)
+        _session.flush()
+        _run_id = _run.id
+        print(f"Created TrainingRun id={_run_id}")
+
+    os.chdir(Path(__file__).parent.parent)
+    train_finetune.run(training_run_id=_run_id)
