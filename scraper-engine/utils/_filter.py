@@ -19,7 +19,7 @@ _AIRCRAFT = [
     "mi-35", "uh-60", "black hawk", "ah-64", "apache", "aircraft", "aviation",
     "plane", "su-24", "su-25", "su-27", "su-30", "su-34", "su-35", "mig-29",
     "mig-31", "f-16", "a-50", "il-22", "tu-22", "tu-95", "tu-160",
-    "glide bomb", "kab", "fab-500", "fab-1500", "fab-3000",
+    "cruise missile", "glide bomb", "kab", "fab-500", "fab-1500", "fab-3000",
     # MOVED TARGET DRONES HERE:
     "shahed", "geran", "lancet", "orlan", "bayraktar", "tb2", "switchblade", 
     "leleka", "valkyrie", "puma", "poseidon", "shark", "zala", "supercam",
@@ -55,10 +55,10 @@ _ARTILLERY_AIR_DEFENSE = [
 ]
 
 _NAVAL_MARINE = [
-    "ship", "boat", "vessel", "usv", "sea drone", "magura", "magura v5", 
-    "sea baby", "landing ship", "ropucha", "tapir", "corvette", "frigate", 
-    "submarine", "kilo class", "buyan", "karakurt", "slava class", "moskva", 
-    "raptor", "patrol boat", "bk-16"
+    "ship", "boat", "vessel", "usv", "sea drone", "naval drone", "hovercraft",
+    "aircraft carrier", "magura", "magura v5", "sea baby", "landing ship", "ropucha", "tapir",
+    "corvette", "frigate", "submarine", "kilo class", "buyan", "karakurt",
+    "slava class", "moskva", "raptor", "patrol boat", "bk-16"
 ]
 
 _LOGISTICS_VEHICLES = [

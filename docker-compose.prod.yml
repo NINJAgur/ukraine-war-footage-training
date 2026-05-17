@@ -1,0 +1,161 @@
+# docker-compose.prod.yml — GCP production deployment
+#
+# All services run in Docker; ml-worker uses GPU via NVIDIA Container Toolkit.
+# Named volumes — no host bind-mounts.
+#
+# Usage:
+#   docker compose -f docker-compose.prod.yml up -d
+#   docker compose -f docker-compose.prod.yml down
+
+services:
+
+  # ── Infrastructure ────────────────────────────────────────────────────
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ukraine_footage
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ukraine_footage"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Scraper Engine ────────────────────────────────────────────────────
+
+  scraper-worker:
+    build:
+      context: .
+      dockerfile: scraper-engine/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_SYNC_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/ukraine_footage
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+    command: celery -A celery_app worker -Q default --loglevel=info --concurrency=4
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - scraper_media:/app/scraper-engine/media
+
+  scraper-beat:
+    build:
+      context: .
+      dockerfile: scraper-engine/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_SYNC_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/ukraine_footage
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+    command: celery -A celery_app beat --loglevel=info
+    depends_on:
+      - scraper-worker
+
+  # ── ML Engine ─────────────────────────────────────────────────────────
+
+  ml-worker:
+    build:
+      context: .
+      dockerfile: ml-engine/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_SYNC_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/ukraine_footage
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+    command: celery -A celery_app worker -Q gpu --loglevel=info --concurrency=1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - scraper_media:/app/scraper-engine/media:ro
+      - ml_media:/app/ml-engine/media
+      - ml_runs:/app/ml-engine/runs
+      - ml_checkpoints:/checkpoints
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  ml-beat:
+    build:
+      context: .
+      dockerfile: ml-engine/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_SYNC_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/ukraine_footage
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+    command: celery -A celery_app beat --loglevel=info
+    depends_on:
+      - ml-worker
+
+  # ── Web Application ───────────────────────────────────────────────────
+
+  backend:
+    build:
+      context: .
+      dockerfile: web-app/backend/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD}@postgres:5432/ukraine_footage
+      DATABASE_SYNC_URL: postgresql+psycopg2://postgres:${POSTGRES_PASSWORD}@postgres:5432/ukraine_footage
+      REDIS_URL: redis://redis:6379/0
+      CORS_ORIGINS: ${CORS_ORIGINS}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ml_media:/app/ml-engine/media:ro
+
+  frontend:
+    build:
+      context: .
+      dockerfile: web-app/frontend/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  redis_data:
+  scraper_media:
+  ml_media:
+  ml_runs:
+  ml_checkpoints:

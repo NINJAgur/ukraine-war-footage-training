@@ -185,6 +185,9 @@ Slash commands in `.claude/commands/` wire up the `agents/` domain docs. Invoke 
 | `/research-webapp` | Before new web-app features | `agents/web-app/research.md` |
 | `/research-ml` | Before new ML features | `agents/ml-pipeline/research.md` |
 | `/research-scraper` | Before new scraper features | `agents/ingestion/research.md` |
+| `/research-deploy` | Before new infra/cloud changes | `agents/cloud-deploy/research.md` |
+| `/review-deploy` | Docker Compose + Dockerfile review | `agents/cloud-deploy/review.md` |
+| `/qa-deploy` | Production deployment health check | `agents/cloud-deploy/qa.md` |
 
 ### When to spawn (demand criteria)
 

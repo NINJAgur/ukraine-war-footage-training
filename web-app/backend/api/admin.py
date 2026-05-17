@@ -119,17 +119,11 @@ async def start_training(
                 status_code=400,
                 detail=f"No completed baseline run found for {body.model_type.value} — run BASELINE first",
             )
-        from pathlib import Path
-        if not Path(baseline.weights_path).exists():
-            raise HTTPException(
-                status_code=400,
-                detail=f"Baseline weights missing on disk: {baseline.weights_path}",
-            )
-
     run = TrainingRun(
         stage=body.stage,
         model_type=body.model_type,
         status=TrainingStatus.QUEUED,
+        baseline_weights=baseline.weights_path if body.stage == TrainingStage.FINETUNE else None,
         created_at=datetime.utcnow(),
     )
     db.add(run)
@@ -139,5 +133,6 @@ async def start_training(
         task_name,
         kwargs={"training_run_id": run.id},
         queue="gpu",
+        ignore_result=True,
     )
     return {"task_id": task.id, "training_run_id": run.id, "status": "QUEUED"}

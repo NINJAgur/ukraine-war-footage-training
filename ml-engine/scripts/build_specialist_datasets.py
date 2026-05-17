@@ -211,6 +211,12 @@ def build_model_dataset(model_name: str, out_root: Path) -> Tuple[int, int]:
                 raw_text = lbl_src.read_text() if (lbl_src and lbl_src.exists()) else ""
                 label_text, classes_present = _remap_lines(raw_text, class_map)
 
+                # Specialist models: drop annotation lines for other classes
+                if required_class is not None:
+                    filtered = [l for l in label_text.splitlines() if l.strip() and int(l.split()[0]) == required_class]
+                    label_text = "\n".join(filtered) + ("\n" if filtered else "")
+                    classes_present = {required_class} if filtered else set()
+
                 if required_class is not None and required_class not in classes_present:
                     skipped += 1
                     continue

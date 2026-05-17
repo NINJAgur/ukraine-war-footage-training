@@ -1,6 +1,6 @@
 # PROJECT_PLAN.md — Ukraine Combat Footage Web Application
 > **Source of Truth** — All phases, structure, and decisions are tracked here.
-> Last updated: 2026-05-10
+> Last updated: 2026-05-17 (dataset rebuild + training cycle update)
 
 ---
 
@@ -115,8 +115,8 @@ An automated, full-stack web application that:
 | **Scraping** | `yt-dlp` + Funker530 REST API + GeoConfirmed REST API + Kaggle API |
 | **Async Queue** | Celery + Redis (broker + result backend) |
 | **ML** | Ultralytics YOLOv8 + PyTorch (`torch+cu121`) + OpenCV |
-| **Containers** | Docker + Docker Compose w/ NVIDIA runtime **(Phase 4 only)** |
-| **DevOps** | GitHub Actions + GCP (GCS, Compute Engine) |
+| **Containers** | Docker + Docker Compose (scraper/backend/frontend in Docker Desktop; ml-engine runs natively) |
+| **DevOps** | Oracle Cloud Always Free (CPU services) + Vast.ai GPU on-demand (~$27/mo) |
 
 ---
 
@@ -188,7 +188,8 @@ yolo-training-template/                  ← monorepo root
 ├── PROJECT_PLAN.md                      ← THIS FILE — source of truth
 ├── CLAUDE.md                            ← Claude Code persistent system prompt
 ├── .env                                 ← environment variables (gitignored)
-├── docker-compose.yml                   ← orchestrates all services
+├── docker-compose.yml                   ← local dev stack (scraper + backend + frontend; no ml-worker)
+├── docker-compose.prod.yml              ← Oracle Cloud deploy (CPU services only)
 │
 ├── .claude/                             ← Claude Code agentic workspace
 │   └── settings.json                    ← permissions, hooks, MCP config
@@ -202,10 +203,14 @@ yolo-training-template/                  ← monorepo root
 │   │   ├── research.md
 │   │   ├── qa.md
 │   │   └── review.md
-│   └── web-app/
-│       ├── research.md
-│       ├── qa.md
-│       └── review.md
+│   ├── web-app/
+│   │   ├── research.md
+│   │   ├── qa.md
+│   │   └── review.md
+│   └── cloud-deploy/
+│       ├── research.md                  ← Oracle+Vast.ai architecture, env vars
+│       ├── review.md                    ← Docker Compose + Dockerfile review checklist
+│       └── qa.md                        ← production health verification commands
 │
 ├── rules/                               ← enforced coding standards per domain
 │   ├── vue3-rules.md
@@ -456,26 +461,29 @@ yolo-training-template/                  ← monorepo root
 | `rupankarmajumdar/amad-5` | 5 | 32,529 | 5-class remap → nc=3 (civilians skipped); fresh download 2026-05-14 |
 | **TOTAL** | | **164,386** | Source files never modified — remapping in build script only |
 
-#### Per-Model Merged Dataset (post-filter counts, 2026-05-14 rebuild)
+#### Per-Model Merged Dataset (post-filter counts, 2026-05-17 rebuild — specialist label filter applied)
+
+> **Critical fix (2026-05-17):** `build_specialist_datasets.py` had a bug — specialist datasets included annotation lines from all remapped classes, not just the target class. Fixed: label text is filtered to target class only before writing. All 4 datasets rebuilt clean.
 
 | Model | Source Datasets | Train | Val |
 |---|---|---|---|
 | **AIRCRAFT** | mihprofi, shakedlevnat, nzigulic, piterfm, rookieengg, rawsi18 | 65,557 | 9,382 |
 | **VEHICLE** | kiit-mita, nzigulic, piterfm, rawsi18, amad-5 | 56,440 | 6,638 |
 | **PERSONNEL** | kiit-mita, rawsi18, amad-5 | 10,962 | 1,302 |
-| **GENERAL** | all 8 | 144,466 | 19,920 |
+| **GENERAL** | all 8 | 144,466 | ~19,920 |
 
 #### Step 2 — Train specialists (8 Kaggle datasets as corpus)
 
-- [x] **2.36** Run `test_baseline_train.py --model-type AIRCRAFT --epochs 10 --keep` — mAP50=0.9269 @ epoch 10 (run 13, 83K images) ✅ ⚠️ stale — retraining needed on clean merged/
-- [x] **2.36b** `ml-engine/scripts/aircraft_pipeline.py` — scrape→validate→annotate pipeline; `validate_clip()` in `core/inference.py` (generic, any model); detection-rate gate (≥15% frames with detections, 30 samples); 4 annotated MP4s produced (2 Funker530, 2 GeoConfirmed: Mi-28 hit 67%, Shahed building strike 17%)
-- [x] **2.37** Run `test_baseline_train.py --model-type VEHICLE --epochs 10 --keep` — mAP50=0.8712 @ epoch 10 (run 25, 86,945 images) ✅ ⚠️ stale — retraining needed on clean merged/
-- [x] **2.38** Run `test_baseline_train.py --model-type PERSONNEL --epochs 10 --keep` — mAP50=0.780 @ epoch 10 (run 29, 8,433 images) ✅ ⚠️ stale — retraining needed on clean merged/ (expected run ~59)
+- [x] **2.36** Run `test_baseline_train.py --model-type AIRCRAFT --epochs 10 --keep` — mAP50=0.929 @ epoch 10 (run 13, 83K images) ✅
+- [x] **2.36b** AIRCRAFT finetune cycle 1 — mAP50=0.968 @ epoch 8 (run 68, 65,557 train / 9,382 val) ✅
+- [x] **2.36c** `ml-engine/scripts/aircraft_pipeline.py` — scrape→validate→annotate pipeline; `validate_clip()` in `core/inference.py` (generic, any model); detection-rate gate (≥10% frames at conf=0.25, 30 samples)
+- [x] **2.37** Run `test_baseline_train.py --model-type VEHICLE --epochs 10 --keep` — mAP50=0.871 @ epoch 10 (run 25, 56,440 train / 6,638 val) ✅
+- [x] **2.38** Run `test_baseline_train.py --model-type PERSONNEL --epochs 10 --keep` — mAP50=0.780 @ epoch 10 (run 29, contaminated dataset — kept as reference); clean rerun pending after 2026-05-17 dataset rebuild
 - [x] **2.39** All 3 specialists evaluated: all mAP50 > 0.4 ✅
 
 #### Step 3 — Train generalist
 
-- [x] **2.40** Run `test_baseline_train.py --model-type GENERAL --epochs 10 --keep` — mAP50=0.784 @ epoch 10 (run 30, 175K images) ✅ ⚠️ stale — retraining needed on clean merged/
+- [x] **2.40** Run `test_baseline_train.py --model-type GENERAL --epochs 10 --keep` — mAP50=0.784 @ epoch 10 (run 30, 144,466 train / 19,920 val) ✅
 
 #### Step 4 — Tests
 
@@ -565,24 +573,44 @@ yolo-training-template/                  ← monorepo root
 
 ### Phase 4 — Cloud & DevOps
 
-- [x] **4.1** Install Docker Desktop + NVIDIA Container Toolkit
-- [x] **4.2** Write production Dockerfiles for all services (scraper, ml-engine, backend, frontend)
-- [x] **4.3** Write production `docker-compose.yml` (all services, named volumes, ml-beat added)
-- [x] **4.3b** `.dockerignore` — exclude all data/weights; `entrypoint.sh` downloads GDINO + YOLO base weights on cold start
-- [x] **4.3c** `setup_datasets.sh` — one-time Kaggle download + merge into specialist folders
-- [x] **4.3d** `core/storage.py` — real GCS upload for annotated MP4s when `STORAGE_MODE=remote`; replaces dead stub in all 4 pipeline scripts + `annotate_clips.py`
-- [x] **4.3e** Fine-tune pipeline: fixed GDINO/YOLO pipeline conflict (clips stay DOWNLOADED after GDINO); `_maybe_trigger_finetune` now triggers all 4 models
-  - **Training strategy:** baseline(10 epochs) + 4 fine-tune cycles(10 epochs each) = **50 total epochs per model**
-  - `YOLO_FINETUNE_MAX_CYCLES=4` in config; `_trigger_model_finetune` counts DONE fine-tune runs and stops at 4
-  - Each fine-tune loads the best existing weights, so epochs are cumulative: 10→20→30→40→50
-- [x] **4.3f** Inference box labels: `infer_video_multi_model` now uses `model.names[cls_id]` for each box label (was hardcoded to model name, e.g. "GENERAL")
-- [x] **4.3g** Docker pre-flight fixes: `JWT_SECRET` field alignment, `init_db()` on startup for all 3 services, GDINO config path resolved via installed package, Playwright removed from scraper-engine (unused)
-- [ ] **4.4** Docker Desktop smoke test — `docker compose up --build`, verify all 7 services healthy, scrape + annotate one clip end-to-end
-- [ ] **4.5** Write `infra/gcp/main.tf`
-- [ ] **4.6** Write `.github/workflows/ci.yml`
-- [ ] **4.7** Write `.github/workflows/deploy.yml`
-- [ ] **4.8** Configure GCS CORS + bucket ACL for public video serving
-- [ ] **4.9** End-to-end smoke test on GCP
+#### 4a — Docker Local Stack ✅
+- [x] **4.1** `docker-compose.yml` restructured — local dev only (no ml-worker); scraper/backend/frontend + postgres/redis; bind-mounts for scraper + ml media
+- [x] **4.1b** Write production Dockerfiles for all services (scraper, ml-engine, backend, frontend); `entrypoint.sh` downloads GDINO + YOLO base weights on cold start; `setup_datasets.sh` for fresh-machine Kaggle download
+- [x] **4.1c** `core/storage.py` — GCS upload stub (replaces dead stub); `STORAGE_MODE=remote` flag
+- [x] **4.1d** Fine-tune pipeline: `_maybe_trigger_finetune` triggers all 4 models; `YOLO_FINETUNE_MAX_CYCLES=4`; each cycle loads best existing weights (cumulative: 10→20→30→40→50 epochs)
+- [x] **4.1e** Inference box labels: `infer_video_multi_model` uses `model.names[cls_id]` per box (was hardcoded model name)
+- [x] **4.1f** Docker pre-flight fixes: `JWT_SECRET` alignment, `init_db()` on startup, GDINO config path via installed package, Playwright removed from scraper-engine
+- [x] **4.2** All 5 Docker services healthy in Docker Desktop (scraper-worker, scraper-beat, backend, frontend, postgres, redis); scraper-beat scheduling daily scrapes via Celery Beat
+
+#### 4b — Pipeline Hardening ✅
+- [x] **4.3** Container path resolution: `_resolve_path()` in all 4 pipeline scripts + `annotate_clips.py`; maps `/app/scraper-engine/media/` → Windows host path via `REPO_ROOT / rel`
+- [x] **4.4** Annotated output date fix: all pipelines use `clip.published_at` for folder date (not annotation date)
+- [x] **4.5** NMS overdraw fix: `iou=0.45` in all `model()` calls in `inference.py` (was defaulting to 0.7)
+- [x] **4.6** Content filter updates: "police" → civilian negative keyword in `_filter.py`
+- [x] **4.7** ArchiveSection limit: main page archive capped at 10 most-recent clips (full `/archive` unaffected)
+- [x] **4.8** May 12–15 range scrape + annotation: 38 clips scraped, 35 downloaded, all annotated; 58 ANNOTATED total in DB
+- [x] **4.9** Video compression + faststart: FFmpeg CRF 28 + `-movflags +faststart` in `inference.py`; all 67 existing annotated files re-encoded (~5× size reduction)
+- [x] **4.10** Full-screen box filter: boxes covering >90% of frame area discarded in `infer_video_multi_model`
+- [x] **4.11** `_latest_weights` finetune preference: all 4 pipeline scripts now check `runs/finetune/` before `runs/baseline/`; uses highest-numbered run dir with `best.pt`
+- [x] **4.12** `_filter.py` updates: cruise missile → AIRCRAFT scoring; hovercraft/naval drone/aircraft carrier → NAVAL_MARINE category
+
+#### 4c — Training Cycle ✅/🔄
+- [x] **4.13a** AIRCRAFT finetune cycle 1: mAP50=0.968 (run 68, 10 epochs from run 13, best @ epoch 8) ✅
+- [x] **4.13b** PERSONNEL baseline cleanup: bad runs 57, 58, 59, 69, 70 deleted from DB + disk; run 29 (mAP50=0.780) intact as reference
+- [x] **4.13c** `build_specialist_datasets.py` specialist label filter bug fix: label text now filtered to target class only before writing; PERSONNEL dataset verified clean (train: {2: 22244}, val: {2: 2160})
+- [x] **4.13d** All 4 merged datasets rebuilt with fix (2026-05-17): AIRCRAFT (65,557/9,382), VEHICLE (56,440/6,638), GENERAL (~144K/~20K), PERSONNEL (10,962/1,302)
+- [ ] **4.13e** New PERSONNEL baseline — 10 epochs cold start from yolov8m.pt on clean merged dataset (pending dataset rebuild completion)
+- [ ] **4.13f** VEHICLE finetune cycle 1 — 50 epochs from baseline_VEHICLE_25 on clean merged dataset
+- [ ] **4.13g** GENERAL finetune cycle 1 — 50 epochs from baseline_GENERAL_30 on clean merged dataset
+
+#### 4d — Cloud Deployment Architecture ✅/❌
+- [x] **4.14** Deployment architecture decided: Oracle Always Free (4 ARM OCPUs, 24GB RAM, $0/mo) for CPU services + Vast.ai on-demand GPU worker (~$0.30/hr RTX 4090, ~$27/mo)
+- [x] **4.15** Cloud deploy agent files: `agents/cloud-deploy/{research,review,qa}.md` + `.claude/commands/{research,review,qa}-deploy.md`; commands wired in `CLAUDE.md`
+- [x] **4.16** `docker-compose.prod.yml` created — Oracle deploy config (no ml-worker; named volumes; env vars via secrets)
+- [ ] **4.17** Oracle Cloud account setup + ARM instance provisioning (A1.Flex, 4 OCPUs / 24GB)
+- [ ] **4.18** Deploy `docker-compose.prod.yml` to Oracle (scraper + backend + frontend + postgres + redis)
+- [ ] **4.19** Vast.ai GPU worker setup: Docker image with ml-engine; connect to Oracle Redis via public IP + Tailscale or SSH tunnel
+- [ ] **4.20** HTTPS: Cloudflare proxy or Certbot (deferred)
 
 ---
 
@@ -630,23 +658,25 @@ docker compose exec ml-worker celery -A celery_app call tasks.annotate_clips.ann
 
 ## 6. Next Steps
 
-Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 ✅, Phase 4 ⏳
+Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 ✅, Phase 4 🔄
 
-**All baseline training complete:**
-- AIRCRAFT: mAP50=0.929 (run 13, 83K images) ⚠️ stale — needs retraining on clean merged/ (65,557 train)
-- VEHICLE:  mAP50=0.871 (run 25, 87K images) ⚠️ stale — needs retraining on clean merged/ (56,440 train)
-- PERSONNEL: mAP50=0.780 (run 29, 8,433 images) ⚠️ stale — needs retraining on clean merged/ (10,962 train, expected run ~59)
-- GENERAL:  mAP50=0.784 (run 30, 175K images) ⚠️ stale — needs retraining on clean merged/ (144,466 train)
-- Merged datasets rebuilt clean 2026-05-14: all 8 datasets fresh, in-memory class remapping, 0 bad class IDs verified
+**Training status (2026-05-17):**
+- AIRCRAFT: mAP50=0.929 (baseline run 13) → mAP50=0.968 (finetune run 68) ✅
+- VEHICLE: mAP50=0.871 (baseline run 25) — finetune pending (4c.4.13f)
+- PERSONNEL: run 29 (0.780) on contaminated data; clean rerun pending after 2026-05-17 rebuild (4c.4.13e)
+- GENERAL: mAP50=0.784 (baseline run 30) — finetune pending (4c.4.13g)
+- Dataset rebuild (2026-05-17): all 4 merged datasets being rebuilt with specialist label filter fix; AIRCRAFT (65,557/9,382) + VEHICLE (56,440/6,638) done; GENERAL in progress
 
-**Web app — complete:**
+**Web app — complete ✅:**
 - Public feed, archive, submit, hero, ticker, ML cards — all wired to live DB/API
 - Admin panel: clips table (APPROVE + DECLINE + preview modal), training runs table, train buttons, live WebSocket progress bar
-- Auth: JWT login/logout, router guard
-- Stats: `images_labeled` = 175,627 (GENERAL count), `clips_annotated` = 25
-- Integration smoke test: 25 ANNOTATED clips in DB, all pipelines verified end-to-end
+- Video pipeline: FFmpeg CRF 28 + faststart; 90% full-screen box filter; multi-model inference
+- 58 ANNOTATED clips in DB; all 4 pipelines verified end-to-end
 
-**Phase 4 (in progress):** Dockerfiles + docker-compose done ✅. Docker Desktop local smoke test next (4.4), then GCP Terraform + CI/CD. Strategy: get the full stack flawless on Docker Desktop before any cloud deployment.
+**Cloud deployment — in progress 🔄:**
+- Architecture: Oracle Always Free (CPU, $0) + Vast.ai GPU on-demand (~$27/mo)
+- `docker-compose.prod.yml` ready; agent files + slash commands created
+- Immediate next: Oracle account + ARM instance provisioning (4d.4.17)
 
 ---
 

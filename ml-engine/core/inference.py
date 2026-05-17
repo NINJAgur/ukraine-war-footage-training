@@ -166,6 +166,8 @@ def infer_video_multi_model(
     total  = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     cap.release()
 
+    frame_area = width * height
+
     # Pass 1-N: run each model, collect {frame_idx: [(box, conf, cls_name)]}
     all_detections: list[dict] = []   # one dict per model
     for model, label_prefix, _ in models_info:
@@ -180,6 +182,8 @@ def infer_video_multi_model(
             dets = []
             for box in results[0].boxes:
                 x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+                if (x2 - x1) * (y2 - y1) > 0.90 * frame_area:
+                    continue  # skip full-screen false positives
                 conf_val = float(box.conf[0])
                 cls_name = model.names[int(box.cls[0])]
                 dets.append((x1, y1, x2, y2, conf_val, cls_name))
@@ -218,7 +222,9 @@ def infer_video_multi_model(
     import subprocess
     subprocess.run(
         ["ffmpeg", "-y", "-i", temp_path,
-         "-vcodec", "libx264", "-acodec", "aac", "-strict", "experimental",
+         "-vcodec", "libx264", "-crf", "28", "-preset", "fast",
+         "-movflags", "+faststart",
+         "-acodec", "aac", "-strict", "experimental",
          save_path],
         check=True,
     )

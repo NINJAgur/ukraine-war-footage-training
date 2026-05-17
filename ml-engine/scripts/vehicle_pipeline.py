@@ -46,20 +46,21 @@ def _resolve_path(raw: str) -> Path:
 
 
 def _latest_weights(model_name: str) -> Path:
-    """Return best.pt from the highest-numbered run that has it."""
-    runs_dir = ML_ENGINE_DIR / "runs/baseline" / model_name
-    if not runs_dir.exists():
-        raise FileNotFoundError(f"No runs directory: {runs_dir}")
-    candidates = sorted(
-        (d for d in runs_dir.iterdir() if d.is_dir()),
-        key=lambda d: int(d.name.rsplit("_", 1)[-1]) if d.name.rsplit("_", 1)[-1].isdigit() else 0,
-        reverse=True,
-    )
-    for run_dir in candidates:
-        w = run_dir / "weights" / "best.pt"
-        if w.exists():
-            return w
-    raise FileNotFoundError(f"No best.pt found in {runs_dir}")
+    """Return best.pt — prefers finetune runs, falls back to baseline."""
+    for stage in ("finetune", "baseline"):
+        runs_dir = ML_ENGINE_DIR / "runs" / stage / model_name
+        if not runs_dir.exists():
+            continue
+        candidates = sorted(
+            (d for d in runs_dir.iterdir() if d.is_dir()),
+            key=lambda d: int(d.name.rsplit("_", 1)[-1]) if d.name.rsplit("_", 1)[-1].isdigit() else 0,
+            reverse=True,
+        )
+        for run_dir in candidates:
+            w = run_dir / "weights" / "best.pt"
+            if w.exists():
+                return w
+    raise FileNotFoundError(f"No best.pt found for {model_name}")
 
 
 
