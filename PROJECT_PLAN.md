@@ -1,6 +1,6 @@
 # PROJECT_PLAN.md — Ukraine Combat Footage Web Application
 > **Source of Truth** — All phases, structure, and decisions are tracked here.
-> Last updated: 2026-05-17 (dataset rebuild + training cycle update)
+> Last updated: 2026-05-18
 
 ---
 
@@ -599,9 +599,10 @@ yolo-training-template/                  ← monorepo root
 - [x] **4.13b** PERSONNEL baseline cleanup: bad runs 57, 58, 59, 69, 70 deleted from DB + disk; run 29 (mAP50=0.780) intact as reference
 - [x] **4.13c** `build_specialist_datasets.py` specialist label filter bug fix: label text now filtered to target class only before writing; PERSONNEL dataset verified clean (train: {2: 22244}, val: {2: 2160})
 - [x] **4.13d** All 4 merged datasets rebuilt with fix (2026-05-17): AIRCRAFT (65,557/9,382), VEHICLE (56,440/6,638), GENERAL (~144K/~20K), PERSONNEL (10,962/1,302)
-- [ ] **4.13e** New PERSONNEL baseline — 10 epochs cold start from yolov8m.pt on clean merged dataset (pending dataset rebuild completion)
-- [ ] **4.13f** VEHICLE finetune cycle 1 — 50 epochs from baseline_VEHICLE_25 on clean merged dataset
-- [ ] **4.13g** GENERAL finetune cycle 1 — 50 epochs from baseline_GENERAL_30 on clean merged dataset
+- [x] **4.13e** VEHICLE finetune cycle 1 — mAP50=0.901 (run 73, 10 epochs from run 25, clean merged dataset, 56,440 train) ✅
+- [x] **4.13f** PERSONNEL finetune cycle 1 — mAP50=0.872 (run 74, 20 epochs from run 29, clean merged dataset, 10,962 train) ✅
+- [x] **4.13g** `annotate_clips.py` raw file deletion bug fix: success path was missing `raw_path.unlink()` (rejection paths had it; acceptance path did not) ✅
+- [ ] **4.13h** GENERAL finetune cycle 1 — 50 epochs from baseline_GENERAL_30 on clean merged dataset
 
 #### 4d — Cloud Deployment Architecture ✅/❌
 - [x] **4.14** Deployment architecture decided: Oracle Always Free (4 ARM OCPUs, 24GB RAM, $0/mo) for CPU services + Vast.ai on-demand GPU worker (~$0.30/hr RTX 4090, ~$27/mo)
@@ -660,12 +661,12 @@ docker compose exec ml-worker celery -A celery_app call tasks.annotate_clips.ann
 
 Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 ✅, Phase 4 🔄
 
-**Training status (2026-05-17):**
+**Training status (2026-05-18):**
 - AIRCRAFT: mAP50=0.929 (baseline run 13) → mAP50=0.968 (finetune run 68) ✅
-- VEHICLE: mAP50=0.871 (baseline run 25) — finetune pending (4c.4.13f)
-- PERSONNEL: run 29 (0.780) on contaminated data; clean rerun pending after 2026-05-17 rebuild (4c.4.13e)
-- GENERAL: mAP50=0.784 (baseline run 30) — finetune pending (4c.4.13g)
-- Dataset rebuild (2026-05-17): all 4 merged datasets being rebuilt with specialist label filter fix; AIRCRAFT (65,557/9,382) + VEHICLE (56,440/6,638) done; GENERAL in progress
+- VEHICLE: mAP50=0.871 (baseline run 25) → mAP50=0.901 (finetune run 73, 10 epochs) ✅
+- PERSONNEL: mAP50=0.780 (baseline run 29) → mAP50=0.872 (finetune run 74, 20 epochs on clean dataset) ✅
+- GENERAL: mAP50=0.784 (baseline run 30) — finetune pending
+- All 4 merged datasets clean (2026-05-17 rebuild): AIRCRAFT (65,557/9,382), VEHICLE (56,440/6,638), PERSONNEL (10,962/1,302), GENERAL (144,466/19,920)
 
 **Web app — complete ✅:**
 - Public feed, archive, submit, hero, ticker, ML cards — all wired to live DB/API

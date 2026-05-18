@@ -168,6 +168,9 @@ def _run_specialist(
             clip.det_class = model_name
             clip.status = ClipStatus.ANNOTATED
             clip.updated_at = datetime.now(timezone.utc)
+            if raw_path.exists():
+                raw_path.unlink()
+                clip.file_path = None
             accepted += 1
             logger.info(f"[{model_name}] clip_id={clip.id} ANNOTATED dets={clip_dets}")
 
@@ -253,6 +256,9 @@ def _run_general() -> dict:
             clip.det_class = "GENERAL"
             clip.status = ClipStatus.ANNOTATED
             clip.updated_at = datetime.now(timezone.utc)
+            if raw_path.exists():
+                raw_path.unlink()
+                clip.file_path = None
             accepted += 1
             logger.info(f"[GENERAL] clip_id={clip.id} ANNOTATED dets={clip_dets}")
 

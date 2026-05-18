@@ -44,9 +44,9 @@
 1. Dataset prep: all 8 datasets downloaded fresh; class remapping applied in build script (source files never modified); nzigulic + rookieengg reorganized to standard train/val layout ✅
 2. Merged folders rebuilt clean via `scripts/build_specialist_datasets.py` ✅ — in-memory class remapping + specialist class filter; verified 0 bad class IDs across all models
 3. AIRCRAFT baseline: mAP50=0.929 @ 10 epochs, run 13 ✅ (stale — retraining needed on clean merged/, 65,557 train images)
-4. VEHICLE baseline: mAP50=0.871 @ 10 epochs, run 25 ✅ (stale — retraining needed on clean merged/, 56,440 train images)
-5. PERSONNEL baseline: mAP50=0.780 @ 10 epochs, run 29 ✅ (stale — retraining needed on clean merged/, 10,962 train images, expected run ~59)
-6. GENERAL: mAP50=0.784 @ 10 epochs, run 30 ✅ (stale — retraining needed on clean merged/, 144,466 train images)
+4. VEHICLE: baseline run 25 (0.871) → finetune run 73 (0.901, 10 epochs on clean merged/, 56,440 train) ✅
+5. PERSONNEL: baseline run 29 (0.780) → finetune run 74 (0.872, 20 epochs on clean merged/, 10,962 train) ✅
+6. GENERAL: mAP50=0.784 @ 10 epochs, run 30 ✅ (finetune pending)
 
 **Scraped dataset pipeline (GDINO → fine-tune):**
 
