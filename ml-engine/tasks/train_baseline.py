@@ -85,7 +85,7 @@ def _make_epoch_callbacks(run_id: int, total_epochs: int):
     max_retries=1,
     default_retry_delay=300,
 )
-def train_baseline(self, training_run_id: int, weights: str = None) -> dict:
+def train_baseline(self, training_run_id: int) -> dict:
     """
     Stage 1 baseline training. Reads pre-built merged dataset for this run's
     model_type; trains YOLOv8m; saves best.pt.  Idempotent via DB status check.
@@ -141,7 +141,6 @@ def train_baseline(self, training_run_id: int, weights: str = None) -> dict:
             device=settings.GPU_DEVICE,
             project=str(run_dir),
             name=run_name,
-            weights=weights,
             resume=False,
             extra_callbacks=dict(zip(
                 ("on_train_epoch_start", "on_fit_epoch_end"),

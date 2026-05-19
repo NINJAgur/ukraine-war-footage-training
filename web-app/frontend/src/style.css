@@ -504,9 +504,9 @@ section { padding: clamp(60px, 8vw, 100px) clamp(20px, 5vw, 80px); }
   will-change: width, height, clip-path;
   cursor: pointer;
   transition:
-    width 1.3s cubic-bezier(0.25,0,0,1),
-    height 1.4s cubic-bezier(0.25,0,0,1) 0.05s,
-    clip-path 1.3s cubic-bezier(0.25,0,0,1),
+    width 1.95s cubic-bezier(0.25,0,0,1),
+    height 2.1s cubic-bezier(0.25,0,0,1) 0.075s,
+    clip-path 1.95s cubic-bezier(0.25,0,0,1),
     border-color 0.3s ease;
 }
 

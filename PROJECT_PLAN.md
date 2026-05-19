@@ -1,6 +1,6 @@
 # PROJECT_PLAN.md — Ukraine Combat Footage Web Application
 > **Source of Truth** — All phases, structure, and decisions are tracked here.
-> Last updated: 2026-05-18
+> Last updated: 2026-05-19
 
 ---
 
@@ -474,7 +474,7 @@ yolo-training-template/                  ← monorepo root
 
 #### Step 2 — Train specialists (8 Kaggle datasets as corpus)
 
-- [x] **2.36** Run `test_baseline_train.py --model-type AIRCRAFT --epochs 10 --keep` — mAP50=0.929 @ epoch 10 (run 13, 83K images) ✅
+- [x] **2.36** Run `test_baseline_train.py --model-type AIRCRAFT --epochs 10 --keep` — mAP50=0.929 @ epoch 10 (run 13, 65,557 train / 9,382 val) ✅
 - [x] **2.36b** AIRCRAFT finetune cycle 1 — mAP50=0.968 @ epoch 8 (run 68, 65,557 train / 9,382 val) ✅
 - [x] **2.36c** `ml-engine/scripts/aircraft_pipeline.py` — scrape→validate→annotate pipeline; `validate_clip()` in `core/inference.py` (generic, any model); detection-rate gate (≥10% frames at conf=0.25, 30 samples)
 - [x] **2.37** Run `test_baseline_train.py --model-type VEHICLE --epochs 10 --keep` — mAP50=0.871 @ epoch 10 (run 25, 56,440 train / 6,638 val) ✅
@@ -592,7 +592,10 @@ yolo-training-template/                  ← monorepo root
 - [x] **4.9** Video compression + faststart: FFmpeg CRF 28 + `-movflags +faststart` in `inference.py`; all 67 existing annotated files re-encoded (~5× size reduction)
 - [x] **4.10** Full-screen box filter: boxes covering >90% of frame area discarded in `infer_video_multi_model`
 - [x] **4.11** `_latest_weights` finetune preference: all 4 pipeline scripts now check `runs/finetune/` before `runs/baseline/`; uses highest-numbered run dir with `best.pt`
-- [x] **4.12** `_filter.py` updates: cruise missile → AIRCRAFT scoring; hovercraft/naval drone/aircraft carrier → NAVAL_MARINE category
+- [x] **4.12** `_filter.py` updates: cruise missile → AIRCRAFT scoring; hovercraft/naval drone/aircraft carrier → NAVAL_MARINE category; "vehicle"/"vehicles" added to logistics keywords
+- [x] **4.12b** `docker-compose.yml` REDIS_URL fix: scraper tasks called `redis.from_url(settings.REDIS_URL)` directly; docker-compose was overriding `CELERY_BROKER_URL` but not `REDIS_URL`; both scraper services now set `REDIS_URL: redis://redis:6379/0`
+- [x] **4.12c** Backend stats query fix: two separate `await db.execute()` calls in `get_stats` caused idle-in-transaction pool exhaustion → 504; merged into single query with FILTER label
+- [x] **4.12d** Frontend: hero section canvas (detection box overlay) suppressed when video is present; ML card expansion animation slowed 50% (1.3s → 1.95s/2.1s)
 
 #### 4c — Training Cycle ✅/🔄
 - [x] **4.13a** AIRCRAFT finetune cycle 1: mAP50=0.968 (run 68, 10 epochs from run 13, best @ epoch 8) ✅
@@ -602,7 +605,10 @@ yolo-training-template/                  ← monorepo root
 - [x] **4.13e** VEHICLE finetune cycle 1 — mAP50=0.901 (run 73, 10 epochs from run 25, clean merged dataset, 56,440 train) ✅
 - [x] **4.13f** PERSONNEL finetune cycle 1 — mAP50=0.872 (run 74, 20 epochs from run 29, clean merged dataset, 10,962 train) ✅
 - [x] **4.13g** `annotate_clips.py` raw file deletion bug fix: success path was missing `raw_path.unlink()` (rejection paths had it; acceptance path did not) ✅
-- [ ] **4.13h** GENERAL finetune cycle 1 — 50 epochs from baseline_GENERAL_30 on clean merged dataset
+- [x] **4.13h-i** `train_baseline.py` hardened: removed `--weights` option entirely; baseline always cold-starts from `yolov8m.pt`; `train_finetune.py __main__` gets `--epochs` arg
+- [x] **4.13j** VEHICLE finetune cycle 2 — mAP50=0.904 (run 76, 10 epochs from run 73, 56,440 train) ✅
+- [x] **4.13k** PERSONNEL finetune cycle 2 — mAP50=0.873 (run 75, 10 epochs from run 74, 10,962 train) ✅
+- [ ] **4.13l** GENERAL finetune cycle 1 — 50 epochs from baseline_GENERAL_30 on clean merged dataset
 
 #### 4d — Cloud Deployment Architecture ✅/❌
 - [x] **4.14** Deployment architecture decided: Oracle Always Free (4 ARM OCPUs, 24GB RAM, $0/mo) for CPU services + Vast.ai on-demand GPU worker (~$0.30/hr RTX 4090, ~$27/mo)
@@ -672,7 +678,8 @@ Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 ✅, Phase 4 🔄
 - Public feed, archive, submit, hero, ticker, ML cards — all wired to live DB/API
 - Admin panel: clips table (APPROVE + DECLINE + preview modal), training runs table, train buttons, live WebSocket progress bar
 - Video pipeline: FFmpeg CRF 28 + faststart; 90% full-screen box filter; multi-model inference
-- 58 ANNOTATED clips in DB; all 4 pipelines verified end-to-end
+- 62 ANNOTATED clips in DB; all 4 pipelines verified end-to-end
+- 11 clips DOWNLOADED (2026-05-19 scrape); `auto_label_batch` dispatched to GPU worker — GDINO labeling in progress
 
 **Cloud deployment — in progress 🔄:**
 - Architecture: Oracle Always Free (CPU, $0) + Vast.ai GPU on-demand (~$27/mo)

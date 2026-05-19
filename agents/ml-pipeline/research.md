@@ -76,10 +76,10 @@ All models use the same 3-class canonical vocabulary, aligned with `_filter.py` 
 
 | Model | Source Datasets | ~Images | Result |
 |-------|----------------|---------|--------|
-| AIRCRAFT | mihprofi, shakedlevnat, nzigulic, piterfm, rookieengg, rawsi18 | ~115K | mAP50=0.929 ✅ run 13 |
-| VEHICLE | kiit-mita, nzigulic, piterfm, rawsi18, amad-5 | ~87K | mAP50=0.871 ✅ run 25 |
-| PERSONNEL | kiit-mita, rawsi18, amad-5 | ~25K | ⏳ next |
-| GENERAL | all 8 | ~175K | ⏳ after all specialists |
+| AIRCRAFT | mihprofi, shakedlevnat, nzigulic, piterfm, rookieengg, rawsi18 | 65,557 | mAP50=0.929 ✅ run 13 → finetune 0.968 run 68 |
+| VEHICLE | kiit-mita, nzigulic, piterfm, rawsi18, amad-5 | 56,440 | mAP50=0.871 ✅ run 25 → finetune 0.901 run 73 |
+| PERSONNEL | kiit-mita, rawsi18, amad-5 | 10,962 | mAP50=0.780 ✅ run 29 → finetune 0.872 run 74 |
+| GENERAL | all 8 | 144,466 | mAP50=0.784 ✅ run 30 → finetune pending |
 
 Weights land at: `runs/baseline/<MODEL_TYPE>/baseline_<MODEL>_<run_id>/weights/best.pt`
 

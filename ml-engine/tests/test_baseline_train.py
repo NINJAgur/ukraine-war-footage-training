@@ -38,8 +38,6 @@ def main():
                         help="Keep weights and DB row after test")
     parser.add_argument("--purge-outputs", action="store_true",
                         help="Delete weights dir AND DB row after test")
-    parser.add_argument("--weights", default=None,
-                        help="Starting weights path (e.g. runs/baseline/AIRCRAFT/.../best.pt)")
     args = parser.parse_args()
 
     model_type = ModelType(args.model_type)
@@ -67,7 +65,7 @@ def main():
 
         # Call task directly (bypasses Celery)
         from tasks.train_baseline import train_baseline
-        result = train_baseline(training_run_id=run_id, weights=args.weights)
+        result = train_baseline(training_run_id=run_id)
         logger.info(f"Result: {result}")
 
         assert result["status"] == "done", f"Expected done, got {result['status']}"

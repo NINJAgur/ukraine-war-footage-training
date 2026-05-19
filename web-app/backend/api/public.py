@@ -198,11 +198,14 @@ def _dir_gb(base: Path) -> float:
 
 @router.get("/stats")
 async def get_stats(db: AsyncSession = Depends(get_db)) -> dict:
-    clips_total = (await db.execute(
-        select(func.count()).where(Clip.status == ClipStatus.ANNOTATED)
-    )).scalar() or 0
-
-    annotated_mp4s = len(list(_ANNOTATED_DIR.glob("**/*.mp4"))) if _ANNOTATED_DIR.exists() else 0
+    rows = (await db.execute(
+        select(
+            func.count(Clip.id).label("total"),
+            func.count(Clip.id).filter(Clip.status == ClipStatus.ANNOTATED).label("annotated"),
+        )
+    )).one()
+    clips_total   = rows.total    or 0
+    annotated_mp4s = rows.annotated or 0
     raw_gb      = _dir_gb(_RAW_DIR)      if _RAW_DIR.exists()      else 0.0
     annotated_gb = _dir_gb(_ANNOTATED_DIR) if _ANNOTATED_DIR.exists() else 0.0
     storage_gb  = round(raw_gb + annotated_gb, 2)

@@ -234,12 +234,14 @@ if __name__ == "__main__":
 
     _logging.basicConfig(level=_logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
-    if len(sys.argv) < 2:
-        print("Usage: python tasks/train_finetune.py <MODEL_TYPE>")
-        print("  MODEL_TYPE: AIRCRAFT | VEHICLE | PERSONNEL | GENERAL")
-        sys.exit(1)
-
-    _model_type = ModelType(sys.argv[1].upper())
+    import argparse as _argparse
+    _parser = _argparse.ArgumentParser()
+    _parser.add_argument("model_type", choices=[m.value for m in ModelType])
+    _parser.add_argument("--epochs", type=int, default=None)
+    _args = _parser.parse_args()
+    _model_type = ModelType(_args.model_type.upper())
+    if _args.epochs:
+        settings.YOLO_EPOCHS_FINETUNE = _args.epochs
 
     # Find latest weights: prefer previous finetune, fall back to baseline
     def _latest_weights_for(model: ModelType):

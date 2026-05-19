@@ -10,7 +10,7 @@
 
     <div style="position:absolute;inset:0;z-index:0;pointer-events:none">
       <div class="hero-ml-bg">
-        <MLCard :cat="GENERALIST_CAT" :hero-mode="true" />
+        <MLCard :cat="heroCat" :hero-mode="true" />
       </div>
     </div>
 
@@ -53,9 +53,10 @@
 import MLCard from './MLCard.vue'
 import { GENERALIST_CAT } from '../data/constants.js'
 
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 
 const heroVideoSrc = ref(null)
+const heroCat = computed(() => heroVideoSrc.value ? { ...GENERALIST_CAT, videoSrc: heroVideoSrc.value } : GENERALIST_CAT)
 const stats = ref([
   { num: '—', label: 'Clips archived' },
   { num: '—', label: 'Training images' },

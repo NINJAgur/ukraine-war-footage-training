@@ -40,10 +40,10 @@ YOLOv8 model retraining.
 
 | Model | mAP50 | Images | Run | Status |
 |-------|-------|--------|-----|--------|
-| AIRCRAFT | 0.929 | 83K | 13 | ✅ |
-| VEHICLE | 0.871 | 87K | 25 | ✅ |
-| PERSONNEL | 0.780 | 8,433 | 29 | ✅ |
-| GENERAL | 0.784 | 175K | 30 | ✅ |
+| AIRCRAFT | 0.929 | 65,557 | 13 | ✅ |
+| VEHICLE | 0.871 | 56,440 | 25 | ✅ |
+| PERSONNEL | 0.780 | 10,962 | 29 | ✅ |
+| GENERAL | 0.784 | 144,466 | 30 | ✅ |
 
 ## Dataset Inventory (8 Kaggle datasets)
 

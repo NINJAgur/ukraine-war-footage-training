@@ -62,8 +62,8 @@ _NAVAL_MARINE = [
 ]
 
 _LOGISTICS_VEHICLES = [
-    "truck", "uaz", "bukhanka", "scooby-doo van", "loaf", "kamaz", "ural", 
-    "desertcross", "technical", "supply truck", "logistics truck", "quad"
+    "truck", "uaz", "bukhanka", "scooby-doo van", "loaf", "kamaz", "ural",
+    "desertcross", "technical", "supply truck", "logistics truck", "quad", "vehicle", "vehicles"
 ]
 
 _INFANTRY_WEAPONS = [
