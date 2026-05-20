@@ -22,7 +22,7 @@ start_service "scraper-engine beat" "$ROOT/scraper-engine" \
     "celery -A celery_app beat --loglevel=info"
 
 start_service "ml-engine worker" "$ROOT/ml-engine" \
-    "celery -A celery_app worker -Q gpu --loglevel=info --concurrency=1"
+    "celery -A celery_app worker -Q gpu --pool=solo --concurrency=1 --loglevel=info"
 
 start_service "ml-engine beat" "$ROOT/ml-engine" \
     "celery -A celery_app beat --loglevel=info"

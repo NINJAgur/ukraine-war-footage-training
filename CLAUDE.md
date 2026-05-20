@@ -50,28 +50,39 @@
 
 **Scraped dataset pipeline (GDINO → fine-tune):**
 
-Each scrape run produces a dated YOLO dataset:
+One `Dataset` DB record per clip. Disk layout:
 ```
 ml-engine/media/scraped_datasets/
-    frames/                     ← transient scratch; one subfolder per video hash
-        <url_hash>/             ← extracted frames (deleted after GDINO finishes)
-    7.5.25/                     ← dated scrape run — permanent YOLO dataset
-        train/images/
-        train/labels/
-        val/images/
-        val/labels/
-    8.5.25/                     ← next run
-        ...
+    frames/<url_hash>/          ← transient scratch; deleted immediately after GDINO runs
+    <url_hash>/                 ← per-clip YOLO dataset (LABELED → PACKAGED → TRAINED → deleted after all runs done)
+        train/images/           ← frames with detections (empty-label frames removed post-remap)
+        train/labels/           ← canonical nc=3 labels
+        data.yaml
+    merged_AIRCRAFT_<run_id>/   ← specialist merged dir; created at train time, deleted after training
+    merged_VEHICLE_<run_id>/
+    ...
 ```
-Pipeline per scrape batch:
-1. Download N videos → `scraper-engine/media/<source>/` (funker530/ or geoconfirmed/)
-2. Package all videos → `scraper-engine/media/combined/`
-3. Feed each video to GDINO → frames land in `ml-engine/media/scraped_datasets/frames/<hash>/`
-4. GDINO labels generated → move images + labels into `scraped_datasets/<date>/train/`
-5. Delete `frames/<hash>/` and `combined/` — both wiped after annotation
-6. Production: also wipes funker530/ and geoconfirmed/ contents after annotation
 
-Fine-tune uses accumulated dated folders as additional training data on top of Kaggle baseline.
+Pipeline per scrape batch (Beat schedule: GDINO @ 02:00, annotate @ 04:00 UTC):
+1. `auto_label_batch` → finds DOWNLOADED clips without a Dataset → dispatches `auto_label_clip` × N
+2. `auto_label_clip` per clip:
+   - Extract frames → `frames/<hash>/`
+   - Run GDINO → labels remapped to canonical nc=3 (0=AIRCRAFT, 1=VEHICLE, 2=PERSONNEL)
+   - Delete `frames/<hash>/` immediately
+   - Remove frames where label is empty after remap
+   - Create `Dataset(LABELED)` record with `detected_model_types` (which classes appeared)
+   - Dispatch `package_dataset`
+3. `package_dataset` → 80/20 train/val split → `Dataset(PACKAGED)`
+4. `annotate_clips` → YOLO inference on raw .mp4 → annotated video → deletes raw file → `_maybe_trigger_finetune`
+5. `_maybe_trigger_finetune` → if ≥5 PACKAGED/TRAINED datasets per model type → `TrainingRun(QUEUED)` → dispatches `train_finetune` × 4
+6. `train_finetune` per model:
+   - Builds `merged_<MODEL>_<run_id>/` from clip datasets, **specialist-filtered** (AIRCRAFT gets only class-0 labels; frames with no class-0 labels excluded)
+   - Creates `combined_data.yaml` pointing at both `kaggle_datasets/merged/<MODEL>/` AND `merged_<MODEL>_<run_id>/` — YOLO reads both without copying Kaggle files
+   - Trains → saves weights → marks datasets TRAINED
+   - Deletes clip dataset dirs (once no other queued run references them)
+   - Deletes `merged_<MODEL>_<run_id>/`
+
+**Specialist filtering (CRITICAL):** `_class_remap` in `train_finetune.py` returns `{0:0}` for AIRCRAFT, `{1:1}` for VEHICLE, `{2:2}` for PERSONNEL, `{0:0,1:1,2:2}` for GENERAL. Frames where no label survives the filter are excluded from the merged dir. Matches `build_specialist_datasets.py` exactly.
 
 **Scraper media structure:**
 ```
@@ -112,7 +123,7 @@ All services import via re-export stubs (`ml-engine/db/models.py`, `scraper-engi
 - **GPU:** RTX 3060 Ti, 8GB VRAM — `batch_size≤8`, always `device='cuda:0'`
 - **FastAPI:** `async def` routes, `AsyncSession`, Pydantic v2 `ConfigDict`
 - **Vue 3:** `<script setup>` only, Pinia, Tailwind dark theme (slate/zinc + `#22c55e` / `#ef4444`)
-- **Celery:** `gpu` queue, `concurrency=1`, all tasks idempotent, Redis broker
+- **Celery:** `gpu` queue, `concurrency=1`, all tasks idempotent, Redis broker; GPU worker on Windows requires `--pool=solo` (billiard prefork fails with WinError 5/6)
 - **DB:** PostgreSQL 16, `ukraine_footage`, SQLAlchemy 2.x
 - **Scraping:** Funker530 REST + GeoConfirmed REST + yt-dlp, SHA256 url_hash dedup
 - **See** `rules/` for coding standards: `celery-rules.md`, `fastapi-rules.md`, `vue3-rules.md`, `yolo-rules.md`

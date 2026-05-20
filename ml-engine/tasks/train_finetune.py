@@ -30,10 +30,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "core"))
 logger = logging.getLogger(__name__)
 
 def _class_remap(model_type: ModelType) -> dict[int, int]:
-    # All 4 models share the same 3-class canonical vocab (nc=3).
-    # Auto-labeled datasets already have canonical IDs 0-2 on disk.
-    # Identity mapping; anything outside 0-2 is dropped by _filter_label_file.
-    return {0: 0, 1: 1, 2: 2}
+    if model_type == ModelType.AIRCRAFT:
+        return {0: 0}
+    if model_type == ModelType.VEHICLE:
+        return {1: 1}
+    if model_type == ModelType.PERSONNEL:
+        return {2: 2}
+    return {0: 0, 1: 1, 2: 2}  # GENERAL
 
 
 def _filter_label_file(src: Path, dst: Path, remap: dict[int, int]) -> int:
@@ -70,11 +73,15 @@ def _merge_datasets(
     for ds_id, ds_yolo_dir in datasets:
         ds_dir = Path(ds_yolo_dir)
         for split in ("train", "val"):
-            for src_img in (ds_dir / split / "images").glob("*.jpg"):
-                shutil.copy2(src_img, merged_dir / split / "images" / f"{ds_id}_{src_img.name}")
             for src_lbl in (ds_dir / split / "labels").glob("*.txt"):
                 dst_lbl = merged_dir / split / "labels" / f"{ds_id}_{src_lbl.name}"
-                _filter_label_file(src_lbl, dst_lbl, remap)
+                kept = _filter_label_file(src_lbl, dst_lbl, remap)
+                if kept == 0:
+                    dst_lbl.unlink(missing_ok=True)
+                    continue
+                src_img = ds_dir / split / "images" / (src_lbl.stem + ".jpg")
+                if src_img.exists():
+                    shutil.copy2(src_img, merged_dir / split / "images" / f"{ds_id}_{src_img.name}")
 
     yaml_path = merged_dir / "data.yaml"
     with open(yaml_path, "w") as f:
@@ -129,7 +136,7 @@ def train_finetune(self, training_run_id: int) -> dict:
             datasets = session.query(Dataset).filter(Dataset.id.in_(dataset_ids)).all()
             if not datasets:
                 raise ValueError(f"No datasets found for ids: {dataset_ids}")
-            not_packaged = [d.id for d in datasets if d.status != DatasetStatus.PACKAGED]
+            not_packaged = [d.id for d in datasets if d.status not in (DatasetStatus.PACKAGED, DatasetStatus.TRAINED)]
             if not_packaged:
                 raise ValueError(f"Datasets not yet packaged: {not_packaged}")
             datasets_snapshot = [(d.id, d.yolo_dir_path) for d in datasets]
@@ -151,27 +158,52 @@ def train_finetune(self, training_run_id: int) -> dict:
         import os
         os.chdir(Path(__file__).parent.parent)  # ensure CWD = ml-engine/ so YOLO writes runs/ there
 
+        kaggle_dir = settings.KAGGLE_CACHE_DIR / "merged" / model_type.value
         if not datasets_snapshot:
-            # No custom datasets — fine-tune on the same pre-built merged Kaggle folder as baseline
-            yaml_path = settings.KAGGLE_CACHE_DIR / "merged" / model_type.value / "dataset.yaml"
+            # No custom datasets — fine-tune on Kaggle merged only
+            yaml_path = kaggle_dir / "dataset.yaml"
             if not yaml_path.exists():
                 raise FileNotFoundError(f"Pre-built merged dataset not found: {yaml_path}")
-            logger.info(f"[{self.request.id}] [{model_type.value}] Fine-tuning on merged Kaggle dataset: {yaml_path}")
-        elif len(datasets_snapshot) == 1:
-            ds_id, ds_yolo_dir = datasets_snapshot[0]
-            candidate = Path(ds_yolo_dir) / "dataset.yaml"
-            yaml_path = candidate if candidate.exists() else _merge_datasets(datasets_snapshot, merged_dir, model_type)
+            total_train = len(list((kaggle_dir / "train" / "images").glob("*.jpg")))
+            total_val   = len(list((kaggle_dir / "val"   / "images").glob("*.jpg")))
+            logger.info(
+                f"[{self.request.id}] [{model_type.value}] Fine-tuning on Kaggle only: "
+                f"train={total_train} val={total_val}"
+            )
         else:
-            yaml_path = _merge_datasets(datasets_snapshot, merged_dir, model_type)
-
-        dataset_root = yaml_path.parent
-        total_train = len(list((dataset_root / "train" / "images").glob("*.jpg")))
-        total_val   = len(list((dataset_root / "val"   / "images").glob("*.jpg")))
-        logger.info(
-            f"[{self.request.id}] [{model_type.value}] Dataset ready "
-            f"({'merged Kaggle' if not datasets_snapshot else f'{len(datasets_snapshot)} custom dataset(s)'}): "
-            f"train={total_train}  val={total_val}"
-        )
+            # Merge scraped datasets, then combine with Kaggle via multi-path YAML
+            _merge_datasets(datasets_snapshot, merged_dir, model_type)
+            class_names = settings.MODEL_CLASSES[model_type.value]
+            yaml_path = merged_dir / "combined_data.yaml"
+            with open(yaml_path, "w") as f:
+                yaml.dump(
+                    {
+                        "train": [
+                            str(kaggle_dir / "train" / "images"),
+                            str(merged_dir / "train" / "images"),
+                        ],
+                        "val": [
+                            str(kaggle_dir / "val" / "images"),
+                            str(merged_dir / "val" / "images"),
+                        ],
+                        "nc": len(class_names),
+                        "names": class_names,
+                    },
+                    f,
+                    default_flow_style=False,
+                )
+            total_train = (
+                len(list((kaggle_dir / "train" / "images").glob("*.jpg")))
+                + len(list((merged_dir / "train" / "images").glob("*.jpg")))
+            )
+            total_val = (
+                len(list((kaggle_dir / "val" / "images").glob("*.jpg")))
+                + len(list((merged_dir / "val" / "images").glob("*.jpg")))
+            )
+            logger.info(
+                f"[{self.request.id}] [{model_type.value}] Fine-tuning on Kaggle + "
+                f"{len(datasets_snapshot)} scraped datasets: train={total_train} val={total_val}"
+            )
 
         results = train_model(
             yaml_path=str(yaml_path),
@@ -203,6 +235,26 @@ def train_finetune(self, training_run_id: int) -> dict:
                 ds = session.get(Dataset, did)
                 if ds:
                     ds.status = DatasetStatus.TRAINED
+            session.flush()
+
+            # Clip dataset dirs safe to delete: no other queued/running run references them
+            active_runs = session.query(TrainingRun).filter(
+                TrainingRun.status.in_([TrainingStatus.QUEUED, TrainingStatus.RUNNING])
+            ).all()
+            pending_ds_ids = {did for r in active_runs for did in (r.dataset_ids or [])}
+            clip_dirs_to_delete = [
+                Path(dyolo) for did, dyolo in datasets_snapshot
+                if did not in pending_ds_ids and dyolo
+            ]
+
+        for d in clip_dirs_to_delete:
+            if d.exists():
+                shutil.rmtree(d, ignore_errors=True)
+                logger.info(f"[{self.request.id}] Deleted clip dataset dir {d.name}")
+
+        if merged_dir.exists():
+            shutil.rmtree(merged_dir, ignore_errors=True)
+            logger.info(f"[{self.request.id}] Deleted merged dir {merged_dir.name}")
 
         logger.info(
             f"[{self.request.id}] [{model_type.value}] Fine-tune done. Weights: {weights_path}"

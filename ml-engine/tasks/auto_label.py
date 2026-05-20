@@ -10,6 +10,7 @@ Pipeline:
                                                         dispatch package_dataset
 """
 import logging
+import shutil
 import sys
 from pathlib import Path
 from typing import Dict
@@ -24,9 +25,23 @@ from db.models import Clip, ClipStatus, Dataset, DatasetStatus
 _RUNNABLE_STATUSES = {ClipStatus.DOWNLOADED}
 from db.session import get_session
 
+_PROJECT_DIR = Path(__file__).resolve().parents[2]
+
 sys.path.insert(0, str(Path(__file__).parent.parent / "core"))
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_clip_path(raw: str) -> Path:
+    p = Path(raw)
+    if p.exists():
+        return p
+    normalized = raw.replace("\\", "/")
+    marker = "scraper-engine/media/"
+    if marker in normalized:
+        rel = normalized[normalized.index(marker):]
+        return _PROJECT_DIR / rel
+    return p
 
 CLASSES = [c.strip() for c in settings.GDINO_TEXT_PROMPT.replace(",", ".").split(".") if c.strip()]
 
@@ -95,9 +110,11 @@ def auto_label_clip(self, clip_id: int) -> dict:
         if existing_ds:
             logger.info(f"[{self.request.id}] Clip {clip_id} already has dataset {existing_ds.id} — skipping")
             return {"status": "skipped", "clip_id": clip_id, "reason": "dataset_exists"}
-        if not clip.file_path or not Path(clip.file_path).exists():
+        if not clip.file_path:
+            raise ValueError(f"Clip {clip_id} has no file_path in DB")
+        video_path = _resolve_clip_path(clip.file_path)
+        if not video_path.exists():
             raise ValueError(f"Clip {clip_id} has no file on disk: {clip.file_path}")
-        video_path = Path(clip.file_path)
         clip_hash = clip.url_hash[:12]
         clip_title = (clip.title or f"clip_{clip_id}")[:60]
 
@@ -125,6 +142,8 @@ def auto_label_clip(self, clip_id: int) -> dict:
         box_threshold=settings.GDINO_BOX_THRESHOLD,
         text_threshold=settings.GDINO_TEXT_THRESHOLD,
     )
+    shutil.rmtree(frames_dir, ignore_errors=True)
+    logger.info(f"[{self.request.id}] Deleted frames scratch dir {frames_dir}")
 
     labels_dir = dataset_dir / "train" / "labels"
     yaml_path = dataset_dir / "data.yaml"
@@ -143,6 +162,19 @@ def auto_label_clip(self, clip_id: int) -> dict:
         except Exception:
             pass
         lbl_path.write_text("\n".join(lines_out) + ("\n" if lines_out else ""))
+
+    # ── Remove frames with empty labels after remapping ───────────────
+    images_dir = dataset_dir / "train" / "images"
+    removed = 0
+    for lbl_path in list(labels_dir.glob("*.txt")):
+        if lbl_path.stat().st_size == 0:
+            img_path = images_dir / (lbl_path.stem + ".jpg")
+            lbl_path.unlink()
+            if img_path.exists():
+                img_path.unlink()
+            removed += 1
+    if removed:
+        logger.info(f"[{self.request.id}] Removed {removed} empty-label frames from dataset")
 
     with open(yaml_path, "w") as _f:
         _yaml.dump(

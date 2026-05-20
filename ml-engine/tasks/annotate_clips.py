@@ -302,7 +302,7 @@ def _trigger_model_finetune(model_type: ModelType) -> None:
 
         all_packaged = (
             session.query(Dataset)
-            .filter(Dataset.status == DatasetStatus.PACKAGED)
+            .filter(Dataset.status.in_([DatasetStatus.PACKAGED, DatasetStatus.TRAINED]))
             .all()
         )
 
