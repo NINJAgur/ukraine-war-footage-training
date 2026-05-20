@@ -102,13 +102,14 @@ def auto_label_clip(self, clip_id: int) -> dict:
             raise ValueError(f"Clip {clip_id} not found")
         if clip.status not in _RUNNABLE_STATUSES:
             logger.info(
-                f"[{self.request.id}] Clip {clip_id} status={clip.status} — skipping "
-                f"(already processed or in wrong state)"
+                f"[{self.request.id}] clip_id={clip_id}  -> SKIP: status={clip.status.value}"
             )
             return {"status": "skipped", "clip_id": clip_id, "reason": clip.status}
         existing_ds = session.query(Dataset).filter_by(clip_id=clip_id).first()
         if existing_ds:
-            logger.info(f"[{self.request.id}] Clip {clip_id} already has dataset {existing_ds.id} — skipping")
+            logger.info(
+                f"[{self.request.id}] clip_id={clip_id}  -> SKIP: dataset_id={existing_ds.id} already exists"
+            )
             return {"status": "skipped", "clip_id": clip_id, "reason": "dataset_exists"}
         if not clip.file_path:
             raise ValueError(f"Clip {clip_id} has no file_path in DB")
@@ -117,6 +118,12 @@ def auto_label_clip(self, clip_id: int) -> dict:
             raise ValueError(f"Clip {clip_id} has no file on disk: {clip.file_path}")
         clip_hash = clip.url_hash[:12]
         clip_title = (clip.title or f"clip_{clip_id}")[:60]
+        source = "funker530" if "funker530" in (clip.file_path or "") else "geoconfirmed"
+        logger.info(
+            f"[{self.request.id}] clip_id={clip_id}  source={source}  hash={clip_hash}  "
+            f"aircraft={clip.score_aircraft:.2f}  vehicle={clip.score_vehicle:.2f}  personnel={clip.score_personnel:.2f}\n"
+            f"    title: {clip_title}"
+        )
 
     # ── Extract frames ────────────────────────────────────────────────
     frames_dir = settings.FRAMES_DIR / clip_hash
@@ -166,6 +173,7 @@ def auto_label_clip(self, clip_id: int) -> dict:
     # ── Remove frames with empty labels after remapping ───────────────
     images_dir = dataset_dir / "train" / "images"
     removed = 0
+    class_box_counts: dict[int, int] = {0: 0, 1: 0, 2: 0}
     for lbl_path in list(labels_dir.glob("*.txt")):
         if lbl_path.stat().st_size == 0:
             img_path = images_dir / (lbl_path.stem + ".jpg")
@@ -173,6 +181,13 @@ def auto_label_clip(self, clip_id: int) -> dict:
             if img_path.exists():
                 img_path.unlink()
             removed += 1
+        else:
+            for line in lbl_path.read_text().splitlines():
+                parts = line.split()
+                if parts:
+                    cid = int(parts[0])
+                    if cid in class_box_counts:
+                        class_box_counts[cid] += 1
     if removed:
         logger.info(f"[{self.request.id}] Removed {removed} empty-label frames from dataset")
 
@@ -194,8 +209,8 @@ def auto_label_clip(self, clip_id: int) -> dict:
     )
 
     logger.info(
-        f"[{self.request.id}] GroundingDINO: {labeled_frames}/{frame_count} "
-        f"frames with detections (remapped to canonical nc=3)"
+        f"[{self.request.id}] GDINO: labeled={labeled_frames}/{frame_count} frames  "
+        f"aircraft={class_box_counts[0]}  vehicle={class_box_counts[1]}  personnel={class_box_counts[2]} boxes"
     )
 
     # ── Tag which model types appear in the labels ────────────────────
@@ -213,7 +228,7 @@ def auto_label_clip(self, clip_id: int) -> dict:
         except Exception:
             pass
     detected_model_types_list = sorted(detected_types)
-    logger.info(f"[{self.request.id}] Detected model types: {detected_model_types_list}")
+    logger.info(f"[{self.request.id}] detected_model_types={detected_model_types_list}")
 
     # ── Create Dataset record ─────────────────────────────────────────
     with get_session() as session:
@@ -232,7 +247,8 @@ def auto_label_clip(self, clip_id: int) -> dict:
         dataset_id = dataset.id
 
     logger.info(
-        f"[{self.request.id}] Dataset id={dataset_id} created for clip_id={clip_id} (clip stays DOWNLOADED)"
+        f"[{self.request.id}] clip_id={clip_id}  -> LABELED: dataset_id={dataset_id}  "
+        f"types={detected_model_types_list}  (clip stays DOWNLOADED)"
     )
 
     from tasks.package_dataset import package_dataset
@@ -272,11 +288,21 @@ def auto_label_batch(self) -> dict:
             .limit(_BATCH_SIZE)
             .all()
         )
-        clip_ids = [c.id for c in clips]
+        clip_snapshot = [
+            (c.id, c.title or f"clip_{c.id}", c.score_aircraft, c.score_vehicle, c.score_personnel)
+            for c in clips
+        ]
         # No status change — clips stay DOWNLOADED so annotate_clips can run YOLO on them
 
-    logger.info(f"[{self.request.id}] auto_label_batch dispatching {len(clip_ids)} clips")
-    for clip_id in clip_ids:
+    logger.info(f"[{self.request.id}] auto_label_batch: {len(clip_snapshot)} clips to dispatch")
+    for clip_id, title, sc_a, sc_v, sc_p in clip_snapshot:
+        logger.info(
+            f"[{self.request.id}]   clip_id={clip_id}  "
+            f"aircraft={sc_a:.2f}  vehicle={sc_v:.2f}  personnel={sc_p:.2f}\n"
+            f"    title: {title}"
+        )
         auto_label_clip.delay(clip_id=clip_id)
+
+    clip_ids = [c[0] for c in clip_snapshot]
 
     return {"dispatched": len(clip_ids), "clip_ids": clip_ids}

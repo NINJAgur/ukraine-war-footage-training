@@ -122,20 +122,28 @@ def _run_specialist(
             q = q.filter(score_attr >= getattr(Clip, col))
         candidates = q.limit(BATCH_SIZE).all()
         total = len(candidates)
-        logger.info(f"[{model_name}] {total} candidates")
+        logger.info(
+            f"[{model_name}] {total} candidates  weights={weights.name}"
+        )
 
         for clip in candidates:
             raw_path = _resolve_clip_path(clip.file_path)
+            title = clip.title or f"clip_{clip.id}"
+            logger.info(
+                f"[{model_name}] clip_id={clip.id}  "
+                f"aircraft={clip.score_aircraft:.2f}  vehicle={clip.score_vehicle:.2f}  personnel={clip.score_personnel:.2f}\n"
+                f"    title: {title}"
+            )
 
             if not raw_path.exists():
-                logger.warning(f"[{model_name}] clip_id={clip.id} file missing: {raw_path}")
+                logger.warning(f"[{model_name}]   -> ERROR: file missing: {raw_path}")
                 clip.status = ClipStatus.ERROR
                 errors += 1
                 continue
 
             passed, rate = validate_clip(model, raw_path, conf_thresh=CONF_THRESH, min_rate=MIN_RATE)
             if not passed:
-                logger.info(f"[{model_name}] clip_id={clip.id} REJECT rate={rate:.0%}")
+                logger.info(f"[{model_name}]   -> REJECT: validate rate={rate:.0%} < {MIN_RATE:.0%}")
                 if raw_path.exists():
                     raw_path.unlink()
                     clip.file_path = None
@@ -154,7 +162,7 @@ def _run_specialist(
             clip_dets = sum(det_counts.values())
 
             if clip_dets == 0:
-                logger.info(f"[{model_name}] clip_id={clip.id} REJECT zero detections in full pass")
+                logger.info(f"[{model_name}]   -> REJECT: zero detections in full inference pass")
                 if temp_out.exists():
                     temp_out.unlink()
                 if raw_path.exists():
@@ -172,7 +180,10 @@ def _run_specialist(
                 raw_path.unlink()
                 clip.file_path = None
             accepted += 1
-            logger.info(f"[{model_name}] clip_id={clip.id} ANNOTATED dets={clip_dets}")
+            logger.info(
+                f"[{model_name}]   -> ANNOTATED: dets={clip_dets}  "
+                f"file={Path(clip.mp4_path).name}"
+            )
 
         session.commit()
 
@@ -210,20 +221,28 @@ def _run_general() -> dict:
             .all()
         )
         total = len(candidates)
-        logger.info(f"[GENERAL] {total} candidates (leftovers from specialists)")
+        logger.info(
+            f"[GENERAL] {total} candidates (leftovers from specialists)  weights={weights.name}"
+        )
 
         for clip in candidates:
             raw_path = _resolve_clip_path(clip.file_path)
+            title = clip.title or f"clip_{clip.id}"
+            logger.info(
+                f"[GENERAL] clip_id={clip.id}  "
+                f"aircraft={clip.score_aircraft:.2f}  vehicle={clip.score_vehicle:.2f}  personnel={clip.score_personnel:.2f}\n"
+                f"    title: {title}"
+            )
 
             if not raw_path.exists():
-                logger.warning(f"[GENERAL] clip_id={clip.id} file missing: {raw_path}")
+                logger.warning(f"[GENERAL]   -> ERROR: file missing: {raw_path}")
                 clip.status = ClipStatus.ERROR
                 errors += 1
                 continue
 
             passed, rate = validate_clip(model, raw_path, conf_thresh=CONF_THRESH, min_rate=MIN_RATE)
             if not passed:
-                logger.info(f"[GENERAL] clip_id={clip.id} REJECT rate={rate:.0%}")
+                logger.info(f"[GENERAL]   -> REJECT: validate rate={rate:.0%} < {MIN_RATE:.0%}")
                 if raw_path.exists():
                     raw_path.unlink()
                     clip.file_path = None
@@ -242,7 +261,7 @@ def _run_general() -> dict:
             clip_dets = sum(det_counts.values())
 
             if clip_dets == 0:
-                logger.info(f"[GENERAL] clip_id={clip.id} REJECT zero detections in full pass")
+                logger.info(f"[GENERAL]   -> REJECT: zero detections in full inference pass")
                 if temp_out.exists():
                     temp_out.unlink()
                 if raw_path.exists():
@@ -260,7 +279,10 @@ def _run_general() -> dict:
                 raw_path.unlink()
                 clip.file_path = None
             accepted += 1
-            logger.info(f"[GENERAL] clip_id={clip.id} ANNOTATED dets={clip_dets}")
+            logger.info(
+                f"[GENERAL]   -> ANNOTATED: dets={clip_dets}  "
+                f"file={Path(clip.mp4_path).name}"
+            )
 
         session.commit()
 
@@ -284,8 +306,8 @@ def _trigger_model_finetune(model_type: ModelType) -> None:
         )
         if done_cycles >= FINETUNE_MAX_CYCLES:
             logger.info(
-                f"[finetune] {model_type.value}: max cycles reached "
-                f"({done_cycles}/{FINETUNE_MAX_CYCLES}) — 50 total epochs complete"
+                f"[finetune] {model_type.value}: -> SKIP: max cycles reached "
+                f"({done_cycles}/{FINETUNE_MAX_CYCLES})"
             )
             return
 
@@ -297,7 +319,10 @@ def _trigger_model_finetune(model_type: ModelType) -> None:
             .first()
         )
         if active:
-            logger.info(f"[finetune] {model_type.value} already active (run_id={active.id})")
+            logger.info(
+                f"[finetune] {model_type.value}: -> SKIP: run already active  "
+                f"run_id={active.id}  status={active.status.value}"
+            )
             return
 
         all_packaged = (
@@ -315,7 +340,10 @@ def _trigger_model_finetune(model_type: ModelType) -> None:
             ]
 
         if len(relevant) < FINETUNE_MIN_DATASETS:
-            logger.info(f"[finetune] {model_type.value}: {len(relevant)}/{FINETUNE_MIN_DATASETS} PACKAGED datasets")
+            logger.info(
+                f"[finetune] {model_type.value}: -> SKIP: only {len(relevant)}/{FINETUNE_MIN_DATASETS} "
+                f"PACKAGED/TRAINED datasets — threshold not met"
+            )
             return
 
         dataset_ids = [d.id for d in relevant]
@@ -323,7 +351,7 @@ def _trigger_model_finetune(model_type: ModelType) -> None:
             baseline_weights = str(_latest_weights(model_type.value))
         except FileNotFoundError:
             baseline_weights = None
-            logger.warning(f"[finetune] No {model_type.value} baseline weights — will use yolov8m.pt")
+            logger.warning(f"[finetune] {model_type.value}: no baseline weights found — will use yolov8m.pt")
 
         run = TrainingRun(
             stage=TrainingStage.FINETUNE,
@@ -338,7 +366,11 @@ def _trigger_model_finetune(model_type: ModelType) -> None:
 
     from tasks.train_finetune import train_finetune
     train_finetune.delay(training_run_id=run_id)
-    logger.info(f"[finetune] Dispatched {model_type.value} run_id={run_id} with {len(dataset_ids)} datasets")
+    logger.info(
+        f"[finetune] {model_type.value}: -> DISPATCH  run_id={run_id}  "
+        f"datasets={len(dataset_ids)}  ids={dataset_ids}\n"
+        f"    baseline_weights={Path(baseline_weights).name if baseline_weights else 'yolov8m.pt'}"
+    )
 
 
 @celery_app.task(

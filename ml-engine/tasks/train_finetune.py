@@ -119,7 +119,7 @@ def train_finetune(self, training_run_id: int) -> dict:
     Stage 2: merge class-filtered custom datasets, fine-tune from baseline.
     Idempotent via DB status check.
     """
-    logger.info(f"[{self.request.id}] train_finetune training_run_id={training_run_id}")
+    logger.info(f"[train_finetune] task_id={self.request.id}  training_run_id={training_run_id}")
 
     with get_session() as session:
         run = session.get(TrainingRun, training_run_id)
@@ -146,6 +146,11 @@ def train_finetune(self, training_run_id: int) -> dict:
         run.status = TrainingStatus.RUNNING
         run.celery_task_id = self.request.id
         run.started_at = datetime.utcnow()
+        logger.info(
+            f"[train_finetune] model={model_type.value}  datasets={len(dataset_ids)}  "
+            f"ids={dataset_ids}  epochs={settings.YOLO_EPOCHS_FINETUNE}\n"
+            f"    baseline_weights={baseline_weights}"
+        )
 
     from core.main import train_model
 
@@ -167,8 +172,7 @@ def train_finetune(self, training_run_id: int) -> dict:
             total_train = len(list((kaggle_dir / "train" / "images").glob("*.jpg")))
             total_val   = len(list((kaggle_dir / "val"   / "images").glob("*.jpg")))
             logger.info(
-                f"[{self.request.id}] [{model_type.value}] Fine-tuning on Kaggle only: "
-                f"train={total_train} val={total_val}"
+                f"[train_finetune] {model_type.value}: Kaggle only  train={total_train}  val={total_val}"
             )
         else:
             # Merge scraped datasets, then combine with Kaggle via multi-path YAML
@@ -201,8 +205,8 @@ def train_finetune(self, training_run_id: int) -> dict:
                 + len(list((merged_dir / "val" / "images").glob("*.jpg")))
             )
             logger.info(
-                f"[{self.request.id}] [{model_type.value}] Fine-tuning on Kaggle + "
-                f"{len(datasets_snapshot)} scraped datasets: train={total_train} val={total_val}"
+                f"[train_finetune] {model_type.value}: Kaggle + {len(datasets_snapshot)} scraped datasets  "
+                f"train={total_train}  val={total_val}"
             )
 
         results = train_model(
@@ -256,8 +260,11 @@ def train_finetune(self, training_run_id: int) -> dict:
             shutil.rmtree(merged_dir, ignore_errors=True)
             logger.info(f"[{self.request.id}] Deleted merged dir {merged_dir.name}")
 
+        map50 = metrics.get("metrics/mAP50(B)", metrics.get("mAP50(B)", 0.0))
         logger.info(
-            f"[{self.request.id}] [{model_type.value}] Fine-tune done. Weights: {weights_path}"
+            f"[train_finetune] {model_type.value}: -> DONE  run_id={training_run_id}  "
+            f"mAP50={map50:.3f}  datasets_used={len(datasets_snapshot)}\n"
+            f"    weights={weights_path}"
         )
         return {
             "status": "done",
@@ -269,7 +276,7 @@ def train_finetune(self, training_run_id: int) -> dict:
         }
 
     except Exception as exc:
-        logger.error(f"[{self.request.id}] [{model_type.value}] Fine-tune failed: {exc}")
+        logger.error(f"[train_finetune] {model_type.value}: -> ERROR  run_id={training_run_id}  {exc}")
         with get_session() as session:
             run = session.get(TrainingRun, training_run_id)
             if run:
