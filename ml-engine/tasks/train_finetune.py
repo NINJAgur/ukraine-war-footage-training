@@ -284,6 +284,10 @@ def train_finetune(self, training_run_id: int) -> dict:
         if merged_dir.exists():
             shutil.rmtree(merged_dir, ignore_errors=True)
             logger.info(f"[train_finetune] Deleted merged dir: {merged_dir.name}")
+        yolo_run_dir = run_dir / run_name
+        if yolo_run_dir.exists() and not weights_path.exists():
+            shutil.rmtree(yolo_run_dir, ignore_errors=True)
+            logger.info(f"[train_finetune] Deleted incomplete run dir: {run_name}")
 
 
 if __name__ == "__main__":
