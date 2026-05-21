@@ -177,6 +177,20 @@ def train_finetune(self, training_run_id: int) -> dict:
         else:
             # Merge scraped datasets, then combine with Kaggle via multi-path YAML
             _merge_datasets(datasets_snapshot, merged_dir, model_type)
+
+            # Delete per-clip dataset dirs immediately after merge — contents are now in merged_dir
+            with get_session() as session:
+                active_runs = session.query(TrainingRun).filter(
+                    TrainingRun.status.in_([TrainingStatus.QUEUED, TrainingStatus.RUNNING])
+                ).all()
+                pending_ds_ids = {did for r in active_runs for did in (r.dataset_ids or [])}
+            for did, dyolo in datasets_snapshot:
+                if did not in pending_ds_ids and dyolo:
+                    d = Path(dyolo)
+                    if d.exists():
+                        shutil.rmtree(d, ignore_errors=True)
+                        logger.info(f"[train_finetune] Deleted clip dataset dir {d.name}")
+
             class_names = settings.MODEL_CLASSES[model_type.value]
             yaml_path = merged_dir / "combined_data.yaml"
             with open(yaml_path, "w") as f:
@@ -241,25 +255,6 @@ def train_finetune(self, training_run_id: int) -> dict:
                     ds.status = DatasetStatus.TRAINED
             session.flush()
 
-            # Clip dataset dirs safe to delete: no other queued/running run references them
-            active_runs = session.query(TrainingRun).filter(
-                TrainingRun.status.in_([TrainingStatus.QUEUED, TrainingStatus.RUNNING])
-            ).all()
-            pending_ds_ids = {did for r in active_runs for did in (r.dataset_ids or [])}
-            clip_dirs_to_delete = [
-                Path(dyolo) for did, dyolo in datasets_snapshot
-                if did not in pending_ds_ids and dyolo
-            ]
-
-        for d in clip_dirs_to_delete:
-            if d.exists():
-                shutil.rmtree(d, ignore_errors=True)
-                logger.info(f"[{self.request.id}] Deleted clip dataset dir {d.name}")
-
-        if merged_dir.exists():
-            shutil.rmtree(merged_dir, ignore_errors=True)
-            logger.info(f"[{self.request.id}] Deleted merged dir {merged_dir.name}")
-
         map50 = metrics.get("metrics/mAP50(B)", metrics.get("mAP50(B)", 0.0))
         logger.info(
             f"[train_finetune] {model_type.value}: -> DONE  run_id={training_run_id}  "
@@ -284,6 +279,11 @@ def train_finetune(self, training_run_id: int) -> dict:
                 run.error_message = str(exc)[:2000]
                 run.completed_at = datetime.utcnow()
         raise
+
+    finally:
+        if merged_dir.exists():
+            shutil.rmtree(merged_dir, ignore_errors=True)
+            logger.info(f"[train_finetune] Deleted merged dir: {merged_dir.name}")
 
 
 if __name__ == "__main__":

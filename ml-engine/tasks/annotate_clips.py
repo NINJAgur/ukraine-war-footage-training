@@ -373,6 +373,35 @@ def _trigger_model_finetune(model_type: ModelType) -> None:
     )
 
 
+def _cleanup_zero_score_clips() -> None:
+    """Delete raw video files for DOWNLOADED clips that have all-zero scores — they will never be annotated."""
+    from sqlalchemy import and_
+    deleted = 0
+    with get_session() as session:
+        clips = (
+            session.query(Clip)
+            .filter(
+                Clip.status == ClipStatus.DOWNLOADED,
+                Clip.file_path.isnot(None),
+                Clip.score_aircraft == 0,
+                Clip.score_vehicle == 0,
+                Clip.score_personnel == 0,
+                Clip.score_uas == 0,
+            )
+            .all()
+        )
+        for clip in clips:
+            raw_path = _resolve_clip_path(clip.file_path)
+            if raw_path.exists():
+                raw_path.unlink()
+            clip.file_path = None
+            clip.status = ClipStatus.PENDING
+            deleted += 1
+        session.commit()
+    if deleted:
+        logger.info(f"[cleanup] Deleted {deleted} zero-score DOWNLOADED clip files")
+
+
 @celery_app.task(
     bind=True,
     name="tasks.annotate_clips.annotate_clips",
@@ -398,6 +427,7 @@ def annotate_clips(self) -> dict:
 
     logger.info(f"[{self.request.id}] annotate_clips done: {results}")
 
+    _cleanup_zero_score_clips()
     _maybe_trigger_finetune()
 
     return results

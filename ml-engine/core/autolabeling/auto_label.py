@@ -41,7 +41,11 @@ def create_yolo_dataset(
             image_path = os.path.join(input_folder, image_file)
 
             train_image_path = os.path.join(train_images_dir, image_file)
-            cv2.imwrite(train_image_path, cv2.imread(image_path))
+            img = cv2.imread(image_path)
+            if img is None:
+                logger.warning(f"Skipping unreadable frame: {image_path}")
+                continue
+            cv2.imwrite(train_image_path, img)
 
             image_source, image = load_image(image_path)
 

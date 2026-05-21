@@ -1,6 +1,6 @@
 # PROJECT_PLAN.md — Ukraine Combat Footage Web Application
 > **Source of Truth** — All phases, structure, and decisions are tracked here.
-> Last updated: 2026-05-19
+> Last updated: 2026-05-21
 
 ---
 
@@ -609,6 +609,8 @@ yolo-training-template/                  ← monorepo root
 - [x] **4.13j** VEHICLE finetune cycle 2 — mAP50=0.904 (run 76, 10 epochs from run 73, 56,440 train) ✅
 - [x] **4.13k** PERSONNEL finetune cycle 2 — mAP50=0.873 (run 75, 10 epochs from run 74, 10,962 train) ✅
 - [ ] **4.13l** GENERAL finetune cycle 1 — 50 epochs from baseline_GENERAL_30 on clean merged dataset
+- [x] **4.13m** Scraped pipeline end-to-end (2026-05-21): 10 clips auto-labeled → 5 datasets PACKAGED (ids 16/18/19) → 6 clips annotated (3 VEHICLE, 2 PERSONNEL, 1 GENERAL); 80 ANNOTATED total in DB ✅
+- [x] **4.13n** Pipeline cleanup fixes (2026-05-21): cv2 corrupt-frame skip in `auto_label.py`; clip dataset dirs deleted immediately after `_merge_datasets()` (not post-training); `merged_dir` cleanup moved to `finally` block; `_cleanup_zero_score_clips()` added to `annotate_clips` end-of-run sweep ✅
 
 #### 4d — Cloud Deployment Architecture ✅/❌
 - [x] **4.14** Deployment architecture decided: Oracle Always Free (4 ARM OCPUs, 24GB RAM, $0/mo) for CPU services + Vast.ai on-demand GPU worker (~$0.30/hr RTX 4090, ~$27/mo)
@@ -667,19 +669,19 @@ docker compose exec ml-worker celery -A celery_app call tasks.annotate_clips.ann
 
 Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 ✅, Phase 4 🔄
 
-**Training status (2026-05-18):**
-- AIRCRAFT: mAP50=0.929 (baseline run 13) → mAP50=0.968 (finetune run 68) ✅
-- VEHICLE: mAP50=0.871 (baseline run 25) → mAP50=0.901 (finetune run 73, 10 epochs) ✅
-- PERSONNEL: mAP50=0.780 (baseline run 29) → mAP50=0.872 (finetune run 74, 20 epochs on clean dataset) ✅
+**Training status (2026-05-21):**
+- AIRCRAFT: mAP50=0.929 (baseline run 13) → mAP50=0.921 (finetune run 68) ✅
+- VEHICLE: mAP50=0.871 (baseline run 25) → mAP50=0.904 (finetune run 76, cycle 2) ✅
+- PERSONNEL: mAP50=0.780 (baseline run 29) → mAP50=0.873 (finetune run 75, cycle 2) ✅
 - GENERAL: mAP50=0.784 (baseline run 30) — finetune pending
-- All 4 merged datasets clean (2026-05-17 rebuild): AIRCRAFT (65,557/9,382), VEHICLE (56,440/6,638), PERSONNEL (10,962/1,302), GENERAL (144,466/19,920)
+- All 4 merged datasets clean: AIRCRAFT (65,557/9,382), VEHICLE (56,440/6,638), PERSONNEL (10,962/1,302), GENERAL (144,466/19,920)
+- 3 PACKAGED scraped datasets (ids 16/18/19) ready for next finetune run
 
 **Web app — complete ✅:**
 - Public feed, archive, submit, hero, ticker, ML cards — all wired to live DB/API
 - Admin panel: clips table (APPROVE + DECLINE + preview modal), training runs table, train buttons, live WebSocket progress bar
 - Video pipeline: FFmpeg CRF 28 + faststart; 90% full-screen box filter; multi-model inference
-- 62 ANNOTATED clips in DB; all 4 pipelines verified end-to-end
-- 11 clips DOWNLOADED (2026-05-19 scrape); `auto_label_batch` dispatched to GPU worker — GDINO labeling in progress
+- 80 ANNOTATED clips in DB; all 4 pipelines verified end-to-end
 
 **Cloud deployment — in progress 🔄:**
 - Architecture: Oracle Always Free (CPU, $0) + Vast.ai GPU on-demand (~$27/mo)
