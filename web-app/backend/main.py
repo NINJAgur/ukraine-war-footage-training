@@ -7,9 +7,9 @@ _REPO_ROOT = str(Path(__file__).parent.parent.parent)
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 from api.auth import router as auth_router
 from api.public import router as public_router
@@ -43,4 +43,10 @@ app.include_router(ws_router)
 
 _ANNOTATED_DIR = Path(__file__).parent.parent.parent / "ml-engine" / "media" / "annotated"
 _ANNOTATED_DIR.mkdir(parents=True, exist_ok=True)
-app.mount("/media/annotated", StaticFiles(directory=str(_ANNOTATED_DIR), html=False), name="annotated")
+
+@app.get("/media/annotated/{path:path}")
+async def serve_annotated(path: str):
+    f = _ANNOTATED_DIR / path
+    if not f.exists() or not f.is_file():
+        raise HTTPException(status_code=404)
+    return FileResponse(f, media_type="video/mp4")
