@@ -94,7 +94,7 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ml_media:/app/ml-engine/media:ro
+      - ml_media:/app/ml-engine/media
 
   frontend:
     build:
