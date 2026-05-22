@@ -1,11 +1,11 @@
-# docker-compose.prod.yml — GCP production deployment
+# docker-compose.prod.yml — GCP e2-micro production deployment (CPU services only)
 #
-# All services run in Docker; ml-worker uses GPU via NVIDIA Container Toolkit.
+# ml-worker and ml-beat run on a separate GCP T4 Spot VM, not here.
 # Named volumes — no host bind-mounts.
 #
 # Usage:
-#   docker compose -f docker-compose.prod.yml up -d
-#   docker compose -f docker-compose.prod.yml down
+#   docker-compose -f docker-compose.prod.yml up -d
+#   docker-compose -f docker-compose.prod.yml down
 
 services:
 
@@ -73,51 +73,6 @@ services:
     depends_on:
       - scraper-worker
 
-  # ── ML Engine ─────────────────────────────────────────────────────────
-
-  ml-worker:
-    build:
-      context: .
-      dockerfile: ml-engine/Dockerfile
-    restart: unless-stopped
-    env_file: .env
-    environment:
-      DATABASE_SYNC_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/ukraine_footage
-      CELERY_BROKER_URL: redis://redis:6379/0
-      CELERY_RESULT_BACKEND: redis://redis:6379/1
-    command: celery -A celery_app worker -Q gpu --loglevel=info --concurrency=1
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    volumes:
-      - scraper_media:/app/scraper-engine/media:ro
-      - ml_media:/app/ml-engine/media
-      - ml_runs:/app/ml-engine/runs
-      - ml_checkpoints:/checkpoints
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-
-  ml-beat:
-    build:
-      context: .
-      dockerfile: ml-engine/Dockerfile
-    restart: unless-stopped
-    env_file: .env
-    environment:
-      DATABASE_SYNC_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/ukraine_footage
-      CELERY_BROKER_URL: redis://redis:6379/0
-      CELERY_RESULT_BACKEND: redis://redis:6379/1
-    command: celery -A celery_app beat --loglevel=info
-    depends_on:
-      - ml-worker
-
   # ── Web Application ───────────────────────────────────────────────────
 
   backend:
@@ -157,5 +112,3 @@ volumes:
   redis_data:
   scraper_media:
   ml_media:
-  ml_runs:
-  ml_checkpoints:
