@@ -43,4 +43,4 @@ app.include_router(ws_router)
 
 _ANNOTATED_DIR = Path(__file__).parent.parent.parent / "ml-engine" / "media" / "annotated"
 _ANNOTATED_DIR.mkdir(parents=True, exist_ok=True)
-app.mount("/media/annotated", StaticFiles(directory=str(_ANNOTATED_DIR)), name="annotated")
+app.mount("/media/annotated", StaticFiles(directory=str(_ANNOTATED_DIR), html=False), name="annotated")
