@@ -106,6 +106,8 @@ services:
       - "443:443"
     depends_on:
       - backend
+    volumes:
+      - ml_media:/app/ml-engine/media:ro
 
 volumes:
   postgres_data:
