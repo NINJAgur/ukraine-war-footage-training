@@ -118,7 +118,7 @@ All services import via re-export stubs (`ml-engine/db/models.py`, `scraper-engi
 
 ## Hard Constraints
 
-- **OS:** Windows 11 native Python for ML engine; Docker Desktop for scraper/backend/frontend (Phase 4)
+- **OS:** Windows 11 native Python for ML engine; Docker on GCP e2-micro for production; Docker Desktop for local dev
 - **ML engine always runs natively** — no Docker GPU passthrough on Windows without NVIDIA Container Toolkit (Linux-only)
 - **GPU:** RTX 3060 Ti, 8GB VRAM — `batch_size≤8`, always `device='cuda:0'`
 - **FastAPI:** `async def` routes, `AsyncSession`, Pydantic v2 `ConfigDict`
@@ -176,7 +176,7 @@ Run Phase 2 test: `cd ml-engine && python tests/test_pipeline_e2e.py`
 | 1 | Scraper engine | ✅ Complete |
 | 2 | ML pipeline — baseline training | ✅ Complete (AIRCRAFT 0.929, VEHICLE 0.871, PERSONNEL 0.780, GENERAL 0.784) |
 | 3 | Web application | ✅ Complete (Celery E2E, hero video, WebSocket progress bar, integration smoke test — 58 annotated clips) |
-| 4 | Cloud & DevOps | 🔄 In progress (docker-compose.yml = local dev only; scraper/backend/frontend in Docker Desktop ✅; ml-worker runs natively on Windows; GCP prod compose next) |
+| 4 | Cloud & DevOps | 🔄 In progress (GCP e2-micro deployed ✅ — all 6 CPU services live at 34.58.124.206; T4 Spot VM provisioning in progress; HTTPS + CI/CD pending) |
 
 ---
 

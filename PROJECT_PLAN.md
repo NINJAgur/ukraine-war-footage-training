@@ -1,6 +1,6 @@
 # PROJECT_PLAN.md — Ukraine Combat Footage Web Application
 > **Source of Truth** — All phases, structure, and decisions are tracked here.
-> Last updated: 2026-05-21
+> Last updated: 2026-05-23
 
 ---
 
@@ -116,7 +116,7 @@ An automated, full-stack web application that:
 | **Async Queue** | Celery + Redis (broker + result backend) |
 | **ML** | Ultralytics YOLOv8 + PyTorch (`torch+cu121`) + OpenCV |
 | **Containers** | Docker + Docker Compose (scraper/backend/frontend in Docker Desktop; ml-engine runs natively) |
-| **DevOps** | Oracle Cloud Always Free (CPU services) + Vast.ai GPU on-demand (~$27/mo) |
+| **Cloud** | GCP e2-micro free tier (CPU services, $0/mo) + GCP T4 Spot VM (GPU, ~$10/mo) |
 
 ---
 
@@ -189,7 +189,7 @@ yolo-training-template/                  ← monorepo root
 ├── CLAUDE.md                            ← Claude Code persistent system prompt
 ├── .env                                 ← environment variables (gitignored)
 ├── docker-compose.yml                   ← local dev stack (scraper + backend + frontend; no ml-worker)
-├── docker-compose.prod.yml              ← Oracle Cloud deploy (CPU services only)
+├── docker-compose.prod.yml              ← GCP e2-micro prod deploy (CPU services only)
 │
 ├── .claude/                             ← Claude Code agentic workspace
 │   └── settings.json                    ← permissions, hooks, MCP config
@@ -208,7 +208,7 @@ yolo-training-template/                  ← monorepo root
 │   │   ├── qa.md
 │   │   └── review.md
 │   └── cloud-deploy/
-│       ├── research.md                  ← Oracle+Vast.ai architecture, env vars
+│       ├── research.md                  ← GCP e2-micro+T4 Spot architecture, env vars
 │       ├── review.md                    ← Docker Compose + Dockerfile review checklist
 │       └── qa.md                        ← production health verification commands
 │
@@ -613,13 +613,14 @@ yolo-training-template/                  ← monorepo root
 - [x] **4.13n** Pipeline cleanup fixes (2026-05-21): cv2 corrupt-frame skip in `auto_label.py`; clip dataset dirs deleted immediately after `_merge_datasets()` (not post-training); `merged_dir` cleanup moved to `finally` block; `_cleanup_zero_score_clips()` added to `annotate_clips` end-of-run sweep ✅
 
 #### 4d — Cloud Deployment Architecture ✅/❌
-- [x] **4.14** Deployment architecture decided: Oracle Always Free (4 ARM OCPUs, 24GB RAM, $0/mo) for CPU services + Vast.ai on-demand GPU worker (~$0.30/hr RTX 4090, ~$27/mo)
+- [x] **4.14** Deployment architecture decided: GCP e2-micro free tier (CPU, $0/mo) + GCP T4 Spot VM (GPU, ~$10/mo via Instance Scheduling 3hr/night)
 - [x] **4.15** Cloud deploy agent files: `agents/cloud-deploy/{research,review,qa}.md` + `.claude/commands/{research,review,qa}-deploy.md`; commands wired in `CLAUDE.md`
-- [x] **4.16** `docker-compose.prod.yml` created — Oracle deploy config (no ml-worker; named volumes; env vars via secrets)
-- [ ] **4.17** Oracle Cloud account setup + ARM instance provisioning (A1.Flex, 4 OCPUs / 24GB)
-- [ ] **4.18** Deploy `docker-compose.prod.yml` to Oracle (scraper + backend + frontend + postgres + redis)
-- [ ] **4.19** Vast.ai GPU worker setup: Docker image with ml-engine; connect to Oracle Redis via public IP + Tailscale or SSH tunnel
+- [x] **4.16** `docker-compose.prod.yml` created — GCP prod config (no ml-worker/ml-beat; named volumes; nginx direct media serving)
+- [x] **4.17** GCP project setup + e2-micro instance provisioned (us-central1, billing upgraded, static IP reserved)
+- [x] **4.18** All 6 CPU services deployed to GCP e2-micro (postgres, redis, scraper-worker, scraper-beat, backend, frontend); DB seeded from local dump; 80 annotated clips seeded to ml_media volume; media serving via nginx alias
+- [ ] **4.19** GCP T4 Spot VM setup — GPU quota approved; VM creation in progress; connect to e2-micro Redis via VPC internal IP; GCP Instance Scheduling (02:00–05:00 UTC daily)
 - [ ] **4.20** HTTPS: Cloudflare proxy or Certbot (deferred)
+- [ ] **4.21** CI/CD: GitHub Actions deploy workflow (deferred)
 
 ---
 
@@ -684,9 +685,10 @@ Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 ✅, Phase 4 🔄
 - 80 ANNOTATED clips in DB; all 4 pipelines verified end-to-end
 
 **Cloud deployment — in progress 🔄:**
-- Architecture: Oracle Always Free (CPU, $0) + Vast.ai GPU on-demand (~$27/mo)
-- `docker-compose.prod.yml` ready; agent files + slash commands created
-- Immediate next: Oracle account + ARM instance provisioning (4d.4.17)
+- Architecture: GCP e2-micro free tier (CPU, $0/mo) + GCP T4 Spot VM (GPU, ~$10/mo)
+- e2-micro live ✅ — all 6 CPU services deployed; 80 annotated clips seeded; nginx direct media serving
+- GCP billing upgraded; GPU quota approved; T4 Spot VM creation in progress (4.19)
+- Remaining: T4 VM setup + Instance Scheduling (4.19), HTTPS (4.20), CI/CD (4.21)
 
 ---
 

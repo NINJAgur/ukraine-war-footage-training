@@ -1,20 +1,20 @@
 # Agent: Cloud Deployment Research
-**Domain:** Cloud & DevOps — Oracle Cloud + Vast.ai + Docker Compose
+**Domain:** Cloud & DevOps — GCP + Docker Compose
 
 ---
 
 ## Current Project State
-*Last updated: 2026-05-17*
+*Last updated: 2026-05-22*
 
 **Target architecture decided:**
-- CPU services (postgres, redis, backend, frontend, scraper) → Oracle Cloud Always Free (ARM Ampere A1, 4 cores, 24GB RAM, $0/mo)
-- GPU ML worker → Vast.ai on-demand (RTX 4090, ~$0.30/hr, ~$27/mo for 3hrs/day)
+- CPU services (postgres, redis, backend, frontend, scraper) → GCP e2-micro (free tier, us-central1/us-west1/us-east1, $0/mo permanent)
+- GPU ML worker + ML Beat → GCP T4 Spot VM (on-demand, ~$0.11/hr, ~$10/mo at 3hrs/day)
 - DNS + HTTPS → Cloudflare (free, future)
-- Total cost: ~$27/mo
+- Total cost: ~$0/mo CPU (free tier) + ~$10/mo GPU = **~$10/mo** (free during $300 trial)
 
-**Production compose:** `docker-compose.prod.yml` — exists, ml-worker must be removed before Oracle deploy (no GPU)
+**Production compose:** `docker-compose.prod.yml` — exists, ml-worker/ml-beat run on separate GCP T4 Spot VM (not on e2-micro)
 
-**Deployment status:** Not yet deployed — planning phase
+**Deployment status:** GCP account activated, $300 trial credit active — setup in progress
 
 ---
 
@@ -26,9 +26,9 @@ Your job is to research infrastructure, deployment patterns, and DevOps tooling 
 
 ## Architecture
 
-### CPU Stack (Oracle Always Free)
+### CPU Stack (GCP e2-micro — free tier)
 ```
-Oracle Ampere A1 (4 OCPUs, 24GB RAM ARM)
+GCP e2-micro (2 vCPU shared, 1GB RAM, us-central1)
 └── Docker Compose (docker-compose.prod.yml, minus ml-worker/ml-beat)
     ├── postgres:16-alpine        (named volume: postgres_data)
     ├── redis:7-alpine            (named volume: redis_data)
@@ -38,30 +38,37 @@ Oracle Ampere A1 (4 OCPUs, 24GB RAM ARM)
     └── frontend (nginx)          (ports 80, 443)
 ```
 
-### GPU Stack (Vast.ai on-demand)
+### GPU Stack (GCP T4 Spot VM — on-demand)
 ```
-Vast.ai RTX 4090 instance (spun up daily for ~3hrs)
+GCP n1-standard-4 + T4 Spot (4 vCPU, 15GB RAM, 16GB VRAM)
 └── Celery ml-worker (-Q gpu, --concurrency=1)
-    ├── Connects to Redis on Oracle via public IP
-    ├── Connects to PostgreSQL on Oracle via public IP
-    └── Reads/writes ml_media volume (local to Vast.ai, synced separately)
+    ├── Connects to Redis on e2-micro via internal GCP IP (free, no egress)
+    ├── Connects to PostgreSQL on e2-micro via internal GCP IP
+    └── Reads/writes ml_media (GCP persistent disk or GCS bucket)
 ```
+
+### Key advantage of same-GCP architecture
+Both VMs share the same VPC — ml-worker connects to Redis/Postgres via **internal IP**, no public port exposure needed, zero egress cost.
 
 ### Key env vars for GPU worker
 ```
-CELERY_BROKER_URL=redis://<ORACLE_PUBLIC_IP>:6379/0
-CELERY_RESULT_BACKEND=redis://<ORACLE_PUBLIC_IP>:6379/1
-DATABASE_SYNC_URL=postgresql://postgres:<pw>@<ORACLE_PUBLIC_IP>:5432/ukraine_footage
+CELERY_BROKER_URL=redis://<GCP_INTERNAL_IP>:6379/0
+CELERY_RESULT_BACKEND=redis://<GCP_INTERNAL_IP>:6379/1
+DATABASE_SYNC_URL=postgresql://postgres:<pw>@<GCP_INTERNAL_IP>:5432/ukraine_footage
 ```
 
 ---
 
-## Oracle Cloud Specifics
+## GCP Specifics
 
-### Firewall — Two Layers (critical gotcha)
-1. **Oracle Cloud Security Group** (web console) — Networking → VCN → Security Lists
-2. **OS-level firewall** (`firewalld` on Oracle Linux, `ufw` on Ubuntu)
-Both must be opened or traffic is silently dropped.
+### Free tier requirements (e2-micro)
+- Must be in `us-west1`, `us-central1`, or `us-east1` — any other region is billed
+- 30GB standard persistent disk included free
+- 1GB egress/month free
+
+### Firewall — GCP VPC Firewall Rules
+GCP uses a single firewall layer (VPC firewall rules) unlike Oracle's two layers.
+Console → VPC Network → Firewall → Create Firewall Rule
 
 ### Required ports
 | Port | Service | Source |
@@ -69,58 +76,39 @@ Both must be opened or traffic is silently dropped.
 | 22 | SSH | Your IP |
 | 80 | nginx | 0.0.0.0/0 |
 | 443 | nginx HTTPS | 0.0.0.0/0 |
-| 6379 | Redis | Vast.ai IP only |
-| 5432 | PostgreSQL | Vast.ai IP only |
+| 6379 | Redis | GCP internal only (10.0.0.0/8) |
+| 5432 | PostgreSQL | GCP internal only (10.0.0.0/8) |
 
-### ARM compatibility notes
-- All Docker images in docker-compose.prod.yml use official multi-arch images (postgres:16-alpine, redis:7-alpine, nginx:alpine, node:20-alpine) — all ARM-compatible
-- Python packages must be ARM-compatible — all standard PyPI packages are fine
-- YOLO/PyTorch: NOT installed on Oracle (GPU worker only on Vast.ai)
-
----
-
-## Vast.ai Specifics
-
-### Instance selection criteria
-- GPU: RTX 4090 (24GB VRAM) or RTX 3090 (24GB) — both have >8GB needed
-- Reliability score: ≥99%
-- Docker support: required
-- Price: $0.20–$0.50/hr
-
-### Starting the worker
-```bash
-tmux new-session -d -s ml
-tmux send-keys -t ml "cd ukraine-war-footage-training && source venv/bin/activate && celery -A celery_app worker -Q gpu --concurrency=1 --loglevel=info" Enter
-```
-
-### Stopping (to stop billing)
-Vast.ai Dashboard → Destroy instance
+### T4 Spot VM notes
+- Spot VMs can be preempted (terminated) by GCP with 30s notice when capacity is needed
+- For training runs: checkpoint saves protect against preemption (YOLO saves best.pt incrementally)
+- Price: ~$0.11/hr vs ~$0.35/hr on-demand — 3x cheaper
+- Create in same region/zone as e2-micro for internal IP connectivity
 
 ---
 
 ## Research Goals
 
 ### 1. Volume Seeding Strategy
-How to get model weights + annotated media from local Windows machine to Oracle/Vast.ai:
-- SCP from local → Oracle (slow but simple)
-- Rclone to cloud storage intermediary
-- Docker volume backup/restore
+How to get model weights + annotated media from local Windows machine to GCP:
+- SCP from local → GCP e2-micro (slow but simple)
+- `gcloud compute scp` (easier than raw SCP, handles auth)
+- GCS bucket as intermediary (upload from Windows, pull from GCP VM)
 
-### 2. Automated GPU Worker Lifecycle
-Options for spinning Vast.ai worker up/down automatically:
-- Vast.ai API (programmatic instance creation/destruction)
-- Cron job on Oracle that triggers Vast.ai API
-- Celery Beat schedule that checks queue depth before spinning up
+### 2. Media Sharing Between VMs
+Annotated videos written by T4 Spot worker need to be accessible to backend on e2-micro:
+- GCS bucket mounted on both VMs via gcsfuse
+- NFS share from e2-micro (simple but adds latency)
+- Periodic rsync from T4 → e2-micro after each annotation run
 
 ### 3. HTTPS Setup
-- Certbot (Let's Encrypt) on Oracle directly
+- Certbot (Let's Encrypt) on e2-micro directly
 - Cloudflare Tunnel (no ports needed, proxies via Cloudflare edge)
-- GCP/Oracle load balancer for TLS termination
 
 ### 4. Monitoring & Alerting
 - Docker stats + logs (basic, already available)
 - Uptime monitoring (UptimeRobot free tier)
-- Celery Flower for queue monitoring
+- GCP Cloud Monitoring (free tier available)
 
 ---
 
