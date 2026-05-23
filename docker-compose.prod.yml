@@ -18,6 +18,8 @@ services:
       POSTGRES_DB: ukraine_footage
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -29,6 +31,8 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    ports:
+      - "6379:6379"
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes
