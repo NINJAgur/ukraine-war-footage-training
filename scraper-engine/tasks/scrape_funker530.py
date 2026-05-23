@@ -345,16 +345,20 @@ def download_funker530_video(self, clip_id: int, video_url: str, page_url: str) 
     output_path = get_output_path(page_url, "", date_str)
     try:
         meta = _download_video(video_url, output_path)
+        file_path = meta["file_path"]
+        if settings.STORAGE_MODE == "remote":
+            from utils.gcs import upload_raw
+            file_path = upload_raw(Path(file_path), "funker530", settings.REMOTE_STORAGE_BUCKET)
         with get_session() as session:
             clip = session.get(Clip, clip_id)
             clip.status = ClipStatus.DOWNLOADED
-            clip.file_path = meta["file_path"]
+            clip.file_path = file_path
             clip.duration_seconds = meta["duration_seconds"]
             clip.width = meta["width"]
             clip.height = meta["height"]
             if not clip.title and meta["title"]:
                 clip.title = meta["title"]
-        return {"status": "downloaded", "clip_id": clip_id, "file_path": meta["file_path"]}
+        return {"status": "downloaded", "clip_id": clip_id, "file_path": file_path}
     except Exception as exc:
         with get_session() as session:
             clip = session.get(Clip, clip_id)

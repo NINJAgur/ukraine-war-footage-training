@@ -15,6 +15,17 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 
+def _delete_gcs_object(gs_url: str, bucket_name: str) -> None:
+    try:
+        from google.cloud import storage as gcs
+        without_scheme = gs_url[len("gs://"):]
+        _, _, blob_name = without_scheme.partition("/")
+        gcs.Client().bucket(bucket_name).blob(blob_name).delete()
+        logger.info(f"Deleted GCS raw: {gs_url}")
+    except Exception as exc:
+        logger.warning(f"Failed to delete GCS object {gs_url}: {exc}")
+
+
 def finalize_clip(clip, temp_path: Path, model_name: str) -> str:
     """
     Rename temp annotated file to its permanent name, delete the raw source,
@@ -26,11 +37,16 @@ def finalize_clip(clip, temp_path: Path, model_name: str) -> str:
     perm_path = temp_path.parent / clean_name
     shutil.move(str(temp_path), str(perm_path))
 
-    if clip.file_path and os.path.exists(clip.file_path):
-        try:
-            os.remove(clip.file_path)
-        except PermissionError:
-            logger.warning(f"Could not delete raw file (file lock): {clip.file_path}")
+    if clip.file_path:
+        if clip.file_path.startswith("gs://"):
+            from config import settings as _s
+            if _s.STORAGE_MODE == "remote":
+                _delete_gcs_object(clip.file_path, _s.REMOTE_STORAGE_BUCKET)
+        elif os.path.exists(clip.file_path):
+            try:
+                os.remove(clip.file_path)
+            except PermissionError:
+                logger.warning(f"Could not delete raw file (file lock): {clip.file_path}")
     clip.file_path = None
 
     from config import settings

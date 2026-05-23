@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     GEOCONFIRMED_DIR: Path = Path(__file__).resolve().parent / "media" / "geoconfirmed"
     COMBINED_DIR: Path = Path(__file__).resolve().parent / "media" / "combined"
 
+    # ── Storage ──────────────────────────────────────────────────────
+    STORAGE_MODE: str = "local"
+    REMOTE_STORAGE_BUCKET: str = "ukraine-footage-media"
+
     # ── Scraping ──────────────────────────────────────────────────────
     FUNKER530_BASE_URL: str = "https://funker530.com"
     SCRAPE_MAX_PAGES: int = 10

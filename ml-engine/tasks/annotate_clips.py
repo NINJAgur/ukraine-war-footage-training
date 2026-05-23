@@ -55,17 +55,41 @@ def _resolve_weights_path(raw: str) -> Path:
     return w
 
 
+def _delete_gcs_object(gs_url: str) -> None:
+    """Delete a gs:// object from GCS."""
+    try:
+        from google.cloud import storage as gcs
+        without_scheme = gs_url[len("gs://"):]
+        bucket_name, _, blob_name = without_scheme.partition("/")
+        client = gcs.Client()
+        client.bucket(bucket_name).blob(blob_name).delete()
+        logger.info(f"Deleted GCS object: {gs_url}")
+    except Exception as exc:
+        logger.warning(f"Failed to delete GCS object {gs_url}: {exc}")
+
+
+def _download_from_gcs(gs_url: str) -> Path:
+    """Download a gs:// object to a temp file and return its path."""
+    import tempfile
+    from google.cloud import storage as gcs
+    # gs://bucket/blob/path → bucket + blob
+    without_scheme = gs_url[len("gs://"):]
+    bucket_name, _, blob_name = without_scheme.partition("/")
+    suffix = Path(blob_name).suffix or ".mp4"
+    tmp = Path(tempfile.mktemp(suffix=suffix, dir="/tmp"))
+    client = gcs.Client()
+    bucket = client.bucket(bucket_name)
+    bucket.blob(blob_name).download_to_filename(str(tmp))
+    logger.info(f"Downloaded from GCS: {gs_url} → {tmp}")
+    return tmp
+
+
 def _resolve_clip_path(raw: str) -> Path:
-    """Map container paths (/app/scraper-engine/media/...) to local filesystem."""
+    if raw.startswith("gs://"):
+        return _download_from_gcs(raw)
     p = Path(raw)
     if p.exists():
         return p
-    # Container path: /app/scraper-engine/media/... → <project>/scraper-engine/media/...
-    normalized = raw.replace("\\", "/")
-    marker = "scraper-engine/media/"
-    if marker in normalized:
-        rel = normalized[normalized.index(marker):]
-        return PROJECT_DIR / rel
     return p
 
 
@@ -90,6 +114,14 @@ def _latest_weights(model_name: str) -> Path:
 
 
 from core.storage import finalize_clip
+
+
+def _cleanup_raw(raw_path: Path, original_file_path: str) -> None:
+    """Delete local (temp) file and, when original was a GCS URL, the GCS object."""
+    if raw_path.exists():
+        raw_path.unlink()
+    if original_file_path and original_file_path.startswith("gs://"):
+        _delete_gcs_object(original_file_path)
 
 
 def _run_specialist(
@@ -144,9 +176,8 @@ def _run_specialist(
             passed, rate = validate_clip(model, raw_path, conf_thresh=CONF_THRESH, min_rate=MIN_RATE)
             if not passed:
                 logger.info(f"[{model_name}]   -> REJECT: validate rate={rate:.0%} < {MIN_RATE:.0%}")
-                if raw_path.exists():
-                    raw_path.unlink()
-                    clip.file_path = None
+                _cleanup_raw(raw_path, clip.file_path)
+                clip.file_path = None
                 clip.status = ClipStatus.PENDING
                 rejected += 1
                 continue
@@ -165,9 +196,8 @@ def _run_specialist(
                 logger.info(f"[{model_name}]   -> REJECT: zero detections in full inference pass")
                 if temp_out.exists():
                     temp_out.unlink()
-                if raw_path.exists():
-                    raw_path.unlink()
-                    clip.file_path = None
+                _cleanup_raw(raw_path, clip.file_path)
+                clip.file_path = None
                 clip.status = ClipStatus.PENDING
                 rejected += 1
                 continue
@@ -178,7 +208,7 @@ def _run_specialist(
             clip.updated_at = datetime.now(timezone.utc)
             if raw_path.exists():
                 raw_path.unlink()
-                clip.file_path = None
+            clip.file_path = None
             accepted += 1
             logger.info(
                 f"[{model_name}]   -> ANNOTATED: dets={clip_dets}  "
@@ -243,9 +273,8 @@ def _run_general() -> dict:
             passed, rate = validate_clip(model, raw_path, conf_thresh=CONF_THRESH, min_rate=MIN_RATE)
             if not passed:
                 logger.info(f"[GENERAL]   -> REJECT: validate rate={rate:.0%} < {MIN_RATE:.0%}")
-                if raw_path.exists():
-                    raw_path.unlink()
-                    clip.file_path = None
+                _cleanup_raw(raw_path, clip.file_path)
+                clip.file_path = None
                 clip.status = ClipStatus.PENDING
                 rejected += 1
                 continue
@@ -264,9 +293,8 @@ def _run_general() -> dict:
                 logger.info(f"[GENERAL]   -> REJECT: zero detections in full inference pass")
                 if temp_out.exists():
                     temp_out.unlink()
-                if raw_path.exists():
-                    raw_path.unlink()
-                    clip.file_path = None
+                _cleanup_raw(raw_path, clip.file_path)
+                clip.file_path = None
                 clip.status = ClipStatus.PENDING
                 rejected += 1
                 continue
@@ -277,7 +305,7 @@ def _run_general() -> dict:
             clip.updated_at = datetime.now(timezone.utc)
             if raw_path.exists():
                 raw_path.unlink()
-                clip.file_path = None
+            clip.file_path = None
             accepted += 1
             logger.info(
                 f"[GENERAL]   -> ANNOTATED: dets={clip_dets}  "

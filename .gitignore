@@ -158,3 +158,8 @@ data.yaml
 .claude/scheduled_tasks.lock
 # Windows crash dumps
 *.stackdump
+# Terraform
+infra/gcp/terraform.tfvars
+infra/gcp/.terraform/
+infra/gcp/terraform.tfstate
+infra/gcp/terraform.tfstate.backup
