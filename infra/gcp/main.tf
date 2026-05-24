@@ -280,6 +280,14 @@ PYEOF
       grep -q "$DATASETS_MNT" /etc/fstab || \
         echo "$DATASETS_DEV $DATASETS_MNT ext4 discard,defaults,nofail 0 2" >> /etc/fstab
 
+      # Swap on persistent disk — prevents OOM during large dataset extraction
+      if [ ! -f "$DATASETS_MNT/swapfile" ]; then
+        fallocate -l 4G "$DATASETS_MNT/swapfile"
+        chmod 600 "$DATASETS_MNT/swapfile"
+        mkswap "$DATASETS_MNT/swapfile"
+      fi
+      swapon "$DATASETS_MNT/swapfile" 2>/dev/null || true
+
       # Symlink ml-engine/media → persistent disk so all paths stay identical
       mkdir -p "$DATASETS_MNT/media"
       chown -R ubuntu:ubuntu "$DATASETS_MNT"
