@@ -157,7 +157,7 @@ resource "google_compute_disk" "datasets" {
   name = "ukraine-footage-datasets"
   zone = var.zone
   type = "pd-standard"
-  size = 120
+  size = 200
 }
 
 resource "google_compute_resource_policy" "gpu_schedule" {

@@ -42,11 +42,19 @@ datasets = [
     "rawsi18/military-assets-dataset-12-classes-yolo8-format",
     "rupankarmajumdar/amad-5-aerial-military-asset-detection-dataset",
 ]
+import os, pathlib
+
+cache_root = pathlib.Path(os.environ.get("KAGGLE_CACHE_FOLDER", pathlib.Path.home() / ".cache" / "kaggle"))
+
 failed = []
 for handle in datasets:
     print(f"  {handle}...", flush=True)
     try:
         kagglehub.dataset_download(handle)
+        # Delete zip files after extraction to save disk space
+        for z in cache_root.rglob("*.zip"):
+            z.unlink()
+            print(f"  Deleted zip: {z.name}", flush=True)
     except Exception as e:
         print(f"  FAILED {handle}: {e}", flush=True)
         failed.append(handle)
