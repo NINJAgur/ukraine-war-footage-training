@@ -153,6 +153,13 @@ output "e2_micro_ip" {
 
 # ── T4 Spot VM (GPU worker) ───────────────────────────────────────────
 
+resource "google_compute_disk" "datasets" {
+  name = "ukraine-footage-datasets"
+  zone = var.zone
+  type = "pd-standard"
+  size = 120
+}
+
 resource "google_compute_resource_policy" "gpu_schedule" {
   name   = "gpu-daily-schedule"
   region = var.region
@@ -185,9 +192,14 @@ resource "google_compute_instance" "t4_gpu" {
   boot_disk {
     initialize_params {
       image = "ubuntu-os-cloud/ubuntu-2204-lts"
-      size  = 150
+      size  = 50
       type  = "pd-standard"
     }
+  }
+
+  attached_disk {
+    source      = google_compute_disk.datasets.self_link
+    device_name = "datasets"
   }
 
   network_interface {
@@ -257,13 +269,28 @@ PYEOF
         touch /var/lib/weights-downloaded
       fi
 
-      # Download Kaggle datasets + build merged folders (first boot only)
-      if [ ! -f /var/lib/datasets-downloaded ]; then
-        cd /home/ubuntu/app/ml-engine
-        sudo -u ubuntu bash scripts/setup_datasets.sh
-        chown -R ubuntu:ubuntu /home/ubuntu/app/ml-engine/media
-        touch /var/lib/datasets-downloaded
+      # Mount persistent datasets disk
+      DATASETS_DEV="/dev/disk/by-id/google-datasets"
+      DATASETS_MNT="/mnt/datasets"
+      mkdir -p "$DATASETS_MNT"
+      if ! blkid "$DATASETS_DEV" | grep -q ext4; then
+        mkfs.ext4 -F "$DATASETS_DEV"
       fi
+      mount -o discard,defaults "$DATASETS_DEV" "$DATASETS_MNT" || true
+      grep -q "$DATASETS_MNT" /etc/fstab || \
+        echo "$DATASETS_DEV $DATASETS_MNT ext4 discard,defaults,nofail 0 2" >> /etc/fstab
+
+      # Symlink ml-engine/media → persistent disk so all paths stay identical
+      mkdir -p "$DATASETS_MNT/media"
+      chown -R ubuntu:ubuntu "$DATASETS_MNT"
+      if [ ! -L /home/ubuntu/app/ml-engine/media ]; then
+        rm -rf /home/ubuntu/app/ml-engine/media
+        ln -s "$DATASETS_MNT/media" /home/ubuntu/app/ml-engine/media
+      fi
+
+      # Download Kaggle datasets + build merged folders (once — persists on disk)
+      cd /home/ubuntu/app/ml-engine
+      sudo -u ubuntu bash scripts/setup_datasets.sh
 
       # Write .env (refreshed every boot in case IPs change)
       cat > /home/ubuntu/app/.env <<ENVEOF
