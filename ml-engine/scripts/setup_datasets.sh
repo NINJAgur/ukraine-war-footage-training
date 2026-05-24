@@ -42,9 +42,17 @@ datasets = [
     "rawsi18/military-assets-dataset-12-classes-yolo8-format",
     "rupankarmajumdar/amad-5-aerial-military-asset-detection-dataset",
 ]
+failed = []
 for handle in datasets:
     print(f"  {handle}...", flush=True)
-    kagglehub.dataset_download(handle)
+    try:
+        kagglehub.dataset_download(handle)
+    except Exception as e:
+        print(f"  FAILED {handle}: {e}", flush=True)
+        failed.append(handle)
+if failed:
+    print(f"Failed datasets (will retry next boot): {failed}")
+    sys.exit(1)
 print("All datasets downloaded.")
 PY
 

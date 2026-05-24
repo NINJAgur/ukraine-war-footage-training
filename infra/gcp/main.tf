@@ -297,8 +297,10 @@ PYEOF
       fi
 
       # Download Kaggle datasets + build merged folders (once — persists on disk)
+      # Non-fatal: Celery still starts for annotation even if datasets aren't ready
       cd /home/ubuntu/app/ml-engine
-      sudo -u ubuntu bash scripts/setup_datasets.sh
+      sudo -u ubuntu bash scripts/setup_datasets.sh || \
+        echo "[startup] Dataset setup incomplete — will retry on next boot"
 
       # Write .env (refreshed every boot in case IPs change)
       cat > /home/ubuntu/app/.env <<ENVEOF
