@@ -1,6 +1,7 @@
 terraform {
   required_providers {
     google = { source = "hashicorp/google", version = "~> 5.0" }
+    null   = { source = "hashicorp/null",   version = "~> 3.0" }
   }
 }
 
@@ -27,6 +28,27 @@ resource "google_storage_bucket_iam_member" "public_read" {
   bucket = google_storage_bucket.media.name
   role   = "roles/storage.objectViewer"
   member = "allUsers"
+}
+
+resource "null_resource" "upload_weights" {
+  triggers = {
+    bucket = google_storage_bucket.media.name
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["bash", "-c"]
+    command     = "PYTHONHTTPSVERIFY=0 '${path.module}/../../venv/Scripts/python.exe' '${path.module}/upload_weights.py' '${google_storage_bucket.media.name}' '${path.module}/../..'"
+  }
+
+  depends_on = [google_storage_bucket_iam_member.public_read]
+}
+
+data "google_project" "project" {}
+
+resource "google_storage_bucket_iam_member" "compute_rw" {
+  bucket = google_storage_bucket.media.name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${data.google_project.project.number}-compute@developer.gserviceaccount.com"
 }
 
 
@@ -163,7 +185,7 @@ resource "google_compute_instance" "t4_gpu" {
   boot_disk {
     initialize_params {
       image = "ubuntu-os-cloud/ubuntu-2204-lts"
-      size  = 100
+      size  = 150
       type  = "pd-standard"
     }
   }
@@ -213,6 +235,34 @@ resource "google_compute_instance" "t4_gpu" {
       if [ ! -d venv ]; then
         python3 -m venv venv
         venv/bin/pip install --quiet -r requirements.txt
+      fi
+
+      # Download weights from GCS (first boot only)
+      if [ ! -f /var/lib/weights-downloaded ]; then
+        pip3 install --quiet google-cloud-storage
+        python3 - <<PYEOF
+from google.cloud import storage
+import pathlib
+client = storage.Client()
+bucket = client.bucket("ukraine-footage-media")
+ml_root = pathlib.Path("/home/ubuntu/app/ml-engine")
+for blob in client.list_blobs("ukraine-footage-media", prefix="runs/"):
+    if not blob.name.endswith("best.pt"):
+        continue
+    local = ml_root / blob.name[len("runs/"):]
+    local.parent.mkdir(parents=True, exist_ok=True)
+    blob.download_to_filename(str(local))
+    print(f"Downloaded {blob.name}")
+PYEOF
+        touch /var/lib/weights-downloaded
+      fi
+
+      # Download Kaggle datasets + build merged folders (first boot only)
+      if [ ! -f /var/lib/datasets-downloaded ]; then
+        cd /home/ubuntu/app/ml-engine
+        sudo -u ubuntu bash scripts/setup_datasets.sh
+        chown -R ubuntu:ubuntu /home/ubuntu/app/ml-engine/media
+        touch /var/lib/datasets-downloaded
       fi
 
       # Write .env (refreshed every boot in case IPs change)
