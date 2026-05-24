@@ -163,3 +163,4 @@ infra/gcp/terraform.tfvars
 infra/gcp/.terraform/
 infra/gcp/terraform.tfstate
 infra/gcp/terraform.tfstate.backup
+infra/gcp/.terraform.lock.hcl
