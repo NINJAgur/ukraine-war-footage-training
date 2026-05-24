@@ -17,7 +17,7 @@ if [ -d "$MERGED_DIR/GENERAL/train/images" ] && [ -n "$(ls -A "$MERGED_DIR/GENER
 fi
 
 echo "[setup_datasets] Downloading 8 Kaggle datasets (~10 GB, may take 30-60 min)..."
-python - <<'PY'
+python3 - <<'PY'
 import sys
 sys.path.insert(0, ".")
 import kagglehub
@@ -39,7 +39,7 @@ print("All datasets downloaded.")
 PY
 
 echo "[setup_datasets] Building merged specialist datasets..."
-python scripts/build_specialist_datasets.py
+python3 scripts/build_specialist_datasets.py
 
 echo "[setup_datasets] Done. Trigger baseline training via the Admin panel or:"
 echo "  POST /api/admin/train  {\"model_type\": \"AIRCRAFT\"}"
