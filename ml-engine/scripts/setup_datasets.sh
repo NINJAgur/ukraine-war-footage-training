@@ -13,11 +13,6 @@ cd "$(dirname "$0")/.."
 PYTHON="python3"
 [ -f "venv/bin/python3" ] && PYTHON="venv/bin/python3"
 
-# Redirect kagglehub cache to persistent disk if mounted, otherwise use default
-if mountpoint -q /mnt/datasets 2>/dev/null; then
-  mkdir -p /mnt/datasets/.cache/kaggle
-  export KAGGLE_CACHE_FOLDER=/mnt/datasets/.cache/kaggle
-fi
 
 MERGED_DIR="media/kaggle_datasets/merged"
 if [ -d "$MERGED_DIR/GENERAL/train/images" ] && [ -n "$(ls -A "$MERGED_DIR/GENERAL/train/images" 2>/dev/null)" ]; then
@@ -68,7 +63,7 @@ echo "[setup_datasets] Building merged specialist datasets..."
 $PYTHON scripts/build_specialist_datasets.py
 
 echo "[setup_datasets] Cleaning up source dataset cache to free disk space..."
-rm -rf "${KAGGLE_CACHE_FOLDER:-$HOME/.cache/kaggle}/datasets"
+rm -rf "$HOME/.cache/kagglehub/datasets"
 echo "[setup_datasets] Done. Trigger baseline training via the Admin panel or:"
 echo "  POST /api/admin/train  {\"model_type\": \"AIRCRAFT\"}"
 echo "  POST /api/admin/train  {\"model_type\": \"VEHICLE\"}"

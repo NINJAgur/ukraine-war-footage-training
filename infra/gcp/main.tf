@@ -289,6 +289,12 @@ PYEOF
       fi
       swapon "$DATASETS_MNT/swapfile" 2>/dev/null || true
 
+      # Redirect kagglehub cache to persistent disk via symlink (env var unreliable across sudo)
+      mkdir -p "$DATASETS_MNT/.cache/kagglehub"
+      mkdir -p /home/ubuntu/.cache
+      chown ubuntu:ubuntu "$DATASETS_MNT/.cache" "$DATASETS_MNT/.cache/kagglehub"
+      sudo -u ubuntu ln -sfn "$DATASETS_MNT/.cache/kagglehub" /home/ubuntu/.cache/kagglehub
+
       # Symlink ml-engine/media → persistent disk so all paths stay identical
       mkdir -p "$DATASETS_MNT/media"
       chown -R ubuntu:ubuntu "$DATASETS_MNT"
