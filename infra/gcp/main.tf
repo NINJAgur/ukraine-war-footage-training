@@ -157,7 +157,7 @@ resource "google_compute_disk" "datasets" {
   name = "ukraine-footage-datasets"
   zone = var.zone
   type = "pd-standard"
-  size = 200
+  size = 150
 }
 
 resource "google_compute_resource_policy" "gpu_schedule" {
@@ -277,6 +277,7 @@ PYEOF
         mkfs.ext4 -F "$DATASETS_DEV"
       fi
       mount -o discard,defaults "$DATASETS_DEV" "$DATASETS_MNT" || true
+      resize2fs "$DATASETS_DEV" 2>/dev/null || true
       grep -q "$DATASETS_MNT" /etc/fstab || \
         echo "$DATASETS_DEV $DATASETS_MNT ext4 discard,defaults,nofail 0 2" >> /etc/fstab
 

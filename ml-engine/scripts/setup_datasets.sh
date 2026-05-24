@@ -67,6 +67,8 @@ PY
 echo "[setup_datasets] Building merged specialist datasets..."
 $PYTHON scripts/build_specialist_datasets.py
 
+echo "[setup_datasets] Cleaning up source dataset cache to free disk space..."
+rm -rf "${KAGGLE_CACHE_FOLDER:-$HOME/.cache/kaggle}/datasets"
 echo "[setup_datasets] Done. Trigger baseline training via the Admin panel or:"
 echo "  POST /api/admin/train  {\"model_type\": \"AIRCRAFT\"}"
 echo "  POST /api/admin/train  {\"model_type\": \"VEHICLE\"}"
