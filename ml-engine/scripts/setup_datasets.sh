@@ -13,6 +13,12 @@ cd "$(dirname "$0")/.."
 PYTHON="python3"
 [ -f "venv/bin/python3" ] && PYTHON="venv/bin/python3"
 
+# Redirect kagglehub cache to persistent disk if mounted, otherwise use default
+if mountpoint -q /mnt/datasets 2>/dev/null; then
+  mkdir -p /mnt/datasets/.cache/kaggle
+  export KAGGLE_CACHE_FOLDER=/mnt/datasets/.cache/kaggle
+fi
+
 MERGED_DIR="media/kaggle_datasets/merged"
 if [ -d "$MERGED_DIR/GENERAL/train/images" ] && [ -n "$(ls -A "$MERGED_DIR/GENERAL/train/images" 2>/dev/null)" ]; then
     echo "[setup_datasets] Merged datasets already present — nothing to do."

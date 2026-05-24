@@ -9,6 +9,7 @@ Usage:
     cd ml-engine && python scripts/build_specialist_datasets.py
     cd ml-engine && python scripts/build_specialist_datasets.py --models AIRCRAFT
 """
+import os
 import sys
 import shutil
 import logging
@@ -125,7 +126,7 @@ BASELINE_DATASETS: Dict[str, List[str]] = {
 }
 
 IMG_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
-_KAGGLEHUB_CACHE = Path.home() / ".cache" / "kagglehub" / "datasets"
+_KAGGLEHUB_CACHE = Path(os.environ.get("KAGGLE_CACHE_FOLDER", Path.home() / ".cache" / "kaggle")) / "datasets"
 
 
 def _local_dataset_path(handle: str) -> Path:
