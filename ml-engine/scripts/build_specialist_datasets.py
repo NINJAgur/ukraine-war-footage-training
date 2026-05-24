@@ -126,7 +126,7 @@ BASELINE_DATASETS: Dict[str, List[str]] = {
 }
 
 IMG_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
-_KAGGLEHUB_CACHE = Path(os.environ.get("KAGGLE_CACHE_FOLDER", Path.home() / ".cache" / "kaggle")) / "datasets"
+_KAGGLEHUB_CACHE = Path.home() / ".cache" / "kagglehub" / "datasets"
 
 
 def _local_dataset_path(handle: str) -> Path:

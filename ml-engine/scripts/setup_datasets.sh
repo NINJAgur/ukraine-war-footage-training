@@ -37,9 +37,9 @@ datasets = [
     "rawsi18/military-assets-dataset-12-classes-yolo8-format",
     "rupankarmajumdar/amad-5-aerial-military-asset-detection-dataset",
 ]
-import os, pathlib
+import pathlib
 
-cache_root = pathlib.Path(os.environ.get("KAGGLE_CACHE_FOLDER", pathlib.Path.home() / ".cache" / "kaggle"))
+cache_root = pathlib.Path.home() / ".cache" / "kagglehub"
 
 failed = []
 for handle in datasets:
