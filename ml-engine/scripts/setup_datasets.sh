@@ -9,6 +9,10 @@
 set -e
 cd "$(dirname "$0")/.."
 
+# Use venv python if available (GCP deployment), otherwise fall back to system python3
+PYTHON="python3"
+[ -f "venv/bin/python3" ] && PYTHON="venv/bin/python3"
+
 MERGED_DIR="media/kaggle_datasets/merged"
 if [ -d "$MERGED_DIR/GENERAL/train/images" ] && [ -n "$(ls -A "$MERGED_DIR/GENERAL/train/images" 2>/dev/null)" ]; then
     echo "[setup_datasets] Merged datasets already present — nothing to do."
@@ -17,7 +21,7 @@ if [ -d "$MERGED_DIR/GENERAL/train/images" ] && [ -n "$(ls -A "$MERGED_DIR/GENER
 fi
 
 echo "[setup_datasets] Downloading 8 Kaggle datasets (~10 GB, may take 30-60 min)..."
-python3 - <<'PY'
+$PYTHON - <<'PY'
 import sys
 sys.path.insert(0, ".")
 import kagglehub
@@ -39,7 +43,7 @@ print("All datasets downloaded.")
 PY
 
 echo "[setup_datasets] Building merged specialist datasets..."
-python3 scripts/build_specialist_datasets.py
+$PYTHON scripts/build_specialist_datasets.py
 
 echo "[setup_datasets] Done. Trigger baseline training via the Admin panel or:"
 echo "  POST /api/admin/train  {\"model_type\": \"AIRCRAFT\"}"
