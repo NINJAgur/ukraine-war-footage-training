@@ -221,7 +221,7 @@ resource "google_compute_instance" "t4_gpu" {
         # gcc-12 required: GCP kernel 6.8 built with gcc-12, DKMS must match
         apt-get install -y --no-install-recommends \
           build-essential gcc-12 linux-headers-$(uname -r) \
-          ubuntu-drivers-common git python3 python3-venv python3-pip wget
+          ubuntu-drivers-common git python3 python3-venv python3-pip wget ffmpeg
         update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-12 12
         ubuntu-drivers autoinstall
         touch /var/lib/nvidia-driver-installed
@@ -244,29 +244,27 @@ resource "google_compute_instance" "t4_gpu" {
 
       # Python venv + deps
       cd /home/ubuntu/app/ml-engine
-      if [ ! -d venv ]; then
+      if [ ! -f venv/bin/celery ]; then
         python3 -m venv venv
-        venv/bin/pip install --quiet -r requirements.txt
+        venv/bin/pip install -r requirements.txt
       fi
 
-      # Download weights from GCS (first boot only)
-      if [ ! -f /var/lib/weights-downloaded ]; then
+      # Download weights from GCS (re-runs if any weight is missing)
+      if [ ! -f /home/ubuntu/app/ml-engine/runs/baseline/GENERAL/baseline_GENERAL_30/weights/best.pt ]; then
         pip3 install --quiet google-cloud-storage
         python3 - <<PYEOF
 from google.cloud import storage
 import pathlib
 client = storage.Client()
-bucket = client.bucket("ukraine-footage-media")
 ml_root = pathlib.Path("/home/ubuntu/app/ml-engine")
 for blob in client.list_blobs("ukraine-footage-media", prefix="runs/"):
     if not blob.name.endswith("best.pt"):
         continue
-    local = ml_root / blob.name[len("runs/"):]
+    local = ml_root / blob.name
     local.parent.mkdir(parents=True, exist_ok=True)
     blob.download_to_filename(str(local))
     print(f"Downloaded {blob.name}")
 PYEOF
-        touch /var/lib/weights-downloaded
       fi
 
       # Mount persistent datasets disk
@@ -331,7 +329,7 @@ Type=simple
 User=ubuntu
 WorkingDirectory=/home/ubuntu/app/ml-engine
 EnvironmentFile=/home/ubuntu/app/.env
-ExecStart=/home/ubuntu/app/ml-engine/venv/bin/celery -A celery_app worker -Q gpu --concurrency=1 --loglevel=info
+ExecStart=/home/ubuntu/app/ml-engine/venv/bin/celery -A celery_app worker -Q gpu --concurrency=1 --loglevel=info --beat
 Restart=on-failure
 RestartSec=30
 StandardOutput=append:/var/log/celery-gpu.log
