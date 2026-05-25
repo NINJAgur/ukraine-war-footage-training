@@ -4,11 +4,12 @@
 ---
 
 ## Current Project State
-*Last updated: 2026-05-17*
+*Last updated: 2026-05-26*
 
-**Production compose:** `docker-compose.prod.yml` (root of repo)
+**Production compose:** `docker-compose.prod.yml` (root of repo) — CPU services only
 **Local dev compose:** `docker-compose.yml` (no ml-worker, bind mounts)
-**Deployment target:** Oracle Always Free (CPU) + Vast.ai GPU on-demand
+**Deployment target:** GCP e2-micro (CPU, free tier) + GCP T4 Spot VM (GPU, native Python + systemd)
+**T4 startup script:** `infra/gcp/main.tf` — terraform-managed startup script auto-provisions all deps
 
 ---
 
@@ -46,11 +47,12 @@ Flag issues as CRITICAL, WARNING, or SUGGESTION.
 - [ ] `proxy_set_header X-Real-IP` and `X-Forwarded-For` set
 
 ### Secrets & Security
-- [ ] `.env` file is in `.gitignore`
-- [ ] Redis port 6379 only open to Vast.ai IP (not 0.0.0.0/0)
-- [ ] PostgreSQL port 5432 only open to Vast.ai IP (not public)
+- [ ] `.env` file is in `.gitignore`; no IPs or credentials in any `.md` files
+- [ ] Redis port 6379 only open to GCP internal range (10.128.0.0/9 in VPC firewall)
+- [ ] PostgreSQL port 5432 only open to GCP internal range (not public)
 - [ ] Strong passwords in production `.env` (not defaults)
 - [ ] JWT secret is a long random string
+- [ ] `terraform.tfvars` is in `.gitignore` (contains project_id)
 
 ### Volume Strategy
 - [ ] `postgres_data` — persistent, never deleted
@@ -66,14 +68,14 @@ Flag issues as CRITICAL, WARNING, or SUGGESTION.
 
 | File | Purpose |
 |------|---------|
-| `docker-compose.prod.yml` | Production: named volumes, GPU, all services |
+| `docker-compose.prod.yml` | Production e2-micro: named volumes, CPU services only |
 | `docker-compose.yml` | Local dev: bind mounts, no ml-worker |
 | `web-app/frontend/Dockerfile` | Multi-stage: node builder → nginx |
 | `web-app/frontend/nginx.conf` | SPA + API proxy + WebSocket + media |
 | `web-app/backend/Dockerfile` | FastAPI uvicorn |
 | `scraper-engine/Dockerfile` | Celery scraper worker |
-| `ml-engine/Dockerfile` | Celery GPU worker (Vast.ai only) |
-| `ml-engine/entrypoint.sh` | Weight download on first start |
+| `infra/gcp/main.tf` | Terraform: GCS bucket, e2-micro VM, T4 Spot VM (startup script manages all T4 setup) |
+| `infra/gcp/upload_weights.py` | One-time: upload local `ml-engine/runs/*/best.pt` to GCS |
 
 ---
 

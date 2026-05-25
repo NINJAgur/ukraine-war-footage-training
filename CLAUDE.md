@@ -33,7 +33,8 @@
 - Scrapers have two function variants: `_since(since_date)` for Celery/daily runs, `_sample(max_count/max_incidents)` for tests
 - Annotated output: `media/annotated/<model>/<publish_date>/<hash>_annotated.mp4` — date is `clip.published_at`, falling back to today; temp files written to same dir, renamed on completion
 - Pipeline conf threshold: `CONF_THRESH=0.25` for both `validate_clip` and `infer_video_multi_model`; `iou=0.45` passed to all `model()` calls in `inference.py` to suppress overlapping boxes
-- **Container path resolution:** scraper-worker (Docker) writes `/app/scraper-engine/media/...` paths to DB; pipeline scripts running natively call `_resolve_path()` to map these to Windows paths via `REPO_ROOT / rel`
+- **Container path resolution (local dev):** scraper-worker (Docker) writes `/app/scraper-engine/media/...` paths to DB; pipeline scripts running natively call `_resolve_path()` to map these to Windows paths via `REPO_ROOT / rel`
+- **GCS media (production):** scraper uploads raw `.mp4` to `gs://ukraine-footage-media/raw/<source>/<date>/<hash>.mp4` → `clip.file_path = gs://...`; T4 `annotate_clips` downloads raw from GCS via `_download_from_gcs()`, annotates, uploads to `gs://ukraine-footage-media/annotated/...` → `clip.mp4_path = https://storage.googleapis.com/...`; raw GCS object deleted after annotation
 
 **3 universal classes (aligned with `_filter.py`):**
 - `0=AIRCRAFT` — drones, helicopters, fixed-wing, missiles
@@ -176,7 +177,7 @@ Run Phase 2 test: `cd ml-engine && python tests/test_pipeline_e2e.py`
 | 1 | Scraper engine | ✅ Complete |
 | 2 | ML pipeline — baseline training | ✅ Complete (AIRCRAFT 0.929, VEHICLE 0.871, PERSONNEL 0.780, GENERAL 0.784) |
 | 3 | Web application | ✅ Complete (Celery E2E, hero video, WebSocket progress bar, integration smoke test — 58 annotated clips) |
-| 4 | Cloud & DevOps | 🔄 In progress (GCP e2-micro deployed ✅ — all 6 CPU services live at 34.58.124.206; T4 Spot VM provisioning in progress; HTTPS + CI/CD pending) |
+| 4 | Cloud & DevOps | 🔄 In progress (GCP e2-micro ✅ — all 6 CPU services live; T4 Spot VM ✅ — fully automated startup, GCS annotation pipeline live; HTTPS + CI/CD pending) |
 
 ---
 

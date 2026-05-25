@@ -4,17 +4,20 @@
 ---
 
 ## Current Project State
-*Last updated: 2026-05-22*
+*Last updated: 2026-05-26*
 
-**Target architecture decided:**
-- CPU services (postgres, redis, backend, frontend, scraper) → GCP e2-micro (free tier, us-central1/us-west1/us-east1, $0/mo permanent)
-- GPU ML worker + ML Beat → GCP T4 Spot VM (on-demand, ~$0.11/hr, ~$10/mo at 3hrs/day)
-- DNS + HTTPS → Cloudflare (free, future)
+**Architecture fully deployed:**
+- CPU services (postgres, redis, backend, frontend, scraper-worker, scraper-beat) → GCP e2-micro free tier, us-central1
+- GPU ML worker + Beat → GCP T4 Spot VM (n1-standard-1 + NVIDIA T4), Instance Scheduling 02:00–05:00 UTC daily
+- Media storage → GCS bucket `ukraine-footage-media` (public-read for annotated/, private raw/)
+- DNS + HTTPS → pending (Cloudflare or Certbot, task 4.20)
 - Total cost: ~$0/mo CPU (free tier) + ~$10/mo GPU = **~$10/mo** (free during $300 trial)
 
-**Production compose:** `docker-compose.prod.yml` — exists, ml-worker/ml-beat run on separate GCP T4 Spot VM (not on e2-micro)
+**Production compose:** `docker-compose.prod.yml` — CPU services only (no ml-worker/ml-beat)
 
-**Deployment status:** GCP account activated, $300 trial credit active — setup in progress
+**T4 Startup script:** Fully automated — NVIDIA drivers (first-boot reboot via sentinel), ffmpeg, sparse repo clone, python venv + deps (torch==2.5.1+cu121 pinned — 2.6+ breaks ultralytics weights_only), model weights downloaded from GCS at `runs/`, Celery GPU worker + embedded Beat (`--beat` flag). systemd service `celery-gpu` starts automatically.
+
+**GCS annotation pipeline confirmed:** scraper uploads `gs://ukraine-footage-media/raw/...` → T4 downloads, runs YOLO, uploads `gs://ukraine-footage-media/annotated/...` → frontend serves directly via `https://storage.googleapis.com/...`
 
 ---
 
@@ -38,13 +41,14 @@ GCP e2-micro (2 vCPU shared, 1GB RAM, us-central1)
     └── frontend (nginx)          (ports 80, 443)
 ```
 
-### GPU Stack (GCP T4 Spot VM — on-demand)
+### GPU Stack (GCP T4 Spot VM — Instance Scheduling 02:00–05:00 UTC)
 ```
-GCP n1-standard-4 + T4 Spot (4 vCPU, 15GB RAM, 16GB VRAM)
-└── Celery ml-worker (-Q gpu, --concurrency=1)
+GCP n1-standard-1 + T4 Spot (1 vCPU, 3.75GB RAM, 16GB VRAM)
+└── Celery GPU worker + Beat (--beat, -Q gpu, --concurrency=1)
     ├── Connects to Redis on e2-micro via internal GCP IP (free, no egress)
     ├── Connects to PostgreSQL on e2-micro via internal GCP IP
-    └── Reads/writes ml_media (GCP persistent disk or GCS bucket)
+    ├── Downloads raw videos from GCS bucket (clips from scraper)
+    └── Uploads annotated videos to GCS bucket (served publicly)
 ```
 
 ### Key advantage of same-GCP architecture
@@ -87,28 +91,32 @@ Console → VPC Network → Firewall → Create Firewall Rule
 
 ---
 
-## Research Goals
+## Solved Architecture Decisions (reference)
 
-### 1. Volume Seeding Strategy
-How to get model weights + annotated media from local Windows machine to GCP:
-- SCP from local → GCP e2-micro (slow but simple)
-- `gcloud compute scp` (easier than raw SCP, handles auth)
-- GCS bucket as intermediary (upload from Windows, pull from GCP VM)
+### 1. Weight Distribution → GCS (solved)
+Weights uploaded from local Windows via `infra/gcp/upload_weights.py` → T4 startup script downloads from GCS on first boot. Only downloads `best.pt` files under `runs/` prefix. Skips blobs that already exist.
 
-### 2. Media Sharing Between VMs
-Annotated videos written by T4 Spot worker need to be accessible to backend on e2-micro:
-- GCS bucket mounted on both VMs via gcsfuse
-- NFS share from e2-micro (simple but adds latency)
-- Periodic rsync from T4 → e2-micro after each annotation run
+### 2. Media Sharing Between VMs → GCS bucket (solved)
+Scraper uploads raw `.mp4` as `gs://ukraine-footage-media/raw/...` → T4 downloads for annotation, uploads result as `gs://ukraine-footage-media/annotated/...` → frontend references `https://storage.googleapis.com/...` directly. No shared filesystem needed.
 
-### 3. HTTPS Setup
-- Certbot (Let's Encrypt) on e2-micro directly
+### 3. T4 PyTorch Version → pin torch==2.5.1+cu121 (solved)
+PyTorch 2.6+ changed `weights_only` default from `False` to `True`, breaking `ultralytics==8.2.34`. Pinned in `ml-engine/requirements.txt` with `--extra-index-url https://download.pytorch.org/whl/cu121`.
+
+### 4. Beat Scheduler on T4 → embedded `--beat` (solved)
+Single Celery worker process runs both worker and beat via `--beat` flag. Beat schedule defined in `ml-engine/celery_app.py`: `auto_label_batch` @ 02:00 UTC, `annotate_clips` @ 04:00 UTC.
+
+## Open Research Topics
+
+### 5. HTTPS Setup (pending task 4.20)
+- Certbot (Let's Encrypt) on e2-micro directly — simplest
 - Cloudflare Tunnel (no ports needed, proxies via Cloudflare edge)
+- Cloudflare DNS proxy (orange cloud) + Certbot is the recommended combo
 
-### 4. Monitoring & Alerting
-- Docker stats + logs (basic, already available)
-- Uptime monitoring (UptimeRobot free tier)
-- GCP Cloud Monitoring (free tier available)
+### 6. CI/CD (pending task 4.21)
+- GitHub Actions `ci.yml` — run unit tests on every push
+- `deploy-e2-micro.yml` — SSH in, `git pull`, `docker compose up -d`
+- Secrets: `GCP_SSH_PRIVATE_KEY`, `GCP_E2_MICRO_HOST`, `POSTGRES_PASSWORD`, `JWT_SECRET`, `ADMIN_PASSWORD`
+- Consider: auto-trigger `infra/gcp/upload_weights.py` after new training run completes
 
 ---
 

@@ -28,43 +28,42 @@ An automated, full-stack web application that:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                  INGESTION LAYER  (scraper-engine)                  │
+│         INGESTION LAYER  (scraper-engine — GCP e2-micro)            │
 │                                                                     │
 │  [Celery Beat — daily 00:00 UTC]                                    │
 │       ├──► scrape_funker530   (REST API → score → yt-dlp download)  │
 │       └──► scrape_geoconfirmed (REST API → score → yt-dlp download) │
 │                    │                                                │
-│                    ▼                                                │
-│   Clip row written to PostgreSQL with keyword scores:               │
-│   score_aircraft / score_vehicle / score_personnel / score_uas      │
-│   is_pov — status=PENDING → DOWNLOADED once yt-dlp completes       │
+│   Raw .mp4 → uploaded to GCS: raw/<source>/<date>/<hash>.mp4       │
+│   clip.file_path = gs://ukraine-footage-media/raw/...              │
+│   Clip row written to PostgreSQL, status=DOWNLOADED                 │
 └─────────────────────────────────────────────────────────────────────┘
-                     │
+                     │ (Redis Celery queue via GCP internal IP)
                      ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                     ML LAYER  (ml-engine)                           │
+│         ML LAYER  (ml-engine — GCP T4 Spot VM)                      │
 │                                                                     │
-│  [Celery Beat — daily 04:00 UTC]                                    │
-│       └──► annotate_clips task  (sequential: AIRCRAFT→VEHICLE→PERSONNEL)
+│  [Celery Beat — daily 02:00 UTC → GDINO auto-label]                 │
+│  [Celery Beat — daily 04:00 UTC → annotate_clips]                   │
+│       └──► annotate_clips task  (sequential: AIRCRAFT→VEHICLE→PERSONNEL→GENERAL)
 │                    │                                                │
-│            Query DB by score majority vote:                         │
-│            AIRCRAFT:  score_aircraft > 0 AND ≥ others              │
-│            VEHICLE:   score_vehicle  > 0 AND ≥ others              │
-│            PERSONNEL: score_personnel > 0 AND ≥ others             │
-│                    │                                                │
-│            validate_clip (≥10% frames detected at conf=0.15)       │
+│            Query DB by score majority vote                          │
+│            _download_from_gcs(clip.file_path) → /tmp/<hash>.mp4    │
+│            validate_clip (≥10% frames detected at conf=0.25)       │
 │                PASS → infer_video_multi_model → annotated MP4       │
-│                FAIL → delete raw, status=PENDING                   │
-│                    │                                                │
-│            Clip: status=ANNOTATED, mp4_path set, raw deleted        │
+│                     → upload to GCS: annotated/<model>/<date>/...  │
+│                     → clip.mp4_path = https://storage.googleapis.com/...
+│                     → delete raw GCS object                        │
+│                FAIL → delete raw GCS object, status=PENDING        │
 └─────────────────────────────────────────────────────────────────────┘
                      │
                      ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│             PUBLIC DASHBOARD  (web-app/frontend)                    │
+│         PUBLIC DASHBOARD  (web-app/frontend — GCP e2-micro)         │
 │                                                                     │
 │   GET /api/annotated-clips → ArchiveSection / Archive.vue          │
 │   GET /api/stats           → TickerBar, MLCard HUD                 │
+│   <video src="https://storage.googleapis.com/..."> (direct GCS)    │
 └─────────────────────────────────────────────────────────────────────┘
                      │
                      ▼ (future: fine-tune loop)
@@ -617,10 +616,14 @@ yolo-training-template/                  ← monorepo root
 - [x] **4.15** Cloud deploy agent files: `agents/cloud-deploy/{research,review,qa}.md` + `.claude/commands/{research,review,qa}-deploy.md`; commands wired in `CLAUDE.md`
 - [x] **4.16** `docker-compose.prod.yml` created — GCP prod config (no ml-worker/ml-beat; named volumes; nginx direct media serving)
 - [x] **4.17** GCP project setup + e2-micro instance provisioned (us-central1, billing upgraded, static IP reserved)
-- [x] **4.18** All 6 CPU services deployed to GCP e2-micro (postgres, redis, scraper-worker, scraper-beat, backend, frontend); DB seeded from local dump; 80 annotated clips seeded to ml_media volume; media serving via nginx alias
-- [ ] **4.19** GCP T4 Spot VM setup — GPU quota approved; VM creation in progress; connect to e2-micro Redis via VPC internal IP; GCP Instance Scheduling (02:00–05:00 UTC daily)
+- [x] **4.18** All 6 CPU services deployed to GCP e2-micro (postgres, redis, scraper-worker, scraper-beat, backend, frontend); DB seeded from local dump; 80 annotated clips seeded to ml_media volume; nginx direct media serving
+- [x] **4.19** GCP T4 Spot VM fully operational — n1-standard-1 + T4, Instance Scheduling (02:00–05:00 UTC daily), startup script fully automated: NVIDIA drivers (first-boot reboot), ffmpeg, sparse repo clone, venv + deps (torch==2.5.1+cu121 pinned — 2.6+ broke ultralytics weights_only), weights downloaded from GCS, Celery GPU worker + Beat (`--beat` flag). GCS annotation pipeline confirmed end-to-end: scraper uploads raw → T4 downloads + annotates + uploads annotated → `clip.mp4_path = https://storage.googleapis.com/...`. 7 stale pre-GCS clips marked ERROR in DB (Docker paths no longer resolvable). ✅
 - [ ] **4.20** HTTPS: Cloudflare proxy or Certbot (deferred)
-- [ ] **4.21** CI/CD: GitHub Actions deploy workflow (deferred)
+- [ ] **4.21** CI/CD — GitHub Actions workflows:
+  - [ ] **4.21a** `ci.yml` — on push/PR to main: lint (ruff), type-check (pyright), run unit tests (pytest -m unit) for all 3 Python services
+  - [ ] **4.21b** `deploy-e2-micro.yml` — on push to main: SSH into e2-micro, `git pull`, `docker compose -f docker-compose.prod.yml build && up -d`; use GitHub Actions secrets for SSH key + GCP credentials
+  - [ ] **4.21c** `deploy-weights.yml` — on push to main affecting `ml-engine/requirements.txt` or `infra/gcp/`: re-run `terraform apply` (or trigger only if needed); manual dispatch for weight upload to GCS
+  - [ ] **4.21d** Add GitHub Actions secrets: `GCP_SSH_PRIVATE_KEY`, `GCP_E2_MICRO_HOST`, `POSTGRES_PASSWORD`, `JWT_SECRET`, `ADMIN_PASSWORD`, `CORS_ORIGINS`
 
 ---
 
@@ -671,7 +674,7 @@ docker compose exec ml-worker celery -A celery_app call tasks.annotate_clips.ann
 Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 ✅, Phase 4 🔄
 
 **Training status (2026-05-21):**
-- AIRCRAFT: mAP50=0.929 (baseline run 13) → mAP50=0.921 (finetune run 68) ✅
+- AIRCRAFT: mAP50=0.929 (baseline run 13) → mAP50=0.968 (finetune run 68) ✅
 - VEHICLE: mAP50=0.871 (baseline run 25) → mAP50=0.904 (finetune run 76, cycle 2) ✅
 - PERSONNEL: mAP50=0.780 (baseline run 29) → mAP50=0.873 (finetune run 75, cycle 2) ✅
 - GENERAL: mAP50=0.784 (baseline run 30) — finetune pending
@@ -685,10 +688,10 @@ Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 ✅, Phase 4 🔄
 - 80 ANNOTATED clips in DB; all 4 pipelines verified end-to-end
 
 **Cloud deployment — in progress 🔄:**
-- Architecture: GCP e2-micro free tier (CPU, $0/mo) + GCP T4 Spot VM (GPU, ~$10/mo)
-- e2-micro live ✅ — all 6 CPU services deployed; 80 annotated clips seeded; nginx direct media serving
-- GCP billing upgraded; GPU quota approved; T4 Spot VM creation in progress (4.19)
-- Remaining: T4 VM setup + Instance Scheduling (4.19), HTTPS (4.20), CI/CD (4.21)
+- Architecture: GCP e2-micro free tier (CPU, $0/mo) + GCP T4 Spot VM (GPU, ~$10/mo via Instance Scheduling 02:00–05:00 UTC)
+- e2-micro live ✅ — all 6 CPU services deployed; GCS bucket serving annotated videos
+- T4 Spot VM live ✅ — fully automated startup (drivers, deps, weights, Celery+Beat); GCS annotation pipeline verified end-to-end
+- Remaining: HTTPS (4.20), CI/CD (4.21)
 
 ---
 
