@@ -156,6 +156,8 @@ data.yaml
 *.pth
 # Claude Code internals
 .claude/scheduled_tasks.lock
+.claude/settings.json
+.claude/settings.local.json
 # Windows crash dumps
 *.stackdump
 # Terraform
