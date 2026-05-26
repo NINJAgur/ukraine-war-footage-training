@@ -1,0 +1,24 @@
+name: Deploy to e2-micro
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success'
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.E2_MICRO_HOST }}
+          username: ubuntu
+          key: ${{ secrets.E2_MICRO_SSH_KEY }}
+          script: |
+            cd /home/ubuntu/app
+            sudo git pull
+            sudo DOCKER_BUILDKIT=1 docker compose -f docker-compose.prod.yml build --parallel
+            sudo docker compose -f docker-compose.prod.yml up -d --remove-orphans
