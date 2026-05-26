@@ -1,6 +1,6 @@
 # PROJECT_PLAN.md — Ukraine Combat Footage Web Application
 > **Source of Truth** — All phases, structure, and decisions are tracked here.
-> Last updated: 2026-05-23
+> Last updated: 2026-05-26
 
 ---
 
@@ -191,7 +191,7 @@ yolo-training-template/                  ← monorepo root
 ├── docker-compose.prod.yml              ← GCP e2-micro prod deploy (CPU services only)
 │
 ├── .claude/                             ← Claude Code agentic workspace
-│   └── settings.json                    ← permissions, hooks, MCP config
+│   └── settings.json                    ← permissions, hooks, MCP config (gitignored)
 │
 ├── agents/                              ← multi-agent swarm definitions
 │   ├── ingestion/
@@ -311,17 +311,19 @@ yolo-training-template/                  ← monorepo root
 │               ├── SiteFooter.vue
 │               └── ... (see 3.9 for full list)
 │
-├── infra/                               ← NOT YET CREATED (tasks 4.5–4.9: GCP Terraform + CI/CD)
+├── infra/                               ← GCP Terraform (task 4.19 ✅)
 │   ├── gcp/
 │   │   ├── main.tf
-│   │   └── variables.tf
+│   │   ├── variables.tf
+│   │   └── upload_weights.py            ← uploads runs/ weights to GCS bucket
 │   └── nginx/
 │       └── nginx.conf
 │
-├── .github/                             ← NOT YET CREATED (tasks 4.6–4.7: GitHub Actions)
+├── .github/                             ← GitHub Actions CI/CD (task 4.21 ✅)
 │   └── workflows/
-│       ├── ci.yml
-│       └── deploy.yml
+│       ├── ci.yml                       ← frontend build + ruff lint on push/PR
+│       ├── deploy-e2-micro.yml          ← SSH deploy after CI passes (workflow_run)
+│       └── deploy-weights.yml           ← manual: SSH T4 → upload weights to GCS
 │
 ```
 
@@ -623,7 +625,11 @@ yolo-training-template/                  ← monorepo root
   - [x] **4.21a** `ci.yml` — frontend build (`npm run build`) + ruff lint on push/PR to main
   - [x] **4.21b** `deploy-e2-micro.yml` — SSH deploy via `appleboy/ssh-action` on push to main after CI passes (`workflow_run` trigger)
   - [x] **4.21c** `deploy-weights.yml` — manual `workflow_dispatch` to SSH into T4 and run `upload_weights.py`
-  - [x] **4.21d** GitHub secrets set: `E2_MICRO_HOST`, `E2_MICRO_SSH_KEY`; e2-micro uses sparse checkout
+  - [x] **4.21d** GitHub secrets set: `E2_MICRO_HOST`, `E2_MICRO_SSH_KEY`, `T4_SSH_KEY`; e2-micro uses sparse checkout; CI/CD pipeline confirmed passing end-to-end (2026-05-26)
+- [x] **4.22** Admin panel `latestRun()` fix: prefer DONE runs over ERROR for model status cards — was showing ERROR for all models despite successful DONE runs
+- [x] **4.23** Test suite hardening: production DB guard added to all 3 conftests (`web-app/backend`, `scraper-engine`, `ml-engine`) — refuses to run if `DATABASE_URL` points to non-local host
+- [x] **4.24** Security: `.claude/settings.json` purged from all 140 git commits via `git filter-repo --invert-paths`; added to `.gitignore`; force-pushed to GitHub
+- [x] **4.25** `web-app/backend/config.py` hardened: removed insecure defaults for `JWT_SECRET`, `ADMIN_USERNAME`, `ADMIN_PASSWORD` — app fails fast at startup if not set in `.env`
 
 ---
 
@@ -671,9 +677,9 @@ docker compose exec ml-worker celery -A celery_app call tasks.annotate_clips.ann
 
 ## 6. Next Steps
 
-Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 ✅, Phase 4 🔄
+Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 ✅, Phase 4 ✅
 
-**Training status (2026-05-21):**
+**Training status (2026-05-26):**
 - AIRCRAFT: mAP50=0.929 (baseline run 13) → mAP50=0.968 (finetune run 68) ✅
 - VEHICLE: mAP50=0.871 (baseline run 25) → mAP50=0.904 (finetune run 76, cycle 2) ✅
 - PERSONNEL: mAP50=0.780 (baseline run 29) → mAP50=0.873 (finetune run 75, cycle 2) ✅
@@ -687,11 +693,12 @@ Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 ✅, Phase 4 🔄
 - Video pipeline: FFmpeg CRF 28 + faststart; 90% full-screen box filter; multi-model inference
 - 80 ANNOTATED clips in DB; all 4 pipelines verified end-to-end
 
-**Cloud deployment — in progress 🔄:**
+**Cloud deployment — complete ✅ (2026-05-26):**
 - Architecture: GCP e2-micro free tier (CPU, $0/mo) + GCP T4 Spot VM (GPU, ~$10/mo via Instance Scheduling 02:00–05:00 UTC)
-- e2-micro live ✅ — all 6 CPU services deployed; GCS bucket serving annotated videos
-- T4 Spot VM live ✅ — fully automated startup (drivers, deps, weights, Celery+Beat); GCS annotation pipeline verified end-to-end
-- Phase 4 complete ✅
+- e2-micro live ✅ — all 6 CPU services deployed; HTTPS via ukrarchive.duckdns.org + Let's Encrypt
+- T4 Spot VM live ✅ — fully automated startup; GCS annotation pipeline verified end-to-end
+- CI/CD live ✅ — GitHub Actions: frontend build + ruff lint → auto-deploy to e2-micro on push to main
+- Security ✅ — no insecure config defaults; .claude/settings.json purged from history
 
 ---
 
