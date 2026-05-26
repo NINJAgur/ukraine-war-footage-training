@@ -51,8 +51,12 @@ def finalize_clip(clip, temp_path: Path, model_name: str) -> str:
 
     from config import settings
     if settings.STORAGE_MODE == "remote":
-        return _upload_gcs(perm_path, model_name, settings.REMOTE_STORAGE_BUCKET)
+        file_size = perm_path.stat().st_size
+        url = _upload_gcs(perm_path, model_name, settings.REMOTE_STORAGE_BUCKET)
+        clip.file_size_bytes = file_size
+        return url
 
+    clip.file_size_bytes = perm_path.stat().st_size
     return str(perm_path)
 
 

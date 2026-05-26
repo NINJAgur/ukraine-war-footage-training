@@ -6,7 +6,7 @@ import enum
 from datetime import datetime
 
 from sqlalchemy import (
-    Column, DateTime, Enum, ForeignKey, Index, Integer,
+    BigInteger, Column, DateTime, Enum, ForeignKey, Index, Integer,
     JSON, String, Text, UniqueConstraint,
 )
 from sqlalchemy.orm import DeclarativeBase, relationship
@@ -66,6 +66,7 @@ class Clip(Base):
     is_pov = Column(Integer, default=0)
     
     det_class = Column(String(20))       # dominant detected class (AIRCRAFT/VEHICLE/PERSONNEL/GENERAL)
+    file_size_bytes = Column(BigInteger)
     duration_seconds = Column(Integer)
     width = Column(Integer)
     height = Column(Integer)

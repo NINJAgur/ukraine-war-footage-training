@@ -15,7 +15,6 @@ from schemas.clips import ClipOut, ClipSubmit
 router = APIRouter(prefix="/api", tags=["public"])
 
 _ANNOTATED_DIR = Path(__file__).parent.parent.parent.parent / "ml-engine" / "media" / "annotated"
-_RAW_DIR       = Path(__file__).parent.parent.parent.parent / "scraper-engine" / "media"
 
 
 def _resolve_mp4_path(raw: str) -> Path:
@@ -184,31 +183,18 @@ async def _model_stats(db: AsyncSession) -> dict:
     return result
 
 
-def _dir_gb(base: Path) -> float:
-    import os
-    total = 0
-    for root, _dirs, files in _os_walk(base):
-        for f in files:
-            try:
-                total += os.path.getsize(root / f)
-            except OSError:
-                pass
-    return round(total / 1e9, 2)
-
-
 @router.get("/stats")
 async def get_stats(db: AsyncSession = Depends(get_db)) -> dict:
     rows = (await db.execute(
         select(
             func.count(Clip.id).label("total"),
             func.count(Clip.id).filter(Clip.status == ClipStatus.ANNOTATED).label("annotated"),
+            func.coalesce(func.sum(Clip.file_size_bytes).filter(Clip.status == ClipStatus.ANNOTATED), 0).label("total_bytes"),
         )
     )).one()
-    clips_total   = rows.total    or 0
+    clips_total    = rows.total    or 0
     annotated_mp4s = rows.annotated or 0
-    raw_gb      = _dir_gb(_RAW_DIR)      if _RAW_DIR.exists()      else 0.0
-    annotated_gb = _dir_gb(_ANNOTATED_DIR) if _ANNOTATED_DIR.exists() else 0.0
-    storage_gb  = round(raw_gb + annotated_gb, 2)
+    storage_gb     = round((rows.total_bytes or 0) / 1e9, 2)
 
     model_stats = await _model_stats(db)
     # Use GENERAL's image count as the canonical unique-images total — it already
