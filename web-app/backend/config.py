@@ -12,11 +12,11 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/ukraine_footage"
     DATABASE_SYNC_URL: str = "postgresql+psycopg2://postgres:postgres@localhost:5432/ukraine_footage"
     REDIS_URL: str = "redis://localhost:6379/0"
-    JWT_SECRET: str = "change-me-in-production"
+    JWT_SECRET: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
-    ADMIN_USERNAME: str = "admin"
-    ADMIN_PASSWORD: str = "admin123"
+    ADMIN_USERNAME: str
+    ADMIN_PASSWORD: str
     CORS_ORIGINS: str = "http://localhost:5173"
 
     class Config:
