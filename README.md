@@ -79,15 +79,20 @@ Admin panel: `http://localhost:5173/admin` — credentials in `web-app/backend/.
 
 ## Running Tests
 
+Unit tests run locally without Docker. Integration tests require `docker compose up -d` first.
+
 ```bash
-# Backend unit + integration tests
-cd web-app/backend && pytest tests/unit tests/integration -v
+# Backend unit tests (no DB needed)
+cd web-app/backend && pytest tests/unit -v -m unit
+
+# Backend integration tests (requires Docker Compose running)
+cd web-app/backend && pytest tests/integration -v
+
+# Scraper unit tests (no DB needed)
+cd scraper-engine && pytest tests/unit -v
 
 # ML engine unit tests (no GPU needed)
 cd ml-engine && pytest tests/unit -v
-
-# Scraper unit tests
-cd scraper-engine && pytest tests/unit -v
 
 # Frontend component tests
 cd web-app/frontend && npm run test

@@ -1,6 +1,12 @@
 # requires: pip install pytest httpx
+import os
 import sys
 from pathlib import Path
+
+# Set required env vars before any config import (no defaults in production config)
+os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
+os.environ.setdefault("ADMIN_USERNAME", "admin")
+os.environ.setdefault("ADMIN_PASSWORD", "testpass")
 
 # Add backend root so `main`, `api`, `db`, `schemas`, `config` are importable
 _BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -25,7 +31,7 @@ def client():
 
 @pytest.fixture(scope="session")
 def auth_headers(client):
-    resp = client.post("/api/auth/login", json={"username": "admin", "password": "admin123"})
+    resp = client.post("/api/auth/login", json={"username": os.environ["ADMIN_USERNAME"], "password": os.environ["ADMIN_PASSWORD"]})
     assert resp.status_code == 200, f"Login failed: {resp.text}"
     token = resp.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
