@@ -1,8 +1,13 @@
 # Ukraine Combat Footage Archival System
 
+[![CI](https://github.com/NINJAgur/ukraine-war-footage-training/actions/workflows/ci.yml/badge.svg)](https://github.com/NINJAgur/ukraine-war-footage-training/actions/workflows/ci.yml)
+[![Deploy](https://github.com/NINJAgur/ukraine-war-footage-training/actions/workflows/deploy-e2-micro.yml/badge.svg)](https://github.com/NINJAgur/ukraine-war-footage-training/actions/workflows/deploy-e2-micro.yml)
+
 Automated full-stack application that scrapes, auto-labels, and publicly displays
 archival combat footage from the war in Ukraine, with a secure admin panel for
 YOLOv8 model retraining.
+
+**Live:** https://ukrarchive.duckdns.org
 
 ## Architecture
 
@@ -33,17 +38,18 @@ YOLOv8 model retraining.
 |---------|-----------|-------|--------|
 | Scraper Engine | `scraper-engine/` | 1 | ✅ Complete |
 | ML Engine | `ml-engine/` | 2 | ✅ Complete |
-| Backend API | `web-app/backend/` | 3 | 🔄 In progress |
-| Frontend | `web-app/frontend/` | 3 | 🔄 In progress |
+| Backend API | `web-app/backend/` | 3 | ✅ Complete |
+| Frontend | `web-app/frontend/` | 3 | ✅ Complete |
+| Cloud & DevOps | GCP e2-micro + T4 Spot | 4 | ✅ Complete |
 
-## ML Training — All Baselines Complete
+## ML Training — Best Runs
 
-| Model | mAP50 | Images | Run | Status |
-|-------|-------|--------|-----|--------|
-| AIRCRAFT | 0.929 | 65,557 | 13 | ✅ |
-| VEHICLE | 0.871 | 56,440 | 25 | ✅ |
-| PERSONNEL | 0.780 | 10,962 | 29 | ✅ |
-| GENERAL | 0.784 | 144,466 | 30 | ✅ |
+| Model | mAP50 | Images | Stage | Run |
+|-------|-------|--------|-------|-----|
+| AIRCRAFT | 0.968 | 64,916 | Finetune | 68 |
+| VEHICLE | 0.904 | 56,440 | Finetune | 76 |
+| PERSONNEL | 0.873 | 10,962 | Finetune | 75 |
+| GENERAL | 0.784 | 144,466 | Baseline | 30 |
 
 ## Dataset Inventory (8 Kaggle datasets)
 
