@@ -618,12 +618,12 @@ yolo-training-template/                  ← monorepo root
 - [x] **4.17** GCP project setup + e2-micro instance provisioned (us-central1, billing upgraded, static IP reserved)
 - [x] **4.18** All 6 CPU services deployed to GCP e2-micro (postgres, redis, scraper-worker, scraper-beat, backend, frontend); DB seeded from local dump; 80 annotated clips seeded to ml_media volume; nginx direct media serving
 - [x] **4.19** GCP T4 Spot VM fully operational — n1-standard-1 + T4, Instance Scheduling (02:00–05:00 UTC daily), startup script fully automated: NVIDIA drivers (first-boot reboot), ffmpeg, sparse repo clone, venv + deps (torch==2.5.1+cu121 pinned — 2.6+ broke ultralytics weights_only), weights downloaded from GCS, Celery GPU worker + Beat (`--beat` flag). GCS annotation pipeline confirmed end-to-end: scraper uploads raw → T4 downloads + annotates + uploads annotated → `clip.mp4_path = https://storage.googleapis.com/...`. 7 stale pre-GCS clips marked ERROR in DB (Docker paths no longer resolvable). ✅
-- [ ] **4.20** HTTPS: Cloudflare proxy or Certbot (deferred)
-- [ ] **4.21** CI/CD — GitHub Actions workflows:
-  - [ ] **4.21a** `ci.yml` — on push/PR to main: lint (ruff), type-check (pyright), run unit tests (pytest -m unit) for all 3 Python services
-  - [ ] **4.21b** `deploy-e2-micro.yml` — on push to main: SSH into e2-micro, `git pull`, `docker compose -f docker-compose.prod.yml build && up -d`; use GitHub Actions secrets for SSH key + GCP credentials
-  - [ ] **4.21c** `deploy-weights.yml` — on push to main affecting `ml-engine/requirements.txt` or `infra/gcp/`: re-run `terraform apply` (or trigger only if needed); manual dispatch for weight upload to GCS
-  - [ ] **4.21d** Add GitHub Actions secrets: `GCP_SSH_PRIVATE_KEY`, `GCP_E2_MICRO_HOST`, `POSTGRES_PASSWORD`, `JWT_SECRET`, `ADMIN_PASSWORD`, `CORS_ORIGINS`
+- [x] **4.20** HTTPS — DuckDNS (`ukrarchive.duckdns.org`) + Let's Encrypt via Certbot standalone; nginx.conf redirects HTTP→HTTPS; cert auto-renews via certbot systemd timer; `/etc/letsencrypt` mounted into frontend container
+- [x] **4.21** CI/CD — GitHub Actions workflows:
+  - [x] **4.21a** `ci.yml` — frontend build (`npm run build`) + ruff lint on push/PR to main
+  - [x] **4.21b** `deploy-e2-micro.yml` — SSH deploy via `appleboy/ssh-action` on push to main after CI passes (`workflow_run` trigger)
+  - [x] **4.21c** `deploy-weights.yml` — manual `workflow_dispatch` to SSH into T4 and run `upload_weights.py`
+  - [x] **4.21d** GitHub secrets set: `E2_MICRO_HOST`, `E2_MICRO_SSH_KEY`; e2-micro uses sparse checkout
 
 ---
 
@@ -691,7 +691,7 @@ Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 ✅, Phase 4 🔄
 - Architecture: GCP e2-micro free tier (CPU, $0/mo) + GCP T4 Spot VM (GPU, ~$10/mo via Instance Scheduling 02:00–05:00 UTC)
 - e2-micro live ✅ — all 6 CPU services deployed; GCS bucket serving annotated videos
 - T4 Spot VM live ✅ — fully automated startup (drivers, deps, weights, Celery+Beat); GCS annotation pipeline verified end-to-end
-- Remaining: HTTPS (4.20), CI/CD (4.21)
+- Phase 4 complete ✅
 
 ---
 

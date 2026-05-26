@@ -10,7 +10,7 @@
 - CPU services (postgres, redis, backend, frontend, scraper-worker, scraper-beat) → GCP e2-micro free tier, us-central1
 - GPU ML worker + Beat → GCP T4 Spot VM (n1-standard-1 + NVIDIA T4), Instance Scheduling 02:00–05:00 UTC daily
 - Media storage → GCS bucket `ukraine-footage-media` (public-read for annotated/, private raw/)
-- DNS + HTTPS → pending (Cloudflare or Certbot, task 4.20)
+- DNS + HTTPS → **ukrarchive.duckdns.org** (DuckDNS free subdomain + Let's Encrypt via Certbot, expires 2026-08-24, auto-renews via certbot systemd timer)
 - Total cost: ~$0/mo CPU (free tier) + ~$10/mo GPU = **~$10/mo** (free during $300 trial)
 
 **Production compose:** `docker-compose.prod.yml` — CPU services only (no ml-worker/ml-beat)
@@ -105,18 +105,21 @@ PyTorch 2.6+ changed `weights_only` default from `False` to `True`, breaking `ul
 ### 4. Beat Scheduler on T4 → embedded `--beat` (solved)
 Single Celery worker process runs both worker and beat via `--beat` flag. Beat schedule defined in `ml-engine/celery_app.py`: `auto_label_batch` @ 02:00 UTC, `annotate_clips` @ 04:00 UTC.
 
-## Open Research Topics
+## Solved Architecture Decisions (continued)
 
-### 5. HTTPS Setup (pending task 4.20)
-- Certbot (Let's Encrypt) on e2-micro directly — simplest
-- Cloudflare Tunnel (no ports needed, proxies via Cloudflare edge)
-- Cloudflare DNS proxy (orange cloud) + Certbot is the recommended combo
+### 5. HTTPS → DuckDNS + Let's Encrypt Certbot (solved)
+- Free subdomain `ukrarchive.duckdns.org` via duckdns.org
+- Cert issued via `certbot certonly --standalone`, mounted into nginx container at `/etc/letsencrypt:ro`
+- nginx.conf: HTTP → 301 redirect to HTTPS; TLSv1.2/1.3 on port 443
+- Auto-renewal: certbot systemd timer (installed by default), pre-hook stops nginx container, post-hook starts it
+- GCP firewall must allow port 80 from `0.0.0.0/0` for certbot standalone challenge
 
-### 6. CI/CD (pending task 4.21)
-- GitHub Actions `ci.yml` — run unit tests on every push
-- `deploy-e2-micro.yml` — SSH in, `git pull`, `docker compose up -d`
-- Secrets: `GCP_SSH_PRIVATE_KEY`, `GCP_E2_MICRO_HOST`, `POSTGRES_PASSWORD`, `JWT_SECRET`, `ADMIN_PASSWORD`
-- Consider: auto-trigger `infra/gcp/upload_weights.py` after new training run completes
+### 6. CI/CD → GitHub Actions (solved)
+- `.github/workflows/ci.yml` — frontend build + ruff lint on all pushes/PRs
+- `.github/workflows/deploy-e2-micro.yml` — SSH deploy via `appleboy/ssh-action` triggered by `workflow_run` after CI passes
+- `.github/workflows/deploy-weights.yml` — manual `workflow_dispatch` to upload weights from T4 to GCS
+- Required GitHub secrets: `E2_MICRO_HOST`, `E2_MICRO_SSH_KEY`, `T4_SSH_KEY` (weights only)
+- e2-micro uses sparse checkout (`web-app/`, `scraper-engine/`, `shared/`, `.github/`) — no ml-engine or docs pulled
 
 ---
 

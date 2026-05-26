@@ -1,5 +1,5 @@
 # Agent: Cloud Deployment Code Reviewer
-**Domain:** Cloud & DevOps — Docker Compose, Oracle Cloud, Vast.ai
+**Domain:** Cloud & DevOps — Docker Compose, GCP
 
 ---
 
@@ -29,22 +29,25 @@ Flag issues as CRITICAL, WARNING, or SUGGESTION.
 - [ ] `depends_on` with `condition: service_healthy` where services need DB/Redis on start
 - [ ] No hardcoded secrets — all via `${ENV_VAR}` or `env_file`
 - [ ] GPU services use `deploy.resources.reservations.devices` (not `runtime: nvidia`)
-- [ ] ml-worker and ml-beat NOT in Oracle compose (no GPU on Oracle)
+- [ ] ml-worker and ml-beat NOT in prod compose (run on T4 Spot VM natively)
 - [ ] Ports: only expose what's needed publicly (postgres/redis should NOT be on 0.0.0.0)
 
 ### Dockerfiles
 - [ ] Multi-stage builds for frontend (builder → nginx)
 - [ ] `.dockerignore` excludes: `venv/`, `*.pyc`, `runs/`, `media/`, `node_modules/`, `.env`
-- [ ] Base images are multi-arch (arm64 compatible) for Oracle deployment
+- [ ] Base images pinned to specific versions (not `latest`)
 - [ ] No secrets in image layers (`ARG` secrets are cached — use runtime env instead)
 - [ ] Non-root user where possible
 
 ### nginx.conf
+- [ ] HTTP (port 80) redirects to HTTPS via `return 301 https://$host$request_uri`
+- [ ] HTTPS (port 443) uses Let's Encrypt certs at `/etc/letsencrypt/live/<domain>/`
+- [ ] `ssl_protocols TLSv1.2 TLSv1.3` — no TLSv1.0/1.1
 - [ ] SPA fallback: `try_files $uri $uri/ /index.html`
-- [ ] `/api/` proxy to `http://backend:8000`
+- [ ] `/api/` proxy to `http://backend:8000` with `X-Forwarded-Proto $scheme`
 - [ ] `/ws/` proxy with `Upgrade` + `Connection` headers + `proxy_read_timeout 3600s`
-- [ ] `/media/` proxy with `proxy_buffering off` (streaming video)
 - [ ] `proxy_set_header X-Real-IP` and `X-Forwarded-For` set
+- [ ] `/etc/letsencrypt` mounted as `:ro` volume in docker-compose.prod.yml frontend service
 
 ### Secrets & Security
 - [ ] `.env` file is in `.gitignore`; no IPs or credentials in any `.md` files

@@ -177,7 +177,7 @@ Run Phase 2 test: `cd ml-engine && python tests/test_pipeline_e2e.py`
 | 1 | Scraper engine | ✅ Complete |
 | 2 | ML pipeline — baseline training | ✅ Complete (AIRCRAFT 0.929, VEHICLE 0.871, PERSONNEL 0.780, GENERAL 0.784) |
 | 3 | Web application | ✅ Complete (Celery E2E, hero video, WebSocket progress bar, integration smoke test — 58 annotated clips) |
-| 4 | Cloud & DevOps | 🔄 In progress (GCP e2-micro ✅ — all 6 CPU services live; T4 Spot VM ✅ — fully automated startup, GCS annotation pipeline live; HTTPS + CI/CD pending) |
+| 4 | Cloud & DevOps | ✅ Complete (GCP e2-micro ✅; T4 Spot VM ✅; GCS pipeline ✅; HTTPS ✅ ukrarchive.duckdns.org Let's Encrypt; CI/CD ✅ GitHub Actions deploy-on-push) |
 
 ---
 

@@ -134,14 +134,30 @@ docker compose -f docker-compose.prod.yml exec postgres \
 
 ### Frontend Accessibility
 ```bash
-# Check public URL responds
-curl -I http://<E2_MICRO_EXTERNAL_IP>/
+# Check HTTPS responds (Let's Encrypt cert, auto-renews)
+curl -I https://ukrarchive.duckdns.org/
+
+# HTTP should redirect to HTTPS
+curl -I http://ukrarchive.duckdns.org/
+# Expected: 301 → https://ukrarchive.duckdns.org/
 
 # Check API via nginx proxy
-curl http://<E2_MICRO_EXTERNAL_IP>/api/stats
+curl -s https://ukrarchive.duckdns.org/api/stats | python3 -m json.tool
 
 # Check annotated video serves from GCS (new clips)
 curl -I "https://storage.googleapis.com/ukraine-footage-media/annotated/<model>/<date>/<hash>_annotated.mp4"
+```
+
+### CI/CD Health
+```bash
+# Verify GitHub Actions secrets are set (E2_MICRO_HOST, E2_MICRO_SSH_KEY)
+# Check at: github.com/NINJAgur/ukraine-war-footage-training/settings/secrets/actions
+
+# Verify SSH deploy key is in authorized_keys on e2-micro
+cat ~/.ssh/authorized_keys | grep github-actions
+
+# Check last deploy workflow run
+# github.com/NINJAgur/ukraine-war-footage-training/actions/workflows/deploy-e2-micro.yml
 ```
 
 ---
@@ -158,6 +174,9 @@ curl -I "https://storage.googleapis.com/ukraine-footage-media/annotated/<model>/
 | No tasks on GPU queue | Beat not running | Verify `--beat` flag in systemd ExecStart; `celery inspect scheduled` |
 | Annotated videos not loading | GCS object not public-read | Verify `roles/storage.objectViewer` for `allUsers` on bucket |
 | PyTorch UnpicklingError on weights load | Wrong torch version — 2.6+ breaks ultralytics | Verify `torch==2.5.1+cu121` in venv: `venv/bin/python -c "import torch; print(torch.__version__)"` |
+| 502 Bad Gateway after backend redeploy | nginx lost DNS resolution when backend container was recreated | `sudo docker compose -f docker-compose.prod.yml restart frontend` |
+| HTTPS cert expired | Certbot renewal failed (nginx was blocking port 80) | Check `sudo systemctl status certbot.timer`; manual renew: stop frontend → `sudo certbot renew` → start frontend |
+| Admin login fails | JWT_SECRET / ADMIN_USERNAME / ADMIN_PASSWORD not set in .env | `sudo grep -E 'ADMIN|JWT' /home/ubuntu/app/.env` — must be explicitly set, no defaults |
 
 ---
 
