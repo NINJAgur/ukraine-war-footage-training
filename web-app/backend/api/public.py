@@ -194,7 +194,7 @@ async def get_stats(db: AsyncSession = Depends(get_db)) -> dict:
     )).one()
     clips_total    = rows.total    or 0
     annotated_mp4s = rows.annotated or 0
-    storage_gb     = round((rows.total_bytes or 0) / 1e9, 2)
+    storage_gb     = round(int(rows.total_bytes or 0) / 1e9, 2)
 
     model_stats = await _model_stats(db)
     # Use GENERAL's image count as the canonical unique-images total — it already
