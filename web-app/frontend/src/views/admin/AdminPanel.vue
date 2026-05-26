@@ -327,7 +327,8 @@ async function declineClip(clipId) {
 }
 
 function latestRun(modelType) {
-  return runs.value.find(r => r.model_type === modelType)
+  const done = runs.value.find(r => r.model_type === modelType && r.status === 'DONE')
+  return done ?? runs.value.find(r => r.model_type === modelType)
 }
 
 function modelColor(m) { return MODEL_COLORS[m] ?? 'var(--fg-1)' }
