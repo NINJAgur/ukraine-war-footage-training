@@ -114,6 +114,7 @@ services:
       - backend
     volumes:
       - ml_media:/app/ml-engine/media:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
 
 volumes:
   postgres_data:
