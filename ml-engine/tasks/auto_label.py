@@ -32,7 +32,22 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "core"))
 logger = logging.getLogger(__name__)
 
 
+def _download_from_gcs(gs_url: str) -> Path:
+    import tempfile
+    from google.cloud import storage as gcs
+    without_scheme = gs_url[len("gs://"):]
+    bucket_name, _, blob_name = without_scheme.partition("/")
+    suffix = Path(blob_name).suffix or ".mp4"
+    tmp = Path(tempfile.mktemp(suffix=suffix, dir="/tmp"))
+    client = gcs.Client()
+    client.bucket(bucket_name).blob(blob_name).download_to_filename(str(tmp))
+    logger.info(f"Downloaded from GCS: {gs_url} → {tmp}")
+    return tmp
+
+
 def _resolve_clip_path(raw: str) -> Path:
+    if raw.startswith("gs://"):
+        return _download_from_gcs(raw)
     p = Path(raw)
     if p.exists():
         return p
@@ -113,6 +128,7 @@ def auto_label_clip(self, clip_id: int) -> dict:
             return {"status": "skipped", "clip_id": clip_id, "reason": "dataset_exists"}
         if not clip.file_path:
             raise ValueError(f"Clip {clip_id} has no file_path in DB")
+        is_gcs = (clip.file_path or "").startswith("gs://")
         video_path = _resolve_clip_path(clip.file_path)
         if not video_path.exists():
             raise ValueError(f"Clip {clip_id} has no file on disk: {clip.file_path}")
@@ -135,6 +151,10 @@ def auto_label_clip(self, clip_id: int) -> dict:
 
     if frame_count == 0:
         raise ValueError(f"No frames extracted from {video_path}")
+
+    if is_gcs and video_path.exists():
+        video_path.unlink()
+        logger.info(f"Deleted temp GCS download: {video_path}")
 
     # ── Run GroundingDINO ─────────────────────────────────────────────
     from core.autolabeling.auto_label import create_yolo_dataset
