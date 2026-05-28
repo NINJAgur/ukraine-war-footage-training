@@ -16,7 +16,7 @@ opencv-python-headless
 groundingdino-py==0.4.0
 
 google-cloud-storage==2.17.0
-supervision==0.21.0
+supervision
 numpy==1.26.4
 Pillow==10.3.0
 PyYAML==6.0.1
