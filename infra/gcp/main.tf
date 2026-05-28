@@ -233,8 +233,8 @@ resource "google_compute_instance" "inference_engine" {
         python3 -m venv venv
         venv/bin/pip install --quiet torch torchvision \
           --index-url https://download.pytorch.org/whl/cpu
-        venv/bin/pip install --quiet -r requirements.txt \
-          --extra-index-url https://download.pytorch.org/whl/cpu
+        grep -v "^torch\|^torchvision" requirements.txt > /tmp/requirements_cpu.txt
+        venv/bin/pip install --quiet -r /tmp/requirements_cpu.txt
       fi
 
       # Download weights from GCS on first boot

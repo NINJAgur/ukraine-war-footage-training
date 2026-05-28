@@ -12,7 +12,7 @@ psycopg2-binary==2.9.9
 pydantic-settings==2.3.4
 
 ultralytics==8.2.34
-opencv-python-headless==4.9.0.80
+opencv-python-headless
 groundingdino-py==0.4.0
 
 google-cloud-storage==2.17.0
