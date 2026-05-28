@@ -223,6 +223,7 @@ resource "google_compute_instance" "inference_engine" {
           /home/ubuntu/app
         cd /home/ubuntu/app
         git sparse-checkout set inference-engine shared
+        git sparse-checkout reapply
         chown -R ubuntu:ubuntu /home/ubuntu/app
       fi
 
@@ -375,6 +376,7 @@ resource "google_compute_instance" "training_engine" {
           /home/ubuntu/app
         cd /home/ubuntu/app
         git sparse-checkout set training-engine shared
+        git sparse-checkout reapply
         chown -R ubuntu:ubuntu /home/ubuntu/app
       fi
 

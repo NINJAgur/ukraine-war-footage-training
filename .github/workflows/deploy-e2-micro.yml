@@ -17,6 +17,7 @@ jobs:
           host: ${{ secrets.E2_MICRO_HOST }}
           username: ubuntu
           key: ${{ secrets.E2_MICRO_SSH_KEY }}
+          command_timeout: 30m
           script: |
             cd /home/ubuntu/app
             sudo git pull

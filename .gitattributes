@@ -1,0 +1,11 @@
+# Force LF line endings for files that run on Linux servers
+*.sh        text eol=lf
+*.tf        text eol=lf
+*.py        text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.toml      text eol=lf
+*.md        text eol=lf
+*.json      text eol=lf
+*.txt       text eol=lf
+Dockerfile  text eol=lf
