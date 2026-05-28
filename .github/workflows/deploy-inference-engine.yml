@@ -24,7 +24,8 @@ jobs:
 
             # Pull latest code and fix sparse checkout
             cd /home/ubuntu/app
-            sudo git pull
+            sudo git fetch origin
+            sudo git reset --hard origin/main
             sudo git sparse-checkout reapply
 
             # Build venv if pip install previously failed
