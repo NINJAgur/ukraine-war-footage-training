@@ -1,0 +1,4 @@
+[lint]
+ignore = [
+    "E402",  # module-level import not at top — intentional sys.path pattern throughout monorepo
+]

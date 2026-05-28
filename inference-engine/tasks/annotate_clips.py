@@ -245,7 +245,7 @@ def _run_general() -> dict:
             clip_dets = sum(det_counts.values())
 
             if clip_dets == 0:
-                logger.info(f"[GENERAL]   -> REJECT: zero detections in full inference pass")
+                logger.info("[GENERAL]   -> REJECT: zero detections in full inference pass")
                 if temp_out.exists():
                     temp_out.unlink()
                 _cleanup_raw(raw_path, clip.file_path)

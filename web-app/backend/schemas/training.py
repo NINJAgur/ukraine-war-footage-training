@@ -25,8 +25,10 @@ class TrainingRunOut(BaseModel):
         m = self.metrics or {}
         key = next((k for k in m if 'map50' in k.lower() and 'map50-95' not in k.lower()), None)
         if key:
-            try: self.map50 = round(float(m[key]), 3)
-            except (ValueError, TypeError): pass
+            try:
+                self.map50 = round(float(m[key]), 3)
+            except (ValueError, TypeError):
+                pass
         return self
 
 

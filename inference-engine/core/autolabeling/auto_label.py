@@ -1,8 +1,11 @@
 import cv2
+import logging
 import os
 import yaml
 import argparse
 from groundingdino.util.inference import load_model, load_image, predict
+
+logger = logging.getLogger(__name__)
 
 
 def create_yolo_dataset(

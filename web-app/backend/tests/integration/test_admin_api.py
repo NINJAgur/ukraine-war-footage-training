@@ -5,8 +5,6 @@ Requires auth_headers fixture (session-scoped login).
 import logging
 import pytest
 
-from db.models import ModelType, TrainingStage
-
 logger = logging.getLogger("test_admin_api")
 
 

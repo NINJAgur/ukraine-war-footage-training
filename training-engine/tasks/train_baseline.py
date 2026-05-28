@@ -21,7 +21,7 @@ from pathlib import Path
 
 from celery_app import celery_app
 from config import settings
-from db.models import ModelType, TrainingRun, TrainingStage, TrainingStatus
+from db.models import TrainingRun, TrainingStatus
 from db.session import get_session
 
 logger = logging.getLogger(__name__)

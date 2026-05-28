@@ -11,7 +11,6 @@ Run from repo root:
     cd scraper-engine && python tests/test_scrape_sample.py
 """
 import sys
-import os
 import logging
 from pathlib import Path
 
@@ -348,8 +347,8 @@ def test_download_video() -> None:
             f"Download summary: funker530={f_ok} ok / {f_fail} fail  |  "
             f"geoconfirmed={g_ok} ok / {g_fail} fail"
         )
-        assert f_ok >= 1, f"Expected ≥1 Funker530 download — got 0"
-        assert g_ok >= 1, f"Expected ≥1 GeoConfirmed download — got 0"
+        assert f_ok >= 1, "Expected ≥1 Funker530 download — got 0"
+        assert g_ok >= 1, "Expected ≥1 GeoConfirmed download — got 0"
 
     finally:
         if inserted_ids:

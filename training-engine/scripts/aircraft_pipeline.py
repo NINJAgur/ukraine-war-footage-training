@@ -149,7 +149,7 @@ def run(limit: int = 10) -> dict:
             clip_dets = sum(det_counts.values())
 
             if clip_dets == 0:
-                log.info(f"  REJECT — full inference produced 0 detections, skipping")
+                log.info("  REJECT — full inference produced 0 detections, skipping")
                 if temp_out.exists():
                     temp_out.unlink()
                 if raw_path.exists():

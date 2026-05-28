@@ -196,11 +196,11 @@ def _process_placemarks(placemarks: list[dict], max_incidents: int = None) -> li
                     skipped += 1
                     continue
                 if not equip_ok:
-                    logger.info(f"    -> SKIP: no equipment matches")
+                    logger.info("    -> SKIP: no equipment matches")
                     skipped += 1
                     continue
                 if is_pov_noise(scores):
-                    logger.info(f"    -> SKIP: pure FPV noise (pov + no class score)")
+                    logger.info("    -> SKIP: pure FPV noise (pov + no class score)")
                     skipped += 1
                     continue
 

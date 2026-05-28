@@ -1,11 +1,10 @@
 import hashlib
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 import cv2
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models import Clip, ClipSource, ClipStatus, ModelType, TrainingRun, TrainingStatus
@@ -150,8 +149,10 @@ async def _model_stats(db: AsyncSession) -> dict:
         def _run_map50(r: TrainingRun) -> float:
             m = r.metrics or {}
             k = next((k for k in m if "map50" in k.lower() and "map50-95" not in k.lower()), None)
-            try: return float(m[k]) if k else 0.0
-            except (ValueError, TypeError): return 0.0
+            try:
+                return float(m[k]) if k else 0.0
+            except (ValueError, TypeError):
+                return 0.0
 
         done_run = max(done_runs, key=_run_map50) if done_runs else None
 
@@ -175,8 +176,10 @@ async def _model_stats(db: AsyncSession) -> dict:
             images = metrics.get("total_train_images") or 0
             key = next((k for k in metrics if "map50" in k.lower() and "map50-95" not in k.lower()), None)
             if key:
-                try: map50 = round(float(metrics[key]), 3)
-                except (ValueError, TypeError): pass
+                try:
+                    map50 = round(float(metrics[key]), 3)
+                except (ValueError, TypeError):
+                    pass
 
         if active_run:
             result[model] = {"status": "TRAINING", "map50": map50, "images": images}

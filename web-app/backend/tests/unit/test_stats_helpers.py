@@ -3,7 +3,6 @@ Unit tests for _live_map50 from api/public.py.
 Uses tmp_path to create fake results.csv — no DB, no network needed.
 """
 import csv
-import sys
 from pathlib import Path
 from unittest.mock import patch
 

@@ -211,7 +211,7 @@ def main():
                 logging.error(f"Checkpoint not found: {checkpoint_path}")
                 return
             logging.info("Resume mode: skipping dataset download and yaml creation")
-            results = train_model(None, args.epochs, args.imgsz, args.batch,
+            train_model(None, args.epochs, args.imgsz, args.batch,
                                   args.device, args.project, args.name, weights=None,
                                   resume=True)
         else:
@@ -221,9 +221,9 @@ def main():
             if not paths:
                 raise ValueError("No standard train/val/test structure found in dataset")
             yaml_path = create_yaml(dataset_path, paths, args.nc, names)
-            results = train_model(yaml_path, args.epochs, args.imgsz, args.batch,
-                                  args.device, args.project, args.name, weights=args.weights,
-                                  resume=False)
+            train_model(yaml_path, args.epochs, args.imgsz, args.batch,
+                        args.device, args.project, args.name, weights=args.weights,
+                        resume=False)
 
         logging.info("Training completed successfully")
         if args.export_ncnn:

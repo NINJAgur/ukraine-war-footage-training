@@ -9,7 +9,6 @@ Usage:
     cd training-engine && python scripts/build_specialist_datasets.py
     cd training-engine && python scripts/build_specialist_datasets.py --models AIRCRAFT
 """
-import os
 import sys
 import shutil
 import logging
@@ -147,7 +146,7 @@ def _local_dataset_path(handle: str) -> Path:
 def _remap_lines(text: str, class_map: Optional[Dict[int, int]]) -> Tuple[str, set]:
     """Remap label text in memory. Returns (remapped_text, set_of_canonical_class_ids)."""
     if class_map is None:
-        classes = {int(float(l.split()[0])) for l in text.splitlines() if l.strip()}
+        classes = {int(float(line.split()[0])) for line in text.splitlines() if line.strip()}
         return text, classes
     kept = []
     classes = set()
@@ -214,7 +213,7 @@ def build_model_dataset(model_name: str, out_root: Path) -> Tuple[int, int]:
 
                 # Specialist models: drop annotation lines for other classes
                 if required_class is not None:
-                    filtered = [l for l in label_text.splitlines() if l.strip() and int(l.split()[0]) == required_class]
+                    filtered = [line for line in label_text.splitlines() if line.strip() and int(line.split()[0]) == required_class]
                     label_text = "\n".join(filtered) + ("\n" if filtered else "")
                     classes_present = {required_class} if filtered else set()
 

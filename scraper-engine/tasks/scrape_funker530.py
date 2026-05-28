@@ -132,7 +132,7 @@ def _evaluate_post(post: dict, seen_hashes: set) -> Optional[dict]:
         post.get("description") or post.get("content") or ""
     ).strip()
     description = re.sub(r'<[^>]+>', '', raw_desc).strip()
-    desc_lines = [l.strip() for l in description.split('\n') if l.strip()]
+    desc_lines = [ln.strip() for ln in description.split('\n') if ln.strip()]
     description = desc_lines[0] if desc_lines else ""
 
     published_at = _parse_date(post)
@@ -148,21 +148,21 @@ def _evaluate_post(post: dict, seen_hashes: set) -> Optional[dict]:
     )
 
     if not geo:
-        logger.info(f"    -> SKIP: no Ukraine/Russia geo keyword")
+        logger.info("    -> SKIP: no Ukraine/Russia geo keyword")
         return None
     if is_neg:
         logger.info(f"    -> SKIP: {neg_reason}")
         return None
     if not equip_ok:
-        logger.info(f"    -> SKIP: no equipment match")
+        logger.info("    -> SKIP: no equipment match")
         return None
     if is_pov_noise(scores):
-        logger.info(f"    -> SKIP: pure FPV noise (pov + no class score)")
+        logger.info("    -> SKIP: pure FPV noise (pov + no class score)")
         return None
 
     video_url = resolve_video_url(post)
     if not video_url:
-        logger.info(f"    -> SKIP: no downloadable URL")
+        logger.info("    -> SKIP: no downloadable URL")
         return None
 
     page_url = f"https://funker530.com/video/{slug}/"

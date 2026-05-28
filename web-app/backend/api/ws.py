@@ -1,7 +1,6 @@
 import asyncio
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from sqlalchemy import select
 
 from db.session import AsyncSessionLocal
 from shared.db.models import TrainingRun, TrainingStatus

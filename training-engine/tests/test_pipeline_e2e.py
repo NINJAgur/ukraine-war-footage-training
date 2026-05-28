@@ -29,7 +29,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config import settings
 from db.models import Clip, ClipStatus
 from db.session import get_session
 

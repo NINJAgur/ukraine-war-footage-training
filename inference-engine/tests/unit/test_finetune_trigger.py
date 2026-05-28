@@ -2,7 +2,7 @@
 Unit tests for _maybe_trigger_finetune in package_dataset.
 Mocks get_session — no DB or GPU needed.
 """
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
