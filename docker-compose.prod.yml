@@ -99,8 +99,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    volumes:
-      - ml_media:/app/ml-engine/media
+
 
   frontend:
     build:
@@ -113,11 +112,9 @@ services:
     depends_on:
       - backend
     volumes:
-      - ml_media:/app/ml-engine/media:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
 
 volumes:
   postgres_data:
   redis_data:
   scraper_media:
-  ml_media:

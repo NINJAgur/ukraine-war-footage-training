@@ -1,7 +1,6 @@
 terraform {
   required_providers {
     google = { source = "hashicorp/google", version = "~> 5.0" }
-    null   = { source = "hashicorp/null",   version = "~> 3.0" }
   }
 }
 
@@ -30,18 +29,6 @@ resource "google_storage_bucket_iam_member" "public_read" {
   member = "allUsers"
 }
 
-resource "null_resource" "upload_weights" {
-  triggers = {
-    bucket = google_storage_bucket.media.name
-  }
-
-  provisioner "local-exec" {
-    interpreter = ["bash", "-c"]
-    command     = "PYTHONHTTPSVERIFY=0 '${path.module}/../../venv/Scripts/python.exe' '${path.module}/upload_weights.py' '${google_storage_bucket.media.name}' '${path.module}/../..'"
-  }
-
-  depends_on = [google_storage_bucket_iam_member.public_read]
-}
 
 data "google_project" "project" {}
 
@@ -106,17 +93,20 @@ resource "google_compute_instance" "e2_micro" {
   }
 
   metadata = {
-    startup-script = <<-EOF
+    "ssh-keys"       = var.ssh_deploy_key_pub != "" ? "ubuntu:${var.ssh_deploy_key_pub}" : null
+    "startup-script" = <<-EOF
       #!/bin/bash
       set -e
       exec > /var/log/startup-script.log 2>&1
 
       # Swap — prevents OOM during Docker builds on e2-micro
-      fallocate -l 2G /swapfile
-      chmod 600 /swapfile
-      mkswap /swapfile
-      swapon /swapfile
-      echo '/swapfile none swap sw 0 0' >> /etc/fstab
+      if [ ! -f /swapfile ]; then
+        fallocate -l 2G /swapfile
+        chmod 600 /swapfile
+        mkswap /swapfile
+        swapon /swapfile
+        echo '/swapfile none swap sw 0 0' >> /etc/fstab
+      fi
 
       # Docker + git
       apt-get update -qq
@@ -124,20 +114,27 @@ resource "google_compute_instance" "e2_micro" {
       systemctl enable docker
       systemctl start docker
 
-      # Clone repo
-      git clone --depth=1 https://github.com/NINJAgur/ukraine-war-footage-training.git /home/ubuntu/app
-      chown -R ubuntu:ubuntu /home/ubuntu/app
+      # Clone repo (once)
+      if [ ! -d /home/ubuntu/app ]; then
+        git clone --depth=1 https://github.com/NINJAgur/ukraine-war-footage-training.git /home/ubuntu/app
+        chown -R ubuntu:ubuntu /home/ubuntu/app
+      fi
 
-      # Write .env
+      # Write .env (refreshed every boot)
       cat > /home/ubuntu/app/.env <<ENVEOF
-      POSTGRES_PASSWORD=${var.postgres_password}
-      CORS_ORIGINS=${var.cors_origins}
-      STORAGE_MODE=remote
-      REMOTE_STORAGE_BUCKET=ukraine-footage-media
-      ENVEOF
+POSTGRES_PASSWORD=${var.postgres_password}
+CORS_ORIGINS=${var.cors_origins}
+STORAGE_MODE=remote
+REMOTE_STORAGE_BUCKET=${var.bucket_name}
+JWT_SECRET=${var.jwt_secret}
+ADMIN_USERNAME=${var.admin_username}
+ADMIN_PASSWORD=${var.admin_password}
+ENVEOF
+      chown ubuntu:ubuntu /home/ubuntu/app/.env
 
       # Build and start all CPU services
       cd /home/ubuntu/app
+      sudo -u ubuntu docker compose -f docker-compose.prod.yml pull 2>/dev/null || true
       docker compose -f docker-compose.prod.yml up -d --build
     EOF
   }
@@ -151,37 +148,178 @@ output "e2_micro_ip" {
   value = google_compute_address.e2_micro.address
 }
 
-# ── T4 Spot VM (GPU worker) ───────────────────────────────────────────
+# ── Persistent datasets disk (Kaggle data + merged dirs) ─────────────
 
 resource "google_compute_disk" "datasets" {
   name = "ukraine-footage-datasets"
   zone = var.zone
   type = "pd-standard"
   size = 150
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
-resource "google_compute_resource_policy" "gpu_schedule" {
-  name   = "gpu-daily-schedule"
+# ── inference-engine VM (n2-standard-4 CPU, daily 03:00–05:00 UTC) ──
+
+resource "google_compute_resource_policy" "inference_schedule" {
+  name   = "inference-daily-schedule"
   region = var.region
 
   instance_schedule_policy {
-    vm_start_schedule { schedule = "0 2 * * *" }
+    vm_start_schedule { schedule = "0 3 * * *" }
     vm_stop_schedule  { schedule = "0 5 * * *" }
     time_zone         = "UTC"
   }
 }
 
-resource "google_compute_instance" "t4_gpu" {
-  name                      = "ukraine-footage-gpu"
-  machine_type              = "n1-standard-1"
-  zone                      = var.zone
-  tags                      = ["gpu-worker"]
+resource "google_compute_instance" "inference_engine" {
+  name                      = "ukraine-footage-inference"
+  machine_type              = "e2-standard-4"
+  zone                      = var.inference_zone
+  tags                      = ["inference-worker"]
   allow_stopping_for_update = true
 
   scheduling {
-    preemptible         = true
-    automatic_restart   = false
-    on_host_maintenance = "TERMINATE"
+    on_host_maintenance = "MIGRATE"
+    automatic_restart   = true
+  }
+
+  boot_disk {
+    initialize_params {
+      image = "ubuntu-os-cloud/ubuntu-2204-lts"
+      size  = 50
+      type  = "pd-standard"
+    }
+  }
+
+  network_interface {
+    network = "default"
+    access_config {}
+  }
+
+  resource_policies = [google_compute_resource_policy.inference_schedule.id]
+
+  metadata = {
+    "ssh-keys"       = var.ssh_deploy_key_pub != "" ? "ubuntu:${var.ssh_deploy_key_pub}" : null
+    "startup-script" = <<-EOF
+      #!/bin/bash
+      set -e
+      exec >> /var/log/startup-script.log 2>&1
+
+      # First-boot: install system deps
+      if [ ! -f /var/lib/base-deps-installed ]; then
+        apt-get update -qq
+        apt-get install -y --no-install-recommends \
+          git python3 python3-venv python3-pip wget ffmpeg
+        touch /var/lib/base-deps-installed
+      fi
+
+      # Sparse clone on first boot only
+      if [ ! -d /home/ubuntu/app ]; then
+        git clone --depth=1 --filter=blob:none --sparse \
+          https://github.com/NINJAgur/ukraine-war-footage-training.git \
+          /home/ubuntu/app
+        cd /home/ubuntu/app
+        git sparse-checkout set inference-engine shared
+        chown -R ubuntu:ubuntu /home/ubuntu/app
+      fi
+
+      # Python venv + CPU-only torch + deps (skip if already built)
+      cd /home/ubuntu/app/inference-engine
+      if [ ! -f venv/bin/celery ]; then
+        python3 -m venv venv
+        venv/bin/pip install --quiet torch torchvision \
+          --index-url https://download.pytorch.org/whl/cpu
+        venv/bin/pip install --quiet -r requirements.txt \
+          --extra-index-url https://download.pytorch.org/whl/cpu
+      fi
+
+      # Download weights from GCS on first boot
+      if [ ! -d /home/ubuntu/app/training-engine/runs ]; then
+        venv/bin/python3 - <<PYEOF
+from google.cloud import storage
+import pathlib
+client = storage.Client()
+training_root = pathlib.Path("/home/ubuntu/app/training-engine")
+for blob in client.list_blobs("${var.bucket_name}", prefix="runs/"):
+    if not blob.name.endswith("best.pt"):
+        continue
+    local = training_root / blob.name
+    local.parent.mkdir(parents=True, exist_ok=True)
+    blob.download_to_filename(str(local))
+    print(f"Downloaded {blob.name}")
+PYEOF
+      fi
+
+      # Write .env (refreshed every boot in case IPs change)
+      cat > /home/ubuntu/app/.env <<ENVEOF
+DATABASE_SYNC_URL=postgresql+psycopg2://postgres:${var.postgres_password}@${google_compute_instance.e2_micro.network_interface[0].network_ip}:5432/ukraine_footage
+CELERY_BROKER_URL=redis://${google_compute_instance.e2_micro.network_interface[0].network_ip}:6379/0
+CELERY_RESULT_BACKEND=redis://${google_compute_instance.e2_micro.network_interface[0].network_ip}:6379/1
+REDIS_URL=redis://${google_compute_instance.e2_micro.network_interface[0].network_ip}:6379/0
+STORAGE_MODE=remote
+REMOTE_STORAGE_BUCKET=${var.bucket_name}
+GCP_PROJECT_ID=${var.project_id}
+GCP_TRAINING_VM_ZONE=${var.zone}
+GCP_TRAINING_VM_NAME=ukraine-footage-training
+GPU_DEVICE=cpu
+ENVEOF
+      chown ubuntu:ubuntu /home/ubuntu/app/.env
+
+      # systemd service
+      cat > /etc/systemd/system/celery-inference.service <<SVCEOF
+[Unit]
+Description=Celery Inference Worker + Beat
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/app/inference-engine
+EnvironmentFile=/home/ubuntu/app/.env
+Environment=OMP_NUM_THREADS=4
+ExecStart=/home/ubuntu/app/inference-engine/venv/bin/celery -A celery_app worker -Q pipeline --pool=prefork --concurrency=1 --loglevel=info --beat
+Restart=on-failure
+RestartSec=30
+StandardOutput=append:/var/log/celery-inference.log
+StandardError=append:/var/log/celery-inference.log
+
+[Install]
+WantedBy=multi-user.target
+SVCEOF
+
+      systemctl daemon-reload
+      systemctl enable celery-inference
+      systemctl start celery-inference
+    EOF
+  }
+
+  service_account {
+    scopes = ["cloud-platform"]
+  }
+}
+
+output "inference_engine_ip" {
+  value = google_compute_instance.inference_engine.network_interface[0].access_config[0].nat_ip
+}
+
+# ── training-engine VM (n1-standard-4 + T4, on-demand via API) ───────
+
+resource "google_compute_instance" "training_engine" {
+  name                      = "ukraine-footage-training"
+  machine_type              = "n1-standard-4"
+  zone                      = var.zone
+  tags                      = ["training-worker"]
+  allow_stopping_for_update = true
+
+  scheduling {
+    provisioning_model          = "SPOT"
+    instance_termination_action = "STOP"
+    preemptible                 = true
+    automatic_restart           = false
+    on_host_maintenance         = "TERMINATE"
   }
 
   guest_accelerator {
@@ -207,9 +345,8 @@ resource "google_compute_instance" "t4_gpu" {
     access_config {}
   }
 
-  resource_policies = [google_compute_resource_policy.gpu_schedule.id]
-
   metadata = {
+    "ssh-keys"     = var.ssh_deploy_key_pub != "" ? "ubuntu:${var.ssh_deploy_key_pub}" : null
     startup-script = <<-EOF
       #!/bin/bash
       set -e
@@ -218,7 +355,6 @@ resource "google_compute_instance" "t4_gpu" {
       # Install NVIDIA driver on first boot, then reboot to load kernel module
       if [ ! -f /var/lib/nvidia-driver-installed ]; then
         apt-get update -qq
-        # gcc-12 required: GCP kernel 6.8 built with gcc-12, DKMS must match
         apt-get install -y --no-install-recommends \
           build-essential gcc-12 linux-headers-$(uname -r) \
           ubuntu-drivers-common git python3 python3-venv python3-pip wget ffmpeg
@@ -229,7 +365,7 @@ resource "google_compute_instance" "t4_gpu" {
         exit 0
       fi
 
-      # Wait for NVIDIA driver (available after reboot)
+      # Wait for NVIDIA driver
       until nvidia-smi &>/dev/null; do sleep 10; done
 
       # Sparse clone on first boot only
@@ -238,36 +374,36 @@ resource "google_compute_instance" "t4_gpu" {
           https://github.com/NINJAgur/ukraine-war-footage-training.git \
           /home/ubuntu/app
         cd /home/ubuntu/app
-        git sparse-checkout set ml-engine shared
+        git sparse-checkout set training-engine shared
         chown -R ubuntu:ubuntu /home/ubuntu/app
       fi
 
       # Python venv + deps
-      cd /home/ubuntu/app/ml-engine
+      cd /home/ubuntu/app/training-engine
       if [ ! -f venv/bin/celery ]; then
         python3 -m venv venv
         venv/bin/pip install -r requirements.txt
       fi
 
-      # Download weights from GCS (re-runs if any weight is missing)
-      if [ ! -f /home/ubuntu/app/ml-engine/runs/baseline/GENERAL/baseline_GENERAL_30/weights/best.pt ]; then
+      # Download weights from GCS (needed as baseline_weights for train_finetune)
+      if [ ! -d /home/ubuntu/app/training-engine/runs ]; then
         pip3 install --quiet google-cloud-storage
         python3 - <<PYEOF
 from google.cloud import storage
 import pathlib
 client = storage.Client()
-ml_root = pathlib.Path("/home/ubuntu/app/ml-engine")
+training_root = pathlib.Path("/home/ubuntu/app/training-engine")
 for blob in client.list_blobs("ukraine-footage-media", prefix="runs/"):
     if not blob.name.endswith("best.pt"):
         continue
-    local = ml_root / blob.name
+    local = training_root / blob.name
     local.parent.mkdir(parents=True, exist_ok=True)
     blob.download_to_filename(str(local))
     print(f"Downloaded {blob.name}")
 PYEOF
       fi
 
-      # Mount persistent datasets disk
+      # Mount persistent datasets disk (Kaggle cache)
       DATASETS_DEV="/dev/disk/by-id/google-datasets"
       DATASETS_MNT="/mnt/datasets"
       mkdir -p "$DATASETS_MNT"
@@ -279,7 +415,7 @@ PYEOF
       grep -q "$DATASETS_MNT" /etc/fstab || \
         echo "$DATASETS_DEV $DATASETS_MNT ext4 discard,defaults,nofail 0 2" >> /etc/fstab
 
-      # Swap on persistent disk — prevents OOM during large dataset extraction
+      # Swap on persistent disk
       if [ ! -f "$DATASETS_MNT/swapfile" ]; then
         fallocate -l 4G "$DATASETS_MNT/swapfile"
         chmod 600 "$DATASETS_MNT/swapfile"
@@ -287,27 +423,26 @@ PYEOF
       fi
       swapon "$DATASETS_MNT/swapfile" 2>/dev/null || true
 
-      # Redirect kagglehub cache to persistent disk via symlink (env var unreliable across sudo)
+      # Redirect kagglehub cache to persistent disk
       mkdir -p "$DATASETS_MNT/.cache/kagglehub"
       mkdir -p /home/ubuntu/.cache
       chown -R ubuntu:ubuntu "$DATASETS_MNT/.cache" /home/ubuntu/.cache
       ln -sfn "$DATASETS_MNT/.cache/kagglehub" /home/ubuntu/.cache/kagglehub
 
-      # Symlink ml-engine/media → persistent disk so all paths stay identical
+      # Symlink training-engine/media → persistent disk
       mkdir -p "$DATASETS_MNT/media"
       chown -R ubuntu:ubuntu "$DATASETS_MNT"
-      if [ ! -L /home/ubuntu/app/ml-engine/media ]; then
-        rm -rf /home/ubuntu/app/ml-engine/media
-        ln -s "$DATASETS_MNT/media" /home/ubuntu/app/ml-engine/media
+      if [ ! -L /home/ubuntu/app/training-engine/media ]; then
+        rm -rf /home/ubuntu/app/training-engine/media
+        ln -s "$DATASETS_MNT/media" /home/ubuntu/app/training-engine/media
       fi
 
       # Download Kaggle datasets + build merged folders (once — persists on disk)
-      # Non-fatal: Celery still starts for annotation even if datasets aren't ready
-      cd /home/ubuntu/app/ml-engine
+      cd /home/ubuntu/app/training-engine
       sudo -u ubuntu bash scripts/setup_datasets.sh || \
         echo "[startup] Dataset setup incomplete — will retry on next boot"
 
-      # Write .env (refreshed every boot in case IPs change)
+      # Write .env
       cat > /home/ubuntu/app/.env <<ENVEOF
 DATABASE_SYNC_URL=postgresql+psycopg2://postgres:${var.postgres_password}@${google_compute_instance.e2_micro.network_interface[0].network_ip}:5432/ukraine_footage
 CELERY_BROKER_URL=redis://${google_compute_instance.e2_micro.network_interface[0].network_ip}:6379/0
@@ -315,33 +450,36 @@ CELERY_RESULT_BACKEND=redis://${google_compute_instance.e2_micro.network_interfa
 REDIS_URL=redis://${google_compute_instance.e2_micro.network_interface[0].network_ip}:6379/0
 STORAGE_MODE=remote
 REMOTE_STORAGE_BUCKET=ukraine-footage-media
+GCP_PROJECT_ID=${var.project_id}
+GCP_TRAINING_VM_ZONE=${var.zone}
+GCP_TRAINING_VM_NAME=ukraine-footage-training
 ENVEOF
       chown ubuntu:ubuntu /home/ubuntu/app/.env
 
       # systemd service
-      cat > /etc/systemd/system/celery-gpu.service <<SVCEOF
+      cat > /etc/systemd/system/celery-training.service <<SVCEOF
 [Unit]
-Description=Celery GPU Worker
+Description=Celery Training Worker
 After=network.target
 
 [Service]
 Type=simple
 User=ubuntu
-WorkingDirectory=/home/ubuntu/app/ml-engine
+WorkingDirectory=/home/ubuntu/app/training-engine
 EnvironmentFile=/home/ubuntu/app/.env
-ExecStart=/home/ubuntu/app/ml-engine/venv/bin/celery -A celery_app worker -Q gpu --concurrency=1 --loglevel=info --beat
+ExecStart=/home/ubuntu/app/training-engine/venv/bin/celery -A celery_app worker -Q training --concurrency=1 --loglevel=info
 Restart=on-failure
 RestartSec=30
-StandardOutput=append:/var/log/celery-gpu.log
-StandardError=append:/var/log/celery-gpu.log
+StandardOutput=append:/var/log/celery-training.log
+StandardError=append:/var/log/celery-training.log
 
 [Install]
 WantedBy=multi-user.target
 SVCEOF
 
       systemctl daemon-reload
-      systemctl enable celery-gpu
-      systemctl start celery-gpu
+      systemctl enable celery-training
+      systemctl start celery-training
     EOF
   }
 
@@ -350,6 +488,6 @@ SVCEOF
   }
 }
 
-output "t4_gpu_ip" {
-  value = google_compute_instance.t4_gpu.network_interface[0].access_config[0].nat_ip
+output "training_engine_ip" {
+  value = google_compute_instance.training_engine.network_interface[0].access_config[0].nat_ip
 }

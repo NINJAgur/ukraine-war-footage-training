@@ -132,7 +132,7 @@ async def start_training(
     task = _celery.send_task(
         task_name,
         kwargs={"training_run_id": run.id},
-        queue="gpu",
+        queue="training",
         ignore_result=True,
     )
     return {"task_id": task.id, "training_run_id": run.id, "status": "QUEUED"}

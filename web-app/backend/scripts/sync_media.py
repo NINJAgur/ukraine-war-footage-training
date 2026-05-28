@@ -12,7 +12,7 @@ from db.models import Clip, ClipStatus
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
 
-ANNOTATED_DIR = Path("/app/ml-engine/media/annotated")
+ANNOTATED_DIR = Path("/app/inference-engine/media")
 
 
 def main():

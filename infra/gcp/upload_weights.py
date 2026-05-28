@@ -7,7 +7,7 @@ from google.cloud import storage
 
 bucket_name = sys.argv[1]
 repo_root = pathlib.Path(sys.argv[2])
-runs_root = repo_root / "ml-engine" / "runs"
+runs_root = repo_root / "training-engine" / "runs"
 
 client = storage.Client()
 bucket = client.bucket(bucket_name)

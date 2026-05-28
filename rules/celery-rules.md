@@ -1,6 +1,6 @@
 # Celery Rules — Ukraine Combat Footage Project
 
-These rules are enforced on all Celery task code in `scraper-engine/` and `ml-engine/`.
+These rules are enforced on all Celery task code in `scraper-engine/`, `inference-engine/`, and `training-engine/`.
 Violations must be corrected before merging.
 
 ---
@@ -37,29 +37,41 @@ def download_clip(url: str):
     autoretry_for=(Exception,),
     max_retries=3,
     default_retry_delay=60,  # seconds before retry
-    queue='default'          # or 'gpu' for ML tasks
+    queue='default'          # or 'pipeline' (inference-engine) / 'training' (training-engine)
 )
 def my_task(self, arg1: str, arg2: int):
     logger.info(f"[{self.request.id}] Starting my_task({arg1}, {arg2})")
     ...
 ```
 
-### 3. GPU Tasks Go to the `gpu` Queue
+### 3. GPU Tasks Use the Correct Queue
+- `pipeline` — inference-engine tasks (GDINO, packaging, annotation, finetune dispatch)
+- `training` — training-engine tasks (YOLO baseline + finetune training only)
+
 ```python
-# CORRECT — GPU tasks isolated to their own queue
-@celery_app.task(bind=True, queue='gpu', max_retries=2)
-def train_baseline(self, dataset_ids: list[int]):
+# CORRECT — inference-engine task
+@celery_app.task(bind=True, queue='pipeline', max_retries=2)
+def auto_label_clip(self, clip_id: int):
     ...
 
-# WRONG — GPU task on default queue may run concurrently with other GPU tasks
-@celery_app.task(bind=True)
-def train_baseline(self, dataset_ids: list[int]):
+# CORRECT — training-engine task
+@celery_app.task(bind=True, queue='training', max_retries=1)
+def train_finetune(self, training_run_id: int):
+    ...
+
+# WRONG — stale queue name
+@celery_app.task(bind=True, queue='gpu')
+def train_baseline(self, training_run_id: int):
     ...
 ```
 
-GPU worker must be started with `concurrency=1`:
+Workers must run with `concurrency=1`:
 ```bash
-celery -A ml_engine.celery_app worker -Q gpu --concurrency=1
+# inference-engine (requires --pool=solo on Windows/single-GPU Linux)
+celery -A celery_app worker -Q pipeline --pool=solo --concurrency=1
+
+# training-engine
+celery -A celery_app worker -Q training --concurrency=1
 ```
 
 ### 4. Log Task ID at Start and End
@@ -82,8 +94,8 @@ def scrape_funker530(self):
 ### 5. Emit Progress for Long-Running Tasks
 ```python
 # CORRECT — training tasks update state for WebSocket consumers
-@celery_app.task(bind=True, queue='gpu')
-def train_baseline(self, dataset_ids: list[int]):
+@celery_app.task(bind=True, queue='training')
+def train_baseline(self, training_run_id: int):
     for epoch in range(epochs):
         # ... train one epoch
         self.update_state(
@@ -169,8 +181,9 @@ celery_app.conf.update(
     task_acks_late=True,          # ack only after task completes (safer)
     worker_prefetch_multiplier=1, # don't prefetch GPU tasks
     task_queues=[
-        Queue('default'),
-        Queue('gpu'),
+        Queue('default'),         # scraper-engine
+        Queue('pipeline'),        # inference-engine (GDINO, annotation, packaging)
+        Queue('training'),        # training-engine (YOLO training only)
     ],
     task_default_queue='default',
 )

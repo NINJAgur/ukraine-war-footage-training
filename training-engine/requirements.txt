@@ -1,0 +1,21 @@
+# training-engine/requirements.txt
+--extra-index-url https://download.pytorch.org/whl/cu121
+torch==2.5.1+cu121
+torchvision==0.20.1+cu121
+
+celery==5.4.0
+redis==5.0.4
+kombu==5.3.7
+
+SQLAlchemy==2.0.30
+psycopg2-binary==2.9.9
+pydantic-settings==2.3.4
+
+ultralytics==8.2.34
+opencv-python-headless==4.9.0.80
+
+kagglehub==0.3.4
+google-cloud-storage==2.17.0
+numpy==1.26.4
+Pillow==10.3.0
+PyYAML==6.0.1

@@ -41,7 +41,7 @@ app.include_router(public_router)
 app.include_router(admin_router)
 app.include_router(ws_router)
 
-_ANNOTATED_DIR = Path(__file__).parent.parent.parent / "ml-engine" / "media" / "annotated"
+_ANNOTATED_DIR = Path(__file__).parent.parent.parent / "inference-engine" / "media"
 _ANNOTATED_DIR.mkdir(parents=True, exist_ok=True)
 
 @app.get("/media/annotated/{path:path}")

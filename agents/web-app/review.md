@@ -4,25 +4,30 @@
 ---
 
 ## Current Project State
-*Last updated: 2026-05-08*
+*Last updated: 2026-05-28*
 
 **Backend endpoints (all implemented):**
 - `GET /api/stats` — live model status + images_labeled (GENERAL count = 175,627)
 - `GET /api/feed` — paginated ANNOTATED clips
 - `GET /api/archive` — paginated all clips by status
-- `GET /api/annotated-clips` — MP4 list from disk for frontend video backgrounds
+- `GET /api/annotated-clips` — GCS annotated MP4 URLs from DB (for hero video background)
 - `POST /api/submit` — submit URL → `status=REVIEW`
-- `GET/POST /api/admin/clips` — paginated clips; approve (REVIEW→PENDING); decline (DELETE, REVIEW only)
+- `GET /api/admin/clips` — paginated clips (with status filter)
+- `POST /api/admin/clips/{id}/approve` — REVIEW → PENDING
+- `DELETE /api/admin/clips/{id}` — async delete, requires `await db.delete(clip)` (NOT `db.delete`)
 - `GET /api/admin/training-runs` — paginated training runs
 - `POST /api/admin/train` — queue BASELINE or FINETUNE Celery task
 - `POST /api/auth/login` — JWT login
+- `WebSocket /ws/training/{run_id}` — polls DB every 3s, sends `{status, metrics}`, closes on DONE/ERROR
 
 **ClipStatus enum:** `PENDING | DOWNLOADING | DOWNLOADED | QUEUED | LABELED | ANNOTATED | ERROR | REVIEW`
 
-**Key recent changes (review focus):**
-- `DELETE /api/admin/clips/{id}` — async delete, requires `await db.delete(clip)` (NOT `db.delete`)
-- `FootageCard.vue` — `ref="videoEl"` hover-play; `.card-overlay` has `pointer-events: none`
+**Video URLs:** new clips use GCS `https://storage.googleapis.com/ukraine-footage-media/annotated/...`; old clips use local paths served via `/media/`. Backend `video_url` field: if `mp4_path.startswith('https://')` → serve directly, else derive from local path.
+
+**Key invariants:**
 - `GET /api/stats` `images_labeled` — uses GENERAL model count only (not sum of all 4)
+- HeroSection uses GENERAL-model annotated clips only (`/api/annotated-clips?model=GENERAL`)
+- WebSocket sends `{status, metrics}` — frontend must handle null `metrics` (INITIALIZING state)
 
 ---
 

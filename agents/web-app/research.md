@@ -4,12 +4,12 @@
 ---
 
 ## Current Project State
-*Last updated: 2026-05-08*
+*Last updated: 2026-05-28*
 
-**Backend port:** 8000 (not 8001 as shown in some older docs)
-**All core endpoints implemented** — see `web-app/backend/api/` for `public.py`, `admin.py`, `auth.py`
-**DELETE /api/admin/clips/{id}** added — async SQLAlchemy delete requires `await db.delete(obj)`
-**Next unimplemented feature:** WebSocket training progress (`ws://localhost:8000/ws/training/{run_id}`) — stub exists at `web-app/backend/api/ws.py`
+**Backend port:** 8000
+**All features implemented** — endpoints, WebSocket training progress, admin APPROVE/DECLINE flows, hero background video, submission form
+**Live:** https://ukrarchive.duckdns.org (GCP e2-micro, Docker, HTTPS via Let's Encrypt)
+**Annotated videos:** served directly from `https://storage.googleapis.com/ukraine-footage-media/annotated/...` (GCS public-read)
 
 ---
 
@@ -53,7 +53,7 @@ You focus exclusively on the `web-app/` service.
 | Method | Path | Notes |
 |--------|------|-------|
 | GET | `/api/stats` | Live model status + image counts from DB |
-| GET | `/api/annotated-clips` | MP4 list from disk (`ml-engine/media/annotated/`) |
+| GET | `/api/annotated-clips` | GCS annotated MP4 URLs from DB (clips with `mp4_path` set) |
 | GET | `/api/feed` | Paginated ANNOTATED clips from DB |
 | GET | `/api/archive` | Paginated all clips by status |
 | POST | `/api/submit` | Submit clip URL → `status=REVIEW` |
@@ -64,8 +64,8 @@ You focus exclusively on the `web-app/` service.
 
 ### Dev Server Setup
 ```bash
-# Backend on port 8001 (frontend proxies to this)
-cd web-app/backend && uvicorn main:app --reload --port 8001
+# Backend on port 8000
+cd web-app/backend && python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 # Frontend on port 5173
 cd web-app/frontend && npm run dev

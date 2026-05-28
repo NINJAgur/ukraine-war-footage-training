@@ -12,35 +12,37 @@ YOLOv8 model retraining.
 ## Architecture
 
 ```
-[Celery Beat 00:00 UTC] → scraper-engine → Clip(DOWNLOADED, scores in DB)
-                                                    ↓
-                          [Celery Beat 04:00 UTC] annotate_clips task
-                                  ↓           ↓          ↓         ↓
-                             AIRCRAFT    VEHICLE    PERSONNEL   GENERAL
-                             pipeline    pipeline   pipeline    pipeline
-                                  └──────────┴──────────┴─────────┘
-                                             ↓
-                                     annotated MP4
-                                  ↓                   ↓
-                           Public Feed           Admin Panel
-                                                      ↓
-                                          train_baseline / train_finetune
-                                                      ↓
-                                             best.pt weights
-                                          (auto-selected next run)
+e2-micro (Docker, always-on):
+  scraper-beat  ──00:00 UTC──→ scrape_funker530
+                ──00:15 UTC──→ scrape_geoconfirmed
+                                      ↓
+                               Clip(DOWNLOADED, scores in DB) → GCS raw/
+
+inference-engine VM (n1-standard-1 + T4, 03:00–04:00 UTC):
+  beat @03:05 → auto_label_batch → auto_label_clip × N (GDINO)
+                                → package_dataset (Dataset PACKAGED)
+                                → [≥5 PACKAGED] prepare_finetune_batch
+                                    → upload merged/ to GCS
+                                    → start training-engine VM
+                                    → dispatch train_finetune × 4 → Q=training
+  beat @03:35 → annotate_clips (YOLO → annotated MP4 → GCS annotated/)
+
+training-engine VM (n1-standard-4 + T4, on-demand):
+  train_finetune × 4 models → download merged/ from GCS → YOLO → upload best.pt
+  → self-shutdown after last model
 ```
 
 **Scraper → ML decoupling:** scrapers write keyword scores to DB (`score_aircraft`, `score_vehicle`, `score_personnel`, `score_uas`, `is_pov`). Pipelines query by score thresholds — no re-scraping at inference time.
 
 ## Services
 
-| Service | Directory | Phase | Status |
-|---------|-----------|-------|--------|
-| Scraper Engine | `scraper-engine/` | 1 | ✅ Complete |
-| ML Engine | `ml-engine/` | 2 | ✅ Complete |
-| Backend API | `web-app/backend/` | 3 | ✅ Complete |
-| Frontend | `web-app/frontend/` | 3 | ✅ Complete |
-| Cloud & DevOps | GCP e2-micro + T4 Spot | 4 | ✅ Complete |
+| Service | Directory | Runs on | Status |
+|---------|-----------|---------|--------|
+| Scraper Engine | `scraper-engine/` | e2-micro (Docker) | ✅ Complete |
+| Inference Engine | `inference-engine/` | inference-engine VM (T4) | ✅ Complete |
+| Training Engine | `training-engine/` | training-engine VM (T4) | ✅ Complete |
+| Backend API | `web-app/backend/` | e2-micro (Docker) | ✅ Complete |
+| Frontend | `web-app/frontend/` | e2-micro (Docker) | ✅ Complete |
 
 ## ML Training — Best Runs
 
@@ -65,7 +67,65 @@ YOLOv8 model retraining.
 | `rupankarmajumdar/amad-5` | 5 | 34,960 | VEHICLE, PERSONNEL, GENERAL |
 | **TOTAL** | | **175,627** | |
 
-## Quick Start
+## Local Running Guide
+
+### Prerequisites
+
+1. **PostgreSQL** running (local install or `docker compose up -d postgres`)
+2. **Redis** running (local install or `docker compose up -d redis`)
+3. **Python venv** set up for each engine you need:
+   ```bash
+   cd inference-engine && python -m venv venv && venv/Scripts/pip install -r requirements.txt
+   cd scraper-engine   && python -m venv venv && venv/Scripts/pip install -r requirements.txt
+   ```
+4. **`.env`** files in each engine directory (copy `.env.example` if present; at minimum set `DATABASE_SYNC_URL` and `CELERY_BROKER_URL`)
+
+### Start all workers at once
+
+```bash
+bash start_workers.sh
+```
+
+This starts: scraper-worker (Q=default), scraper-beat, inference-engine worker (Q=pipeline, --pool=solo), inference-engine beat.
+
+### Start workers individually
+
+```bash
+# Scraper workers (needed for 'scrape' command)
+cd scraper-engine
+celery -A celery_app worker -Q default --loglevel=info --concurrency=4
+celery -A celery_app beat --loglevel=info   # separate terminal
+
+# Inference-engine worker (needed for 'gdino' and 'annotate' commands)
+cd inference-engine
+celery -A celery_app worker -Q pipeline --pool=solo --concurrency=1 --loglevel=info
+```
+
+### Run pipeline steps with `run_local.py`
+
+```bash
+# Show DB state (clips, datasets, recent training runs)
+python run_local.py status
+
+# Trigger scrapers (dispatches to scraper-worker, polls for new DOWNLOADED clips)
+python run_local.py scrape                   # both sources
+python run_local.py scrape funker530
+python run_local.py scrape geoconfirmed
+
+# Run GDINO auto-labeling batch (dispatches to inference-engine, polls for PACKAGED datasets)
+python run_local.py gdino
+
+# Run YOLO annotation batch (dispatches to inference-engine, polls for ANNOTATED clips)
+python run_local.py annotate
+
+# Full pipeline: scrape → gdino → annotate
+python run_local.py all
+python run_local.py all funker530            # scrape one source then full pipeline
+```
+
+`run_local.py` connects to Redis at `CELERY_BROKER_URL` (default: `redis://localhost:6379/0`) and polls PostgreSQL via `DATABASE_SYNC_URL`.
+
+### Web app (local dev)
 
 ```bash
 # Backend (port 8000)
@@ -82,17 +142,20 @@ Admin panel: `http://localhost:5173/admin` — credentials in `web-app/backend/.
 Unit tests run locally without Docker. Integration tests require `docker compose up -d` first.
 
 ```bash
-# Backend unit tests (no DB needed)
-cd web-app/backend && pytest tests/unit -v -m unit
-
-# Backend integration tests (requires Docker Compose running)
-cd web-app/backend && pytest tests/integration -v
-
 # Scraper unit tests (no DB needed)
 cd scraper-engine && pytest tests/unit -v
 
-# ML engine unit tests (no GPU needed)
-cd ml-engine && pytest tests/unit -v
+# Inference-engine unit tests (no GPU needed)
+cd inference-engine && pytest tests/unit -v
+
+# Inference-engine integration tests (requires Docker Compose running)
+cd inference-engine && pytest tests/integration -v
+
+# Training-engine unit tests (no GPU needed)
+cd training-engine && pytest tests/unit -v
+
+# Backend unit tests (no DB needed)
+cd web-app/backend && pytest tests/unit -v -m unit
 
 # Frontend component tests
 cd web-app/frontend && npm run test
@@ -105,7 +168,7 @@ Domain-specific review, QA, and research agents in `.claude/commands/`:
 | Command | Use when |
 |---------|----------|
 | `/review-webapp` | After web-app changes touching auth, endpoints, or architecture |
-| `/review-ml` | After ml-engine pipeline changes |
+| `/review-ml` | After inference-engine or training-engine pipeline changes |
 | `/review-scraper` | After scraper changes |
 | `/qa-webapp` | New API endpoint added or DB enum changed |
 | `/qa-pipeline` | End-to-end DB state health check |

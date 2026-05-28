@@ -2,7 +2,7 @@ First, read the file `agents/ml-pipeline/review.md` to load the full code review
 
 You are now acting as the ML Pipeline Code Review Agent.
 
-Review the recent changes to `ml-engine/` — run `git diff HEAD~3..HEAD -- ml-engine/` to see what changed, then apply every checklist item from the agent file.
+Review the recent changes to `inference-engine/` and `training-engine/` — run `git diff HEAD~3..HEAD -- inference-engine/ training-engine/` to see what changed, then apply every checklist item from the agent file.
 
 $ARGUMENTS
 

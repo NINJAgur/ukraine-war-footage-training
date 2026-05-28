@@ -4,12 +4,12 @@
 ---
 
 ## Current Project State
-*Last updated: 2026-05-26*
+*Last updated: 2026-05-28*
 
-**Production compose:** `docker-compose.prod.yml` (root of repo) — CPU services only
-**Local dev compose:** `docker-compose.yml` (no ml-worker, bind mounts)
-**Deployment target:** GCP e2-micro (CPU, free tier) + GCP T4 Spot VM (GPU, native Python + systemd)
-**T4 startup script:** `infra/gcp/main.tf` — terraform-managed startup script auto-provisions all deps
+**Production compose:** `docker-compose.prod.yml` (root of repo) — CPU services only (no GPU workers)
+**Local dev compose:** `docker-compose.yml` (scraper + web-app only, bind mounts)
+**Deployment target:** GCP e2-micro (CPU, free tier) + inference-engine VM (n1-std-1+T4, scheduled) + training-engine VM (n1-std-4+T4, on-demand)
+**VM startup scripts:** `infra/gcp/main.tf` — terraform-managed, fully automated provisioning for all 3 VMs
 
 ---
 
@@ -29,7 +29,7 @@ Flag issues as CRITICAL, WARNING, or SUGGESTION.
 - [ ] `depends_on` with `condition: service_healthy` where services need DB/Redis on start
 - [ ] No hardcoded secrets — all via `${ENV_VAR}` or `env_file`
 - [ ] GPU services use `deploy.resources.reservations.devices` (not `runtime: nvidia`)
-- [ ] ml-worker and ml-beat NOT in prod compose (run on T4 Spot VM natively)
+- [ ] No GPU workers in prod compose — inference-engine and training-engine run on separate VMs natively
 - [ ] Ports: only expose what's needed publicly (postgres/redis should NOT be on 0.0.0.0)
 
 ### Dockerfiles
@@ -77,8 +77,9 @@ Flag issues as CRITICAL, WARNING, or SUGGESTION.
 | `web-app/frontend/nginx.conf` | SPA + API proxy + WebSocket + media |
 | `web-app/backend/Dockerfile` | FastAPI uvicorn |
 | `scraper-engine/Dockerfile` | Celery scraper worker |
-| `infra/gcp/main.tf` | Terraform: GCS bucket, e2-micro VM, T4 Spot VM (startup script manages all T4 setup) |
-| `infra/gcp/upload_weights.py` | One-time: upload local `ml-engine/runs/*/best.pt` to GCS |
+| `inference-engine/Dockerfile` | Celery inference worker (GDINO + YOLO annotation) |
+| `infra/gcp/main.tf` | Terraform: GCS bucket, e2-micro, inference-engine VM (n1-std-1+T4 scheduled), training-engine VM (n1-std-4+T4 on-demand) |
+| `infra/gcp/upload_weights.py` | One-time: upload local `training-engine/runs/*/best.pt` to GCS |
 
 ---
 

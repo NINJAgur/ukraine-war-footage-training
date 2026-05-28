@@ -1,0 +1,19 @@
+name: Deploy to inference-engine
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.INFERENCE_ENGINE_HOST }}
+          username: ubuntu
+          key: ${{ secrets.INFERENCE_ENGINE_SSH_KEY }}
+          script: |
+            cd /home/ubuntu/app
+            sudo git pull
+            sudo systemctl restart celery-inference

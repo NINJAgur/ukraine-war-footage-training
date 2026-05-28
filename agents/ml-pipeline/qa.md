@@ -4,13 +4,21 @@
 ---
 
 ## Current Project State
-*Last updated: 2026-05-08*
+*Last updated: 2026-05-28*
 
-**DB clip state:** 8 ANNOTATED, 1 PENDING, 1 ERROR — all from VEHICLE/AIRCRAFT pipelines. 0 GENERAL annotated clips yet.
-**Training runs:** 4 DONE (runs 13, 25, 29, 30). No QUEUED or RUNNING.
-**mAP acceptance:** all 4 models above 0.3 minimum threshold ✅
-**Merged datasets:** built once via `scripts/build_specialist_datasets.py` — all training reads from `media/kaggle_datasets/merged/<MODEL>/dataset.yaml`
-**Celery worker:** not verified end-to-end yet (task dispatch works, but worker hasn't been run against `POST /api/admin/train`)
+**DB state:** 80+ ANNOTATED clips. All 4 baselines + finetune cycles complete.
+**Training runs:** runs 13/25/29/30 (baselines), 68/73/74/75/76 (finetunes) — all DONE.
+**Celery E2E:** fully verified end-to-end (GDINO → PACKAGED → finetune trigger → annotate)
+**Architecture:** inference-engine (n1-standard-1+T4, Q=pipeline, 03:00–04:00 UTC) + training-engine (n1-standard-4+T4, Q=training, on-demand)
+**GCS pipeline:** confirmed working — raw clips uploaded by scraper, T4 downloads/annotates/uploads annotated MP4
+
+**Best weights by model:**
+| Model | Best run | mAP50 | Stage |
+|-------|----------|-------|-------|
+| AIRCRAFT | 68 | 0.968 | Finetune |
+| VEHICLE | 76 | 0.904 | Finetune |
+| PERSONNEL | 75 | 0.873 | Finetune |
+| GENERAL | 30 | 0.784 | Baseline |
 
 ---
 
@@ -23,48 +31,64 @@ and model outputs before they reach the Admin dashboard or public feed.
 
 ## QA Checklist
 
-### 1. Auto-Labeling Output Validation
+### 1. Auto-Labeling Output Validation (GDINO — inference-engine)
 - [ ] Every extracted frame has a corresponding `.txt` label file (even if empty = no detections)
 - [ ] Label files are valid YOLO format: `class_id cx cy w h` (all values 0.0–1.0)
 - [ ] No bounding boxes with `w` or `h` equal to 0
 - [ ] No bounding boxes outside image bounds (cx±w/2 must be in [0,1])
-- [ ] Class IDs are within the declared range (0 to num_classes-1)
+- [ ] Class IDs are 0, 1, or 2 only (AIRCRAFT, VEHICLE, PERSONNEL)
 - [ ] At least 10% of frames have at least one detection (sanity check for prompt quality)
 - [ ] GroundingDINO model files exist before task starts (config + checkpoint)
+- [ ] `frames/<hash>/` directory is deleted after `auto_label_clip` completes (no leftover scratch)
 
 ### 2. Dataset Package Validation
 - [ ] Directory structure matches YOLO standard:
   ```
-  dataset/
-    images/train/  images/val/
-    labels/train/  labels/val/
+  <hash>/
+    train/images/  train/labels/
+    val/images/    val/labels/
+    data.yaml
   ```
 - [ ] `data.yaml` contains: `path`, `train`, `val`, `nc`, `names`
-- [ ] `nc` in `data.yaml` matches number of unique class IDs in label files
+- [ ] `nc=3` in all auto-labeled datasets
 - [ ] Train/val split is approximately 80/20
-- [ ] No image files without corresponding label files
-- [ ] Images are valid (not corrupted) — run `cv2.imread()` check on 10% sample
+- [ ] No image files without corresponding label files (after empty-label removal)
+- [ ] Per-clip `<hash>/` directory is deleted after appending to all relevant `merged/<MODEL>/` dirs
 
 ### 3. Annotated Video Output
-- [ ] Output MP4 file exists and is > 0 bytes
-- [ ] Video is playable (check with `cv2.VideoCapture` — `isOpened()` returns True)
-- [ ] Video duration matches source video ± 5%
-- [ ] Bounding boxes are visible in at least one frame
-- [ ] H.264 codec used (not XVID or other formats)
+- [ ] Output MP4 exists and is > 0 bytes
+- [ ] Video is playable (`cv2.VideoCapture.isOpened()` returns True)
+- [ ] Video duration matches source ± 5%
+- [ ] Bounding boxes visible in at least one frame
+- [ ] H.264 codec + faststart flag (FFmpeg CRF 28)
+- [ ] Full-screen boxes (covering >90% of frame area) are absent (filtered by inference.py)
+- [ ] If remote: annotated MP4 is at `gs://ukraine-footage-media/annotated/<MODEL>/<date>/<hash>_annotated.mp4`
+- [ ] If remote: raw `gs://ukraine-footage-media/raw/...` object is deleted after annotation
 
 ### 4. Training Run Validation
 - [ ] `TrainingRun.status` transitions: `QUEUED → RUNNING → DONE` (never stuck in RUNNING)
 - [ ] `weights_path` points to an actual `.pt` file after status=DONE
-- [ ] `metrics` JSON contains: `mAP50`, `mAP50-95`, `precision`, `recall`
-- [ ] mAP50 > 0.3 on validation set (minimum acceptable for Stage 1)
-- [ ] No GPU OOM during training (check Celery worker logs)
-- [ ] Training logs saved to `runs/{stage}/{name}/`
+- [ ] `metrics` JSON contains `mAP50` key (extracted from `metrics/mAP50(B)`)
+- [ ] mAP50 > 0.40 for finetune runs (production threshold)
+- [ ] No GPU OOM during training (check Celery worker logs for CUDA errors)
+- [ ] Training logs saved to `runs/{stage}/{name}/` on training-engine persistent disk
 
 ### 5. VRAM Safety Checks
-- [ ] `batch_size <= 8` for YOLOv8m on 8GB VRAM
+- [ ] `batch_size <= 8` for local dev (8GB RTX 3060 Ti); T4 can handle up to 16
 - [ ] `amp=True` is set in training config
 - [ ] `torch.cuda.empty_cache()` called after task completes
-- [ ] No two GPU tasks running simultaneously (`concurrency=1` on gpu queue)
+- [ ] No two GPU tasks running simultaneously (`concurrency=1` on both queues)
+
+### 6. Finetune Pipeline Integrity
+- [ ] `prepare_finetune_batch` builds merged dirs BEFORE deleting clip hash dirs (order matters)
+- [ ] If remote: merged dirs uploaded to `gs://bucket/merged/<MODEL>/` before local deletion
+- [ ] `train_finetune` deletes local merged dir in `finally` block (even on training failure)
+- [ ] After last `train_finetune` model: training-engine self-shuts down
+
+### 7. Cleanup Verification
+- [ ] No leftover `frames/<hash>/` dirs in `inference-engine/media/scraped_datasets/frames/`
+- [ ] No leftover per-clip `<hash>/` dirs after packaging
+- [ ] No leftover `merged_<MODEL>_<run_id>/` dirs after training
 
 ---
 
@@ -72,33 +96,33 @@ and model outputs before they reach the Admin dashboard or public feed.
 
 | Stage | Minimum mAP50 | Target mAP50 |
 |-------|--------------|-------------|
-| Stage 1 (Baseline, Kaggle data) | 0.30 | 0.50+ |
-| Stage 2 (Fine-tune, custom data) | 0.40 | 0.60+ |
+| Baseline (Kaggle data) | 0.30 | 0.50+ |
+| Finetune (scraped custom data) | 0.40 | 0.80+ |
 
 If a training run produces mAP50 < minimum, flag it and do NOT promote the weights.
 
 ---
 
-## Test Scenarios
+## DB Health Queries
 
-```python
-# 1. Validate a label file
-def validate_yolo_label(path):
-    for line in open(path):
-        parts = line.strip().split()
-        assert len(parts) == 5
-        cls, cx, cy, w, h = int(parts[0]), *map(float, parts[1:])
-        assert 0 <= cx <= 1 and 0 <= cy <= 1
-        assert 0 < w <= 1 and 0 < h <= 1
+```sql
+-- Clip state overview
+SELECT status, COUNT(*) FROM clips GROUP BY status ORDER BY status;
 
-# 2. Validate data.yaml
-import yaml
-cfg = yaml.safe_load(open("data.yaml"))
-assert all(k in cfg for k in ["path", "train", "val", "nc", "names"])
-assert cfg["nc"] == len(cfg["names"])
+-- Dataset state
+SELECT status, COUNT(*) FROM datasets GROUP BY status ORDER BY status;
 
-# 3. Verify output video is playable
-cap = cv2.VideoCapture("output.mp4")
-assert cap.isOpened()
-assert cap.get(cv2.CAP_PROP_FRAME_COUNT) > 0
+-- Training runs (recent)
+SELECT stage, model_type, status, metrics->>'map50' as map50, id
+FROM training_runs ORDER BY id DESC LIMIT 10;
+
+-- Clips without a dataset (should be processed by next GDINO batch)
+SELECT COUNT(*) FROM clips c
+WHERE c.status = 'DOWNLOADED'
+  AND NOT EXISTS (SELECT 1 FROM datasets d WHERE d.clip_id = c.id);
+
+-- Clips stuck in QUEUED/DOWNLOADING for >1 hour
+SELECT id, status, updated_at FROM clips
+WHERE status IN ('QUEUED','DOWNLOADING')
+  AND updated_at < NOW() - INTERVAL '1 hour';
 ```

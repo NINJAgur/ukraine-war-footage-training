@@ -22,9 +22,11 @@ You focus exclusively on the `scraper-engine/` service.
 | **Kaggle datasets** | kagglehub API | Military/vehicle detection datasets for Stage 1 baseline training |
 
 ### Storage Model
-- Raw videos saved to `MEDIA_ROOT/raw/{source}/{url_hash[:8]}_{title_slug}.mp4`
+- **Local dev:** raw videos saved to `scraper-engine/media/{source}/{hash[:8]}_{slug}.mp4`; `clip.file_path` = local path
+- **Production (GCS):** yt-dlp downloads to temp → upload to `gs://ukraine-footage-media/raw/<source>/<date>/<hash>.mp4` → delete local → `clip.file_path = gs://...`
 - Metadata stored in PostgreSQL `Clip` table
 - De-duplication enforced via `url_hash` (SHA256 of canonical URL)
+- `STORAGE_MODE` env var (`local` | `remote`) gates GCS behavior
 
 ### Tech Stack for This Domain
 - `playwright` (async API) — browser automation

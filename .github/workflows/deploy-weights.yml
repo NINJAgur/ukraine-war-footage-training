@@ -1,11 +1,12 @@
 name: Upload weights to GCS
 
 on:
-  workflow_dispatch:
+  workflow_call:
     inputs:
       t4_host:
-        description: "T4 VM external IP"
+        description: "training-engine VM external IP"
         required: true
+        type: string
 
 jobs:
   upload:
@@ -16,8 +17,8 @@ jobs:
         with:
           host: ${{ inputs.t4_host }}
           username: ubuntu
-          key: ${{ secrets.T4_SSH_KEY }}
+          key: ${{ secrets.TRAINING_ENGINE_SSH_KEY }}
           script: |
-            source /home/ubuntu/app/ml-engine/venv/bin/activate
+            source /home/ubuntu/app/training-engine/venv/bin/activate
             python3 /home/ubuntu/app/infra/gcp/upload_weights.py \
               ukraine-footage-media /home/ubuntu/app

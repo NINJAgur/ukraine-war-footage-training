@@ -19,7 +19,7 @@ _AIRCRAFT = [
     "mi-35", "uh-60", "black hawk", "ah-64", "apache", "aircraft", "aviation",
     "plane", "su-24", "su-25", "su-27", "su-30", "su-34", "su-35", "mig-29",
     "mig-31", "f-16", "a-50", "il-22", "tu-22", "tu-95", "tu-160",
-    "cruise missile", "glide bomb", "kab", "fab-500", "fab-1500", "fab-3000",
+    "cruise missile", "glide bomb", "kab", "fab-500", "fab-1500", "fab-3000", "kh-101", "x-101",
     # MOVED TARGET DRONES HERE:
     "shahed", "geran", "lancet", "orlan", "bayraktar", "tb2", "switchblade", 
     "leleka", "valkyrie", "puma", "poseidon", "shark", "zala", "supercam",
@@ -46,7 +46,7 @@ _ARMORED_VEHICLES = [
 ]
 
 _ARTILLERY_AIR_DEFENSE = [
-    "artillery", "howitzer", "Tyulpan", "mortar", "mlrs", "m777", "pzh2000", 
+    "artillery", "howitzer", "Tyulpan", "mlrs", "m777", "pzh2000",
     "krab", "caesar", "m109", "paladin", "dana", "zuzana", "archer", "bogdana", 
     "2s1", "gvozdika", "2s3", "akatsiya", "2s5", "giatsint", "2s7", "pion", 
     "2s19", "msta", "d-30", "msta-b", "grad", "bm-21", "uragan", "smerch", 

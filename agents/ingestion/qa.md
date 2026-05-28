@@ -4,18 +4,17 @@
 ---
 
 ## Current Project State
-*Last updated: 2026-05-08*
+*Last updated: 2026-05-28*
 
-**Scraper media paths (post Phase 1.9 restructure):**
-- `scraper-engine/media/funker530/` — downloaded videos (wiped after annotation in production)
-- `scraper-engine/media/geoconfirmed/` — downloaded videos (wiped after annotation in production)
-- `media/raw/` subdirectory REMOVED — `_RAW_DIR` in `public.py` now points to `scraper-engine/media/`
+**Scraper media paths:**
+- Local dev: `scraper-engine/media/funker530/` and `scraper-engine/media/geoconfirmed/`
+- Production (GCS): scraper uploads raw to `gs://ukraine-footage-media/raw/<source>/<date>/<hash>.mp4` → `clip.file_path = gs://...`
 
-**Scoring columns on Clip (added manually, no Alembic):**
-`score_aircraft`, `score_vehicle`, `score_personnel`, `score_uas` (INTEGER), `is_pov` (INTEGER)
+**Scoring columns on Clip:** `score_aircraft`, `score_vehicle`, `score_personnel`, `score_uas` (INTEGER), `is_pov` (INTEGER)
 
 **Scraper functions:** `_since(since_date)` for Celery Beat, `_sample(max_count)` for tests
-**Beat schedule:** scrape at 00:00 UTC daily, annotate_clips at 04:00 UTC daily
+**Beat schedule (e2-micro):** scrape_funker530 @00:00 UTC, scrape_geoconfirmed @00:15 UTC
+**GDINO + annotation:** runs on inference-engine VM (03:05 / 03:35 UTC) — NOT scraper Beat
 **Dedup:** SHA256 of normalized URL → `url_hash` UNIQUE constraint
 
 ---
@@ -34,8 +33,9 @@ Run through this checklist when reviewing an ingestion task or testing a scraper
 ### 1. Database Integrity
 - [ ] Every scraped URL produces exactly one `Clip` record (no duplicates)
 - [ ] `url_hash` column has a UNIQUE constraint in PostgreSQL
-- [ ] `status` transitions are valid: `PENDING → DOWNLOADING → LABELED` (never skip)
-- [ ] `file_path` is set and the file actually exists on disk after status=DOWNLOADING
+- [ ] `status` transitions are valid: `PENDING → DOWNLOADING → DOWNLOADED` (never skip)
+- [ ] `file_path` is set after download: local path (dev) or `gs://` URL (production)
+- [ ] If `STORAGE_MODE=remote`: raw file is uploaded to GCS and local file deleted; `file_path` starts with `gs://`
 - [ ] `created_at` and `updated_at` are populated (not NULL)
 - [ ] No `Clip` records with `status=ERROR` that are silently ignored
 

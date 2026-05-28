@@ -1,54 +1,49 @@
 # /train — Queue a YOLOv8 Training Job
 
 ## Description
-Queues a YOLO model training job via the ML Engine's GPU Celery worker.
-Supports Stage 1 (Baseline on Kaggle data) and Stage 2 (Fine-tune on custom labeled data).
+Queues a YOLO model training job via the training-engine Celery worker (Q=training).
+Supports Stage 1 (Baseline on Kaggle data) and Stage 2 (Fine-tune on scraped/labeled data).
 
 ## Usage
 ```
-/train [stage] [--datasets IDS] [--epochs N] [--batch N]
+/train [stage] [--model MODEL] [--epochs N] [--batch N]
 ```
 
 ### Arguments
 | Argument | Values | Description |
 |----------|--------|-------------|
 | `stage` | `baseline`, `finetune` | Training stage. Required. |
-| `--datasets` | Comma-separated IDs | Dataset IDs to use (Stage 2 only). E.g., `--datasets 1,2,5` |
+| `--model` | `AIRCRAFT`, `VEHICLE`, `PERSONNEL`, `GENERAL` | Model type. Required. |
 | `--epochs` | Integer | Override default epoch count |
-| `--batch` | Integer (max 8) | Override batch size. Never exceed 8 on RTX 3060 Ti. |
+| `--batch` | Integer (max 8 local / 16 T4) | Override batch size |
 
 ### Examples
 ```bash
-/train baseline                         # Stage 1: train on Kaggle military datasets
-/train finetune --datasets 1,2,3        # Stage 2: fine-tune on custom labeled datasets
-/train baseline --epochs 50             # Stage 1 with custom epoch count
-/train finetune --datasets 4,5 --batch 4   # Stage 2 with smaller batch (more VRAM headroom)
+/train baseline --model AIRCRAFT            # Stage 1: train on Kaggle military datasets
+/train finetune --model VEHICLE             # Stage 2: fine-tune on scraped merged dataset
+/train baseline --model GENERAL --epochs 50
 ```
 
 ## What This Command Does
 
 1. Verify GPU is available: `python -c "import torch; print(torch.cuda.get_device_name(0))"`
-2. Verify the ml-engine GPU Celery worker is running
-3. For Stage 2: verify specified dataset IDs exist in the DB and have `status=LABELED`
-4. Dispatch the appropriate Celery task to the `gpu` queue:
-   - `train_baseline.apply_async(queue='gpu')` for Stage 1
-   - `train_finetune.apply_async(args=[dataset_ids], queue='gpu')` for Stage 2
-5. Return the `TrainingRun` ID and Celery task ID
-6. Stream progress updates (epoch, loss, mAP50) until completion
+2. Verify the training-engine Celery worker is running on Q=training
+3. For finetune: verify a DONE baseline run with `weights_path` exists for the model
+4. POST to `POST /api/admin/train` with `{stage, model_type}` → creates `TrainingRun(QUEUED)` in DB
+5. Task dispatched to Q=training: `train_baseline` or `train_finetune`
+6. Stream progress via WebSocket `/ws/training/{run_id}` until completion
 
-## VRAM Safety
+## VRAM Budget (YOLOv8m)
 
-| batch_size | YOLOv8m VRAM | Safe on RTX 3060 Ti? |
-|-----------|-------------|----------------------|
-| 4 | ~4GB | Yes |
-| 8 | ~6GB | Yes (default) |
-| 16 | ~10GB | NO — will OOM |
-
-The `gpu` Celery worker runs with `--concurrency=1`. Only one training job runs at a time.
+| batch_size | VRAM | Safe on 8GB (RTX 3060 Ti)? | Safe on 16GB (T4)? |
+|-----------|------|---------------------------|---------------------|
+| 4 | ~4GB | Yes | Yes |
+| 8 | ~6GB | Yes (default) | Yes |
+| 16 | ~10GB | NO — OOM | Yes |
 
 ## Monitoring Progress
 
-Training progress is streamed via WebSocket to the Admin UI at `/admin/train`.
+Training progress streams via WebSocket to Admin UI at `/admin`.
 To monitor from CLI:
 
 ```python
@@ -56,13 +51,13 @@ from celery.result import AsyncResult
 result = AsyncResult(task_id)
 while result.state == 'PROGRESS':
     meta = result.info
-    print(f"Epoch {meta['epoch']}/{meta['total_epochs']} — loss: {meta['loss']:.4f} — mAP50: {meta['mAP50']:.4f}")
+    print(f"Epoch {meta['epoch']}/{meta['total_epochs']} — mAP50: {meta.get('mAP50', 'N/A')}")
     time.sleep(5)
 ```
 
 ## Troubleshooting
 
 - **"CUDA out of memory"**: Reduce `--batch` to 4
-- **"No GPU worker"**: Start with `celery -A ml_engine.celery_app worker -Q gpu --concurrency=1 --loglevel=info`
-- **"Dataset not found"**: Check dataset status with `psql -c "SELECT id, status FROM datasets;"`
-- **"weights not found for finetune"**: Run `/train baseline` first to generate `baseline.pt`
+- **"No training worker"**: Start with `celery -A celery_app worker -Q training --concurrency=1 --loglevel=info` from `training-engine/`
+- **"No baseline for finetune"**: Run `/train baseline --model <MODEL>` first
+- **"Stuck in QUEUED"**: Check training-engine worker logs; ensure `CELERY_BROKER_URL` points to the same Redis

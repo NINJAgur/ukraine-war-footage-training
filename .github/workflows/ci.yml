@@ -3,10 +3,31 @@ name: CI
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
-  test:
+  lint:
     runs-on: ubuntu-latest
     steps:
-      - run: echo "hello"
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install ruff
+      - run: ruff check scraper-engine/ inference-engine/ training-engine/ web-app/backend/ shared/
+
+  frontend-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: web-app/frontend/package-lock.json
+      - run: npm ci
+        working-directory: web-app/frontend
+      - run: npm run build
+        working-directory: web-app/frontend

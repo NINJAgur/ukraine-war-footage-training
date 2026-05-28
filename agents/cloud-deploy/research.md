@@ -4,20 +4,23 @@
 ---
 
 ## Current Project State
-*Last updated: 2026-05-26*
+*Last updated: 2026-05-28*
 
-**Architecture fully deployed:**
+**Architecture fully deployed (3-VM split):**
 - CPU services (postgres, redis, backend, frontend, scraper-worker, scraper-beat) → GCP e2-micro free tier, us-central1
-- GPU ML worker + Beat → GCP T4 Spot VM (n1-standard-1 + NVIDIA T4), Instance Scheduling 02:00–05:00 UTC daily
+- Inference-engine (GDINO auto-label + YOLO annotation + dataset packaging) → n1-standard-1 + T4 Spot, Instance Scheduling 03:00–04:00 UTC daily
+- Training-engine (YOLO baseline + finetune training) → n1-standard-4 + T4 Spot, on-demand (started by inference-engine via GCP Compute API)
 - Media storage → GCS bucket `ukraine-footage-media` (public-read for annotated/, private raw/)
 - DNS + HTTPS → **ukrarchive.duckdns.org** (DuckDNS free subdomain + Let's Encrypt via Certbot, expires 2026-08-24, auto-renews via certbot systemd timer)
 - Total cost: ~$0/mo CPU (free tier) + ~$10/mo GPU = **~$10/mo** (free during $300 trial)
 
-**Production compose:** `docker-compose.prod.yml` — CPU services only (no ml-worker/ml-beat)
+**Production compose:** `docker-compose.prod.yml` — CPU services only (no GPU workers)
 
-**T4 Startup script:** Fully automated — NVIDIA drivers (first-boot reboot via sentinel), ffmpeg, sparse repo clone, python venv + deps (torch==2.5.1+cu121 pinned — 2.6+ breaks ultralytics weights_only), model weights downloaded from GCS at `runs/`, Celery GPU worker + embedded Beat (`--beat` flag). systemd service `celery-gpu` starts automatically.
+**Inference-engine VM startup:** Fully automated — NVIDIA drivers (first-boot reboot via sentinel), ffmpeg, sparse clone `inference-engine/ shared/`, python venv + deps (torch==2.5.1+cu121 pinned — 2.6+ breaks ultralytics weights_only), model weights downloaded from GCS at `runs/`, systemd service `celery-inference` (`celery -A celery_app worker -Q pipeline --pool=solo --concurrency=1 --beat`).
 
-**GCS annotation pipeline confirmed:** scraper uploads `gs://ukraine-footage-media/raw/...` → T4 downloads, runs YOLO, uploads `gs://ukraine-footage-media/annotated/...` → frontend serves directly via `https://storage.googleapis.com/...`
+**Training-engine VM startup:** On-demand only, started by inference-engine via GCP Compute Engine API (`_start_training_vm`). Sparse clone `training-engine/ shared/`, mounts persistent datasets disk at `/mnt/datasets` (150GB Kaggle cache). systemd service `celery-training` (`celery -A celery_app worker -Q training --concurrency=1`). Self-shuts-down after last model trained (`sudo shutdown -h now`).
+
+**GCS annotation pipeline confirmed:** scraper uploads `gs://ukraine-footage-media/raw/...` → inference-engine downloads, runs YOLO, uploads `gs://ukraine-footage-media/annotated/...` → frontend serves directly via `https://storage.googleapis.com/...`
 
 ---
 
@@ -41,24 +44,46 @@ GCP e2-micro (2 vCPU shared, 1GB RAM, us-central1)
     └── frontend (nginx)          (ports 80, 443)
 ```
 
-### GPU Stack (GCP T4 Spot VM — Instance Scheduling 02:00–05:00 UTC)
+### GPU Stack — inference-engine (daily 03:00–04:00 UTC)
 ```
-GCP n1-standard-1 + T4 Spot (1 vCPU, 3.75GB RAM, 16GB VRAM)
-└── Celery GPU worker + Beat (--beat, -Q gpu, --concurrency=1)
-    ├── Connects to Redis on e2-micro via internal GCP IP (free, no egress)
-    ├── Connects to PostgreSQL on e2-micro via internal GCP IP
-    ├── Downloads raw videos from GCS bucket (clips from scraper)
-    └── Uploads annotated videos to GCS bucket (served publicly)
+GCP n1-standard-1 + T4 Spot — Instance Schedule (start 03:00 / stop 04:00 UTC)
+└── Celery Q=pipeline worker + Beat (--beat, --pool=solo, --concurrency=1)
+    Beat schedule:
+      03:05 UTC: auto_label_batch   → GDINO + package_dataset chord
+      03:35 UTC: annotate_clips     → YOLO annotation of raw clips
+    Tasks:
+      auto_label_clip     — GDINO frames → canonical nc=3 labels → Dataset(LABELED)
+      package_dataset     — 80/20 split → merged/<MODEL>/ → Dataset(PACKAGED)
+      trigger_finetune_check — chord callback: ≥5 PACKAGED → TrainingRun(QUEUED) + prepare_finetune_batch
+      prepare_finetune_batch — upload merged dirs to GCS (remote) → start training VM → dispatch train_finetune
+      annotate_clips      — YOLO inference → annotated MP4 → GCS → Clip(ANNOTATED)
+    Connects to Redis/Postgres on e2-micro via GCP internal IP (free, no egress)
 ```
 
-### Key advantage of same-GCP architecture
-Both VMs share the same VPC — ml-worker connects to Redis/Postgres via **internal IP**, no public port exposure needed, zero egress cost.
-
-### Key env vars for GPU worker
+### GPU Stack — training-engine (on-demand, started by inference-engine)
 ```
-CELERY_BROKER_URL=redis://<GCP_INTERNAL_IP>:6379/0
-CELERY_RESULT_BACKEND=redis://<GCP_INTERNAL_IP>:6379/1
-DATABASE_SYNC_URL=postgresql://postgres:<pw>@<GCP_INTERNAL_IP>:5432/ukraine_footage
+GCP n1-standard-4 + T4 Spot — on-demand (started via GCP Compute Engine API)
+└── Celery Q=training worker (--concurrency=1)
+    Tasks:
+      train_finetune — download merged dir from GCS → train YOLO → upload best.pt → shutdown
+    Persistent disk: 150GB at /mnt/datasets (Kaggle merged datasets)
+    Self-shuts-down after last train_finetune completes (sudo shutdown -h now)
+    Connects to Redis/Postgres on e2-micro via GCP internal IP
+```
+
+### All VMs share the same VPC — internal IP connectivity, zero egress cost
+
+### Key env vars for GPU VMs
+```
+CELERY_BROKER_URL=redis://<E2_MICRO_INTERNAL_IP>:6379/0
+CELERY_RESULT_BACKEND=redis://<E2_MICRO_INTERNAL_IP>:6379/1
+DATABASE_SYNC_URL=postgresql+psycopg2://postgres:<pw>@<E2_MICRO_INTERNAL_IP>:5432/ukraine_footage
+REDIS_URL=redis://<E2_MICRO_INTERNAL_IP>:6379/0
+STORAGE_MODE=remote
+REMOTE_STORAGE_BUCKET=ukraine-footage-media
+GCP_PROJECT_ID=<project_id>
+GCP_TRAINING_VM_ZONE=us-central1-a
+GCP_TRAINING_VM_NAME=ukraine-footage-training
 ```
 
 ---
@@ -102,8 +127,8 @@ Scraper uploads raw `.mp4` as `gs://ukraine-footage-media/raw/...` → T4 downlo
 ### 3. T4 PyTorch Version → pin torch==2.5.1+cu121 (solved)
 PyTorch 2.6+ changed `weights_only` default from `False` to `True`, breaking `ultralytics==8.2.34`. Pinned in `ml-engine/requirements.txt` with `--extra-index-url https://download.pytorch.org/whl/cu121`.
 
-### 4. Beat Scheduler on T4 → embedded `--beat` (solved)
-Single Celery worker process runs both worker and beat via `--beat` flag. Beat schedule defined in `ml-engine/celery_app.py`: `auto_label_batch` @ 02:00 UTC, `annotate_clips` @ 04:00 UTC.
+### 4. Beat Scheduler on inference-engine → embedded `--beat` (solved)
+Single Celery worker process runs both worker and beat via `--beat` flag. Beat schedule defined in `inference-engine/celery_app.py`: `auto_label_batch` @ 03:05 UTC (after VM starts at 03:00), `annotate_clips` @ 03:35 UTC (waits behind GDINO tasks in Q=pipeline).
 
 ## Solved Architecture Decisions (continued)
 

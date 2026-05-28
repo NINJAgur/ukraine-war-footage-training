@@ -4,25 +4,22 @@
 ---
 
 ## Current Project State
-*Last updated: 2026-05-08*
+*Last updated: 2026-05-28*
 
-**Live DB state:** 10 clips total — 8 ANNOTATED, 1 PENDING, 1 ERROR. 0 REVIEW clips.
+**Live DB state:** 80+ ANNOTATED clips. All 4 model types trained.
+**Live site:** https://ukrarchive.duckdns.org (GCP e2-micro + Docker + HTTPS)
 **Backend:** FastAPI on port 8000 (`python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000`)
 **Frontend:** Vite on port 5173 (`npm run dev` in `web-app/frontend/`)
-**Admin credentials:** `admin` / `admin123` (from `web-app/backend/.env`)
+**Admin credentials:** from `web-app/backend/.env` (JWT_SECRET, ADMIN_USERNAME, ADMIN_PASSWORD — no defaults, must be set)
 
-**AdminPanel current capabilities:**
+**AdminPanel capabilities (all implemented):**
 - Clips table: paginated, filter tabs (ALL / PENDING / ANNOTATED / REVIEW / ERROR)
-- APPROVE button on REVIEW clips → `POST /api/admin/clips/{id}/approve`
+- APPROVE button on REVIEW clips → `POST /api/admin/clips/{id}/approve` (REVIEW → PENDING)
 - DECLINE button on REVIEW clips → `DELETE /api/admin/clips/{id}`
-- PREVIEW button on all clips → modal with video (ANNOTATED) or URL link (REVIEW)
-- Training runs table with mAP50 + status
+- PREVIEW button → modal with video (ANNOTATED, from GCS) or URL link (REVIEW)
+- Training runs table with live mAP50 + status
 - Train buttons (BASELINE/FINETUNE per model)
-
-**Known gaps (not yet implemented):**
-- WebSocket training progress (3.14/3.14b)
-- Celery worker E2E not verified end-to-end
-- Hero background video (waiting for GENERAL annotated clips to accumulate)
+- WebSocket progress bar: INITIALIZING → EPOCH 0/N (bar 0%) → EPOCH N/N (100%); auto-reconnects on page load if run is RUNNING
 
 ---
 
@@ -39,9 +36,8 @@ correctness, security, UX, and performance requirements.
 - [ ] `GET /api/feed` returns paginated JSON with `clips[]`, `total`, `page`, `per_page`
 - [ ] `GET /api/archive?q=&from=&to=&page=` supports all query params
 - [ ] `POST /api/submit` validates URL format and returns `201` on success
-- [ ] `GET /api/admin/datasets` returns only datasets with `status=LABELED`
-- [ ] `POST /api/admin/train` accepts `{stage: "BASELINE"|"FINETUNE", dataset_ids: int[]}` and returns Celery task ID
-- [ ] `WebSocket /ws/training/{run_id}` sends JSON `{epoch, loss, mAP50, status}` every 2s
+- [ ] `POST /api/admin/train` accepts `{stage: "BASELINE"|"FINETUNE", model_type: str}` and returns run ID
+- [ ] `WebSocket /ws/training/{run_id}` sends JSON `{status, metrics}` every 3s; closes on DONE/ERROR
 - [ ] All `/api/admin/*` endpoints return `401` without valid JWT
 - [ ] `POST /api/auth/login` returns `401` on wrong credentials (not 500)
 

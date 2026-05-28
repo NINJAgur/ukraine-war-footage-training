@@ -1,6 +1,6 @@
 # PROJECT_PLAN.md — Ukraine Combat Footage Web Application
 > **Source of Truth** — All phases, structure, and decisions are tracked here.
-> Last updated: 2026-05-26
+> Last updated: 2026-05-28
 
 ---
 
@@ -41,13 +41,26 @@ An automated, full-stack web application that:
                      │ (Redis Celery queue via GCP internal IP)
                      ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│         ML LAYER  (ml-engine — GCP T4 Spot VM)                      │
+│   INFERENCE LAYER  (inference-engine — n1-standard-1 + T4, Q=pipeline) │
+│   Instance Schedule: 03:00 start / 04:00 stop UTC                  │
 │                                                                     │
-│  [Celery Beat — daily 02:00 UTC → GDINO auto-label]                 │
-│  [Celery Beat — daily 04:00 UTC → annotate_clips]                   │
-│       └──► annotate_clips task  (sequential: AIRCRAFT→VEHICLE→PERSONNEL→GENERAL)
-│                    │                                                │
-│            Query DB by score majority vote                          │
+│  [Beat @03:05] auto_label_batch → auto_label_clip × N              │
+│       └──► Phase 1 GDINO: frames → canonical labels → Dataset(LABELED)  │
+│            Phase 2 package_dataset (per clip):                      │
+│              → filter+append into merged/<MODEL>/ (4 persistent dirs)   │
+│              → delete clip hash dir immediately                     │
+│              → Dataset(PACKAGED)                                    │
+│            Phase 3 chord callback (once, after ALL clips done):     │
+│              → count PACKAGED per model; ≥5 → TrainingRun(QUEUED)  │
+│              → ONE prepare_finetune_batch dispatch (all run IDs)    │
+│              → mark consumed datasets TRAINED                       │
+│            Phase 4 prepare_finetune_batch (Q=pipeline):             │
+│              → remote: upload merged/<MODEL>/ to GCS → delete local │
+│              → local: leave merged dirs on disk                     │
+│              → start training VM → dispatch train_finetune × N      │
+│                                                                     │
+│  [Beat @03:35] annotate_clips (Q=pipeline, waits behind GDINO):    │
+│       └──► YOLO inference (AIRCRAFT→VEHICLE→PERSONNEL→GENERAL)     │
 │            _download_from_gcs(clip.file_path) → /tmp/<hash>.mp4    │
 │            validate_clip (≥10% frames detected at conf=0.25)       │
 │                PASS → infer_video_multi_model → annotated MP4       │
@@ -55,6 +68,21 @@ An automated, full-stack web application that:
 │                     → clip.mp4_path = https://storage.googleapis.com/...
 │                     → delete raw GCS object                        │
 │                FAIL → delete raw GCS object, status=PENDING        │
+│            _shutdown_if_no_training (shuts VM if no active runs)   │
+└─────────────────────────────────────────────────────────────────────┘
+                     │ (dispatch train_finetune → Q=training)
+                     ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│   TRAINING LAYER  (training-engine — n1-standard-4 + T4, Q=training) │
+│   On-demand: started by inference-engine via GCP Compute Engine API │
+│                                                                     │
+│  train_finetune × 4 (AIRCRAFT, VEHICLE, PERSONNEL, GENERAL):        │
+│       download gs://bucket/merged/<MODEL>_<run_id>/ → local         │
+│       combined_data.yaml: kaggle_merged/ + merged_dir               │
+│       YOLO training → best.pt                                       │
+│       upload best.pt → gs://bucket/runs/finetune/...               │
+│       finally: delete local merged dir                              │
+│  After last model: sudo shutdown -h now                             │
 └─────────────────────────────────────────────────────────────────────┘
                      │
                      ▼
@@ -243,29 +271,49 @@ yolo-training-template/                  ← monorepo root
 │       ├── test_scrape_sample.py        ← Phase 1 sample test (max_count/max_incidents)
 │       └── test_scrape_24h.py           ← Phase 1 24h window test (calls _since functions)
 │
-├── ml-engine/                           ← PHASE 2: ML Pipeline ✅ Complete
+├── inference-engine/                    ← GDINO + YOLO annotation + dataset pipeline (Q=pipeline)
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   ├── celery_app.py
+│   ├── config.py                        ← includes GCP_PROJECT_ID, GCP_TRAINING_VM_* settings
+│   ├── media/                           ← scraped_datasets/, annotated/ (gitignored)
+│   ├── tasks/
+│   │   ├── auto_label.py                ← GDINO on video clips (Celery, Q=pipeline)
+│   │   ├── package_dataset.py           ← 80/20 split + _maybe_trigger_finetune + prepare_finetune_batch
+│   │   ├── annotate_clips.py            ← YOLO annotation (Q=pipeline, @03:35 UTC)
+│   │   └── weights.py                   ← _latest_weights, _resolve_weights_path (shared helpers)
+│   ├── core/
+│   │   ├── inference.py                 ← multi-model video inference → annotated MP4
+│   │   ├── storage.py                   ← GCS / local finalize_clip
+│   │   └── autolabeling/
+│   │       └── auto_label.py            ← GroundingDINO labeling (video clips → frames)
+│   ├── db/
+│   │   ├── session.py
+│   │   └── models.py
+│   └── tests/
+│
+├── training-engine/                     ← YOLO training only (Q=training, on-demand VM)
 │   ├── Dockerfile
 │   ├── requirements.txt
 │   ├── celery_app.py
 │   ├── config.py
 │   ├── runs/                            ← YOLO training output (gitignored)
-│   ├── media/                           ← frames, annotated, datasets (gitignored)
 │   ├── tasks/
-│   │   ├── auto_label.py                ← GDINO on video clips (Celery pipeline)
-│   │   ├── autolabel_kaggle.py          ← GDINO on image folders (nzigulic, piterfm)
-│   │   ├── package_dataset.py
-│   │   ├── render_annotated.py
 │   │   ├── train_baseline.py            ← Stage 1: Kaggle datasets → specialist .pt files
-│   │   └── train_finetune.py            ← Stage 2: baseline + custom data → fine_tuned.pt
-│   ├── tests/
-│   ├── core/                            ← migrated from original repo
-│   │   ├── main.py                      ← YOLO training entry point
-│   │   ├── inference.py                 ← multi-model video inference → annotated MP4
-│   │   └── autolabeling/
-│   │       └── auto_label.py            ← GroundingDINO labeling (video clips → frames)
-│   └── db/
-│       ├── session.py
-│       └── models.py
+│   │   └── train_finetune.py            ← Stage 2: download merged from GCS → fine_tuned.pt
+│   ├── core/
+│   │   └── main.py                      ← YOLO training entry point
+│   ├── scripts/
+│   │   ├── build_specialist_datasets.py ← ONE-TIME: builds kaggle_datasets/merged/
+│   │   ├── setup_datasets.sh            ← VM startup: Kaggle download + persistent disk setup
+│   │   ├── aircraft_pipeline.py         ← DB-driven AIRCRAFT annotation pipeline
+│   │   ├── vehicle_pipeline.py
+│   │   ├── personnel_pipeline.py
+│   │   └── general_pipeline.py
+│   ├── db/
+│   │   ├── session.py
+│   │   └── models.py
+│   └── tests/
 │
 ├── web-app/                             ← PHASE 3: Web Application ✅ Complete
 │   ├── backend/
@@ -327,7 +375,7 @@ yolo-training-template/                  ← monorepo root
 │
 ```
 
-> Tests live inside each service directory (`scraper-engine/tests/`, `ml-engine/tests/`, `web-app/tests/`) — not at the repo root.
+> Tests live inside each service directory (`scraper-engine/tests/`, `inference-engine/tests/`, `training-engine/tests/`, `web-app/tests/`) — not at the repo root.
 
 ---
 
@@ -694,11 +742,18 @@ Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 ✅, Phase 4 ✅
 - 80 ANNOTATED clips in DB; all 4 pipelines verified end-to-end
 
 **Cloud deployment — complete ✅ (2026-05-26):**
-- Architecture: GCP e2-micro free tier (CPU, $0/mo) + GCP T4 Spot VM (GPU, ~$10/mo via Instance Scheduling 02:00–05:00 UTC)
+- Architecture: GCP e2-micro free tier (CPU, $0/mo) + 2× T4 Spot VM (GPU, ~$20/mo)
 - e2-micro live ✅ — all 6 CPU services deployed; HTTPS via ukrarchive.duckdns.org + Let's Encrypt
-- T4 Spot VM live ✅ — fully automated startup; GCS annotation pipeline verified end-to-end
+- inference-engine VM ✅ — n1-standard-1 + T4; Instance Schedule 03:00–04:00 UTC; Q=pipeline: auto_label_batch (GDINO @03:05) + annotate_clips (YOLO @03:35) + package_dataset + prepare_finetune_batch; starts training VM via GCP API when ≥5 PACKAGED datasets
+- training-engine VM ✅ — n1-standard-4 + T4; on-demand (started by inference-engine API call); Q=training: train_finetune × 4 models; downloads merged datasets from GCS, trains, uploads weights, self-shuts
 - CI/CD live ✅ — GitHub Actions: frontend build + ruff lint → auto-deploy to e2-micro on push to main
 - Security ✅ — no insecure config defaults; .claude/settings.json purged from history
+
+**Phase 4 additions (2026-05-28):**
+- [x] Pipeline scripts refactored: all 4 (`aircraft_pipeline.py`, `vehicle_pipeline.py`, `personnel_pipeline.py`, `general_pipeline.py`) now expose `run(limit=10) -> dict` callable; `__main__` delegates to `run()`
+- [x] Local E2E orchestrator: `training-engine/scripts/local/run_pipeline.py` — dispatches Celery tasks, polls DB, subcommands: `status | scrape | gdino | annotate | all`
+- [x] Terraform fixed: `inference_engine` scheduling block — removed `preemptible = true` (incompatible with Instance Scheduling resource policies); `training_engine` — added `provisioning_model = "SPOT"` + `instance_termination_action = "STOP"`
+- [x] `start_workers.sh` updated: removed stale "Phase 4 Docker" comment; added local runner hint
 
 ---
 

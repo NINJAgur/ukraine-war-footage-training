@@ -4,11 +4,11 @@
 ---
 
 ## Current Project State
-*Last updated: 2026-05-26*
+*Last updated: 2026-05-28*
 
-**Architecture:** GCP e2-micro (CPU services, free tier) + GCP T4 Spot VM (GPU worker, ~$10/mo)
+**Architecture:** GCP e2-micro (CPU services, free tier) + inference-engine VM (n1-std-1+T4, Q=pipeline, scheduled 03:00–04:00) + training-engine VM (n1-std-4+T4, Q=training, on-demand)
 **GCS bucket:** `ukraine-footage-media` — raw/ (private) + annotated/ (public-read)
-**Status:** Both VMs fully operational; GCS annotation pipeline confirmed end-to-end
+**Status:** All VMs fully operational; GCS annotation pipeline confirmed end-to-end
 
 ---
 
@@ -74,15 +74,15 @@ docker compose -f docker-compose.prod.yml exec postgres \
   -c "SELECT id, status, file_path FROM clips ORDER BY created_at DESC LIMIT 5;"
 ```
 
-### T4 GPU Worker Health
+### Inference-engine VM Health
 ```bash
-# SSH into T4 VM, then:
+# SSH into inference-engine VM (ukraine-footage-inference), then:
 
 # Celery service running
-sudo systemctl status celery-gpu
+sudo systemctl status celery-inference
 
 # Worker logs (live)
-sudo tail -f /var/log/celery-gpu.log
+sudo tail -f /var/log/celery-inference.log
 
 # GPU visible
 nvidia-smi
@@ -91,14 +91,34 @@ nvidia-smi
 sudo cat /var/log/startup-script.log
 
 # Weights downloaded correctly
-ls /home/ubuntu/app/ml-engine/runs/baseline/GENERAL/baseline_GENERAL_30/weights/best.pt
-ls /home/ubuntu/app/ml-engine/runs/finetune/
+ls /home/ubuntu/app/training-engine/runs/baseline/GENERAL/baseline_GENERAL_30/weights/best.pt
+ls /home/ubuntu/app/training-engine/runs/finetune/
+
+# Check venv has celery
+ls /home/ubuntu/app/inference-engine/venv/bin/celery
+```
+
+### Training-engine VM Health
+```bash
+# SSH into training-engine VM (ukraine-footage-training), then:
+
+# Celery service running
+sudo systemctl status celery-training
+
+# Worker logs (live)
+sudo tail -f /var/log/celery-training.log
+
+# GPU visible
+nvidia-smi
 
 # Datasets disk mounted
 df -h /mnt/datasets
 
+# Kaggle datasets present
+ls /mnt/datasets/media/kaggle_datasets/merged/GENERAL/
+
 # Check venv has celery
-ls /home/ubuntu/app/ml-engine/venv/bin/celery
+ls /home/ubuntu/app/training-engine/venv/bin/celery
 ```
 
 ### GCS Pipeline
@@ -169,9 +189,11 @@ cat ~/.ssh/authorized_keys | grep github-actions
 | Backend returns 502 | Container crashed or unhealthy | `docker compose logs backend` |
 | Redis connection refused from T4 | Firewall rule missing or T4 in different zone | GCP Console → VPC Firewall (ports 5432/6379 open to 10.128.0.0/9) |
 | Scraper tasks not processing | scraper-worker not connected to Redis | `docker compose logs scraper-worker` |
-| T4 celery-gpu service failed | venv missing celery binary OR ExecStart path wrong | `systemctl status celery-gpu`, check `/var/log/startup-script.log` |
-| T4 weights not found | First-boot weight download failed | Check GCS has `runs/` blobs; re-run weight download script manually |
-| No tasks on GPU queue | Beat not running | Verify `--beat` flag in systemd ExecStart; `celery inspect scheduled` |
+| inference-engine celery-inference failed | venv missing celery binary OR ExecStart path wrong | `systemctl status celery-inference`, check `/var/log/startup-script.log` |
+| Weights not found on inference-engine | First-boot weight download failed | Check GCS has `runs/` blobs; re-run weight download script manually |
+| No tasks on pipeline queue | Beat not running | Verify `--beat` flag in systemd ExecStart; `celery inspect scheduled` |
+| training-engine celery-training failed | venv missing OR not yet started by inference-engine | Check `systemctl status celery-training`; verify `prepare_finetune_batch` was dispatched |
+| training-engine not started | `GCP_PROJECT_ID` empty OR inference-engine hasn't reached ≥5 PACKAGED datasets threshold | Check inference-engine logs for `[prepare_finetune_batch] Started training VM` |
 | Annotated videos not loading | GCS object not public-read | Verify `roles/storage.objectViewer` for `allUsers` on bucket |
 | PyTorch UnpicklingError on weights load | Wrong torch version — 2.6+ breaks ultralytics | Verify `torch==2.5.1+cu121` in venv: `venv/bin/python -c "import torch; print(torch.__version__)"` |
 | 502 Bad Gateway after backend redeploy | nginx lost DNS resolution when backend container was recreated | `sudo docker compose -f docker-compose.prod.yml restart frontend` |

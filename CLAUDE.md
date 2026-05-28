@@ -53,37 +53,62 @@
 
 One `Dataset` DB record per clip. Disk layout:
 ```
-ml-engine/media/scraped_datasets/
-    frames/<url_hash>/          ← transient scratch; deleted immediately after GDINO runs
-    <url_hash>/                 ← per-clip YOLO dataset (LABELED → PACKAGED → TRAINED → deleted after all runs done)
-        train/images/           ← frames with detections (empty-label frames removed post-remap)
-        train/labels/           ← canonical nc=3 labels
+inference-engine/media/scraped_datasets/
+    frames/<url_hash>/    ← transient scratch; deleted immediately after GDINO runs
+    <url_hash>/           ← per-clip YOLO dataset (LABELED → merged into merged/ → deleted by package_dataset)
+        train/images/     ← frames with detections (empty-label frames removed post-remap)
+        train/labels/     ← canonical nc=3 labels
         data.yaml
-    merged_AIRCRAFT_<run_id>/   ← specialist merged dir; created at train time, deleted after training
-    merged_VEHICLE_<run_id>/
-    ...
+    merged/
+        AIRCRAFT/         ← persistent accumulation dir; grows per-clip; cleared after training dispatched
+        VEHICLE/
+        PERSONNEL/
+        GENERAL/
 ```
 
-Pipeline per scrape batch (Beat schedule: GDINO @ 02:00, annotate @ 04:00 UTC):
-1. `auto_label_batch` → finds DOWNLOADED clips without a Dataset → dispatches `auto_label_clip` × N
+Pipeline per scrape batch (Beat schedule on inference-engine VM: GDINO @03:05, annotate @03:35 UTC):
+
+**Phase 1 — GDINO** (`auto_label_batch` → `auto_label_clip × N`, Q=pipeline):
+1. `auto_label_batch` → finds all DOWNLOADED clips without a Dataset → dispatches `auto_label_clip × N`
 2. `auto_label_clip` per clip:
    - Extract frames → `frames/<hash>/`
-   - Run GDINO → labels remapped to canonical nc=3 (0=AIRCRAFT, 1=VEHICLE, 2=PERSONNEL)
+   - Run GDINO → remap to canonical nc=3
    - Delete `frames/<hash>/` immediately
    - Remove frames where label is empty after remap
-   - Create `Dataset(LABELED)` record with `detected_model_types` (which classes appeared)
+   - Create `Dataset(LABELED)` with `detected_model_types`
    - Dispatch `package_dataset`
-3. `package_dataset` → 80/20 train/val split → `Dataset(PACKAGED)`
-4. `annotate_clips` → YOLO inference on raw .mp4 → annotated video → deletes raw file → `_maybe_trigger_finetune`
-5. `_maybe_trigger_finetune` → if ≥5 PACKAGED/TRAINED datasets per model type → `TrainingRun(QUEUED)` → dispatches `train_finetune` × 4
-6. `train_finetune` per model:
-   - Builds `merged_<MODEL>_<run_id>/` from clip datasets, **specialist-filtered** (AIRCRAFT gets only class-0 labels; frames with no class-0 labels excluded)
-   - Creates `combined_data.yaml` pointing at both `kaggle_datasets/merged/<MODEL>/` AND `merged_<MODEL>_<run_id>/` — YOLO reads both without copying Kaggle files
-   - Trains → saves weights → marks datasets TRAINED
-   - Deletes clip dataset dirs (once no other queued run references them)
-   - Deletes `merged_<MODEL>_<run_id>/`
 
-**Specialist filtering (CRITICAL):** `_class_remap` in `train_finetune.py` returns `{0:0}` for AIRCRAFT, `{1:1}` for VEHICLE, `{2:2}` for PERSONNEL, `{0:0,1:1,2:2}` for GENERAL. Frames where no label survives the filter are excluded from the merged dir. Matches `build_specialist_datasets.py` exactly.
+**Phase 2 — Packaging + Merging** (`package_dataset × N`, Q=pipeline, sequential after each auto_label_clip):
+3. `package_dataset` per clip:
+   - 80/20 train/val split
+   - Filter + append clip's YOLO data into `merged/<MODEL>/` for each detected model (specialist class filter applied)
+   - Delete `scraped_datasets/<hash>/` immediately after appending to all relevant merged dirs
+   - Mark `Dataset(PACKAGED)`
+
+**Phase 3 — Trigger check** (chord callback, fires once after ALL `package_dataset` tasks complete):
+4. Count PACKAGED datasets per model type (per-model filter: only datasets where that model was detected; GENERAL counts all)
+5. Any model with ≥5 → `TrainingRun(QUEUED)` → dispatch ONE `prepare_finetune_batch` with all qualifying run IDs
+6. Mark consumed PACKAGED datasets as TRAINED (so they don't count toward next cycle's threshold)
+
+**Phase 4 — Finetune dispatch** (`prepare_finetune_batch`, Q=pipeline):
+7. Remote: upload `merged/<MODEL>/` → `gs://bucket/merged/<MODEL>/` for each qualifying model → delete local merged dir
+8. Local: leave merged dirs on disk (train_finetune reads directly)
+9. Start training VM via GCP API (remote only — no-op locally)
+10. Dispatch `train_finetune × N qualifying models` → Q=training
+
+**Phase 5 — Training** (`train_finetune`, Q=training, on training-engine):
+11. Remote: download `gs://bucket/merged/<MODEL>/` → local temp dir; Local: read from local merged dir directly
+12. Build `combined_data.yaml`: Kaggle merged (persistent disk) + scraped merged dir
+13. Train → save weights → remote: upload `best.pt` to GCS
+14. `finally`: delete local merged dir (both modes)
+15. After last model: `sudo shutdown -h now` (non-Windows only)
+
+**Phase 6 — Annotation** (`annotate_clips`, Q=pipeline, @03:35 UTC — waits behind GDINO in queue):
+16. YOLO inference on raw .mp4 → annotated video → delete raw file → `_shutdown_if_no_training`
+
+**Specialist filtering (CRITICAL):** `_class_remap` in `package_dataset.py` returns `{0:0}` for AIRCRAFT, `{1:1}` for VEHICLE, `{2:2}` for PERSONNEL, `{0:0,1:1,2:2}` for GENERAL. Frames where no label survives the filter are excluded. Matches `build_specialist_datasets.py` exactly.
+
+**GCS storage (remote mode):** Raw clips never go to GCS individually — only `merged/<MODEL>/` dirs are uploaded to `gs://bucket/merged/<MODEL>/` when training is dispatched. Trained weights go to `gs://bucket/runs/finetune/<MODEL>/<run_name>/weights/best.pt`.
 
 **Scraper media structure:**
 ```
@@ -104,14 +129,19 @@ scraper-engine/media/
 - Any image folder: `tasks/autolabel_kaggle.py --path <dir> [--prompt <terms>]` — universal, recursive
 
 **Shared DB models:** `shared/db/models.py` — single source of truth for all ORM models.
-All services import via re-export stubs (`ml-engine/db/models.py`, `scraper-engine/db/models.py`, `web-app/backend/db/models.py`).
+All services import via re-export stubs (`inference-engine/db/models.py`, `training-engine/db/models.py`, `scraper-engine/db/models.py`, `web-app/backend/db/models.py`).
 
 **4 YOLO models:** AIRCRAFT + VEHICLE + PERSONNEL (specialists) + GENERAL — specialists train first.
+
+**2-VM production split (GCP):**
+- **inference-engine VM** (n1-standard-1 + T4, Instance Schedule 03:00–04:00 UTC, Q=pipeline): GDINO auto-labeling, dataset packaging, merged dataset creation, YOLO annotation of raw clips, starts training VM via GCP API
+- **training-engine VM** (n1-standard-4 + T4, on-demand started by inference-engine): downloads merged datasets from GCS (remote) or reads from local disk, trains 4 YOLO models, uploads weights, self-shuts down
 
 | Service | Directory | Phase |
 |---------|-----------|-------|
 | Scraper Engine | `scraper-engine/` | 1 ✅ |
-| ML Engine | `ml-engine/` | 2 ⚠️ (runs 13/25/29/30 stale — merged datasets rebuilt clean 2026-05-14, all 4 baselines need retraining) |
+| Inference Engine | `inference-engine/` | 2 ✅ (GDINO + YOLO annotation + dataset packaging + finetune dispatch) |
+| Training Engine | `training-engine/` | 2 ✅ (YOLO baseline + finetune training only) |
 | Backend API | `web-app/backend/` | 3 ✅ |
 | Frontend | `web-app/frontend/` | 3 ✅ |
 
@@ -124,7 +154,7 @@ All services import via re-export stubs (`ml-engine/db/models.py`, `scraper-engi
 - **GPU:** RTX 3060 Ti, 8GB VRAM — `batch_size≤8`, always `device='cuda:0'`
 - **FastAPI:** `async def` routes, `AsyncSession`, Pydantic v2 `ConfigDict`
 - **Vue 3:** `<script setup>` only, Pinia, Tailwind dark theme (slate/zinc + `#22c55e` / `#ef4444`)
-- **Celery:** `gpu` queue, `concurrency=1`, all tasks idempotent, Redis broker; GPU worker on Windows requires `--pool=solo` (billiard prefork fails with WinError 5/6)
+- **Celery:** Q=`pipeline` (inference-engine, concurrency=1), Q=`training` (training-engine, concurrency=1); all tasks idempotent, Redis broker; GPU worker on Windows requires `--pool=solo` (billiard prefork fails with WinError 5/6)
 - **DB:** PostgreSQL 16, `ukraine_footage`, SQLAlchemy 2.x
 - **Scraping:** Funker530 REST + GeoConfirmed REST + yt-dlp, SHA256 url_hash dedup
 - **See** `rules/` for coding standards: `celery-rules.md`, `fastapi-rules.md`, `vue3-rules.md`, `yolo-rules.md`
@@ -137,21 +167,24 @@ All services import via re-export stubs (`ml-engine/db/models.py`, `scraper-engi
 | What | Where |
 |------|-------|
 | Shared ORM models | `shared/db/models.py` |
-| Training entry point | `ml-engine/core/main.py` |
-| Inference + multi-model | `ml-engine/core/inference.py` |
-| Auto-label (video clips) | `ml-engine/core/autolabeling/auto_label.py` |
-| Auto-label (any image folder) | `ml-engine/tasks/autolabel_kaggle.py` |
-| Baseline training task | `ml-engine/tasks/train_baseline.py` |
-| ML tasks | `ml-engine/tasks/` |
-| Build merged datasets (run once) | `ml-engine/scripts/build_specialist_datasets.py` |
-| AIRCRAFT pipeline (DB-driven) | `ml-engine/scripts/aircraft_pipeline.py` |
-| VEHICLE pipeline (DB-driven) | `ml-engine/scripts/vehicle_pipeline.py` |
-| PERSONNEL pipeline (DB-driven) | `ml-engine/scripts/personnel_pipeline.py` |
-| GENERAL pipeline (DB-driven) | `ml-engine/scripts/general_pipeline.py` |
-| Annotate clips Celery task | `ml-engine/tasks/annotate_clips.py` |
-| GCS / local storage finalize | `ml-engine/core/storage.py` |
-| Docker entrypoint (weight download) | `ml-engine/entrypoint.sh` |
-| One-time dataset setup | `ml-engine/scripts/setup_datasets.sh` |
+| GDINO auto-label (video clips) | `inference-engine/core/autolabeling/auto_label.py` |
+| YOLO inference + multi-model | `inference-engine/core/inference.py` |
+| Auto-label (any image folder) | `inference-engine/tasks/autolabel_kaggle.py` |
+| Auto-label Celery task | `inference-engine/tasks/auto_label.py` |
+| Package dataset + finetune trigger | `inference-engine/tasks/package_dataset.py` |
+| Annotate clips Celery task | `inference-engine/tasks/annotate_clips.py` |
+| Weight resolution helpers | `inference-engine/tasks/weights.py` |
+| Inference-engine config | `inference-engine/config.py` |
+| GCS / local storage finalize | `inference-engine/core/storage.py` |
+| Training entry point | `training-engine/core/main.py` |
+| Finetune training task | `training-engine/tasks/train_finetune.py` |
+| Baseline training task | `training-engine/tasks/train_baseline.py` |
+| Build merged datasets (run once) | `training-engine/scripts/build_specialist_datasets.py` |
+| AIRCRAFT pipeline (DB-driven) | `training-engine/scripts/aircraft_pipeline.py` |
+| VEHICLE pipeline (DB-driven) | `training-engine/scripts/vehicle_pipeline.py` |
+| PERSONNEL pipeline (DB-driven) | `training-engine/scripts/personnel_pipeline.py` |
+| GENERAL pipeline (DB-driven) | `training-engine/scripts/general_pipeline.py` |
+| One-time dataset setup | `training-engine/scripts/setup_datasets.sh` |
 | Start all Celery workers (dev) | `start_workers.sh` |
 | Funker530 scraper | `scraper-engine/tasks/scrape_funker530.py` |
 | GeoConfirmed scraper | `scraper-engine/tasks/scrape_geoconfirmed.py` |
@@ -159,13 +192,15 @@ All services import via re-export stubs (`ml-engine/db/models.py`, `scraper-engi
 | Phase 1 quick sample test | `scraper-engine/tests/test_scrape_sample.py` |
 | Phase 1 24h window test | `scraper-engine/tests/test_scrape_24h.py` |
 | Daily scrape orchestration | `scraper-engine/scripts/scrape_daily.py` |
-| Phase 2 baseline test | `ml-engine/tests/test_baseline_train.py` |
-| Phase 2 E2E test | `ml-engine/tests/test_pipeline_e2e.py` |
+| Inference-engine unit tests | `inference-engine/tests/unit/` |
+| Inference-engine integration tests | `inference-engine/tests/integration/` |
+| Training-engine unit tests | `training-engine/tests/unit/` |
 | Project plan | `PROJECT_PLAN.md` |
 
 Run Phase 1 sample test: `cd scraper-engine && python tests/test_scrape_sample.py`
 Run Phase 1 24h test: `cd scraper-engine && python tests/test_scrape_24h.py`
-Run Phase 2 test: `cd ml-engine && python tests/test_pipeline_e2e.py`
+Run inference-engine tests: `cd inference-engine && python -m pytest tests/`
+Run training-engine tests: `cd training-engine && python -m pytest tests/`
 
 ---
 
@@ -189,7 +224,7 @@ Slash commands in `.claude/commands/` wire up the `agents/` domain docs. Invoke 
 | Command | Domain | Agent doc |
 |---------|--------|-----------|
 | `/review-webapp` | `web-app/` code review | `agents/web-app/review.md` |
-| `/review-ml` | `ml-engine/` code review | `agents/ml-pipeline/review.md` |
+| `/review-ml` | `inference-engine/` + `training-engine/` code review | `agents/ml-pipeline/review.md` |
 | `/review-scraper` | `scraper-engine/` code review | `agents/ingestion/review.md` |
 | `/qa-webapp` | API contract + frontend QA | `agents/web-app/qa.md` |
 | `/qa-pipeline` | End-to-end DB state + pipeline health | `agents/ml-pipeline/qa.md` + `agents/ingestion/qa.md` |
@@ -236,7 +271,7 @@ If a senior engineer would want to glance at it before merging — spawn. Roughl
 
 ## Do NOT
 
-- Run ml-worker in Docker locally — GPU passthrough requires NVIDIA Container Toolkit (Linux only)
+- Run inference-engine or training-engine workers in Docker locally — GPU passthrough requires NVIDIA Container Toolkit (Linux only)
 - Use Options API or Vuex in Vue components
 - Use sync SQLAlchemy in FastAPI routes
 - Use `print()` in production code — use `logging`

@@ -14,7 +14,7 @@ from schemas.clips import ClipOut, ClipSubmit
 
 router = APIRouter(prefix="/api", tags=["public"])
 
-_ANNOTATED_DIR = Path(__file__).parent.parent.parent.parent / "ml-engine" / "media" / "annotated"
+_ANNOTATED_DIR = Path(__file__).parent.parent.parent.parent / "inference-engine" / "media"
 
 
 def _resolve_mp4_path(raw: str) -> Path:
@@ -23,10 +23,13 @@ def _resolve_mp4_path(raw: str) -> Path:
     if p.exists():
         return p
     normalized = raw.replace("\\", "/")
-    marker = "ml-engine/media/annotated/"
-    if marker in normalized:
-        rel = normalized[normalized.index(marker) + len(marker):]
-        return _ANNOTATED_DIR / rel
+    for marker, strip_len in (
+        ("inference-engine/media/", len("inference-engine/media/")),
+        ("ml-engine/media/", len("ml-engine/media/")),
+    ):
+        if marker in normalized:
+            rel = normalized[normalized.index(marker) + strip_len:]
+            return _ANNOTATED_DIR / rel
     return p
 
 _SOURCE_DISPLAY = {
@@ -86,8 +89,8 @@ async def get_annotated_clips(db: AsyncSession = Depends(get_db)) -> list[dict]:
     return items
 
 
-_KAGGLE_DIR  = Path(__file__).parent.parent.parent.parent / "ml-engine" / "media" / "kaggle_datasets"
-_RUNS_DIR    = Path(__file__).parent.parent.parent.parent / "ml-engine" / "runs" / "baseline"
+_KAGGLE_DIR  = Path(__file__).parent.parent.parent.parent / "training-engine" / "media" / "kaggle_datasets"
+_RUNS_DIR    = Path(__file__).parent.parent.parent.parent / "training-engine" / "runs" / "baseline"
 _SOURCE_DATASETS = {"mihprofi", "nzigulic", "piterfm", "shakedlevnat", "sudipchakrabarty"}
 _MODELS = ["AIRCRAFT", "VEHICLE", "PERSONNEL", "GENERAL"]
 

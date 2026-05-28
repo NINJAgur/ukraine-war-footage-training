@@ -11,7 +11,7 @@ Violations must be corrected before merging.
 - Maximum `batch_size = 8` for YOLOv8m
 - Always use `amp=True` (mixed precision) to halve VRAM usage
 - Always call `torch.cuda.empty_cache()` after GPU tasks complete
-- Never run two GPU tasks concurrently (`concurrency=1` on `gpu` Celery queue)
+- Never run two GPU tasks concurrently (`concurrency=1` on both `pipeline` and `training` Celery queues)
 
 ---
 

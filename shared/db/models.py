@@ -23,7 +23,7 @@ class ClipStatus(str, enum.Enum):
     PENDING = "PENDING"
     DOWNLOADING = "DOWNLOADING"
     DOWNLOADED = "DOWNLOADED"
-    QUEUED = "QUEUED"        # dispatched to ml-engine gpu queue
+    QUEUED = "QUEUED"        # dispatched to training queue
     LABELED = "LABELED"
     ANNOTATED = "ANNOTATED"
     ERROR = "ERROR"
