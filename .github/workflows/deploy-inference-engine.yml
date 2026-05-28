@@ -2,9 +2,14 @@ name: Deploy to inference-engine
 
 on:
   workflow_dispatch:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
 
 jobs:
   deploy:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: Deploy via SSH
@@ -13,7 +18,72 @@ jobs:
           host: ${{ secrets.INFERENCE_ENGINE_HOST }}
           username: ubuntu
           key: ${{ secrets.INFERENCE_ENGINE_SSH_KEY }}
+          command_timeout: 15m
           script: |
+            set -e
+
+            # Pull latest code and fix sparse checkout
             cd /home/ubuntu/app
             sudo git pull
+            sudo git sparse-checkout reapply
+
+            # Build venv if pip install previously failed
+            cd inference-engine
+            if [ ! -f venv/bin/celery ]; then
+              echo "=== Building venv ==="
+              python3 -m venv venv
+              venv/bin/pip install --quiet --upgrade pip
+              venv/bin/pip install --quiet torch torchvision \
+                --index-url https://download.pytorch.org/whl/cpu
+              grep -v "^torch\|^torchvision\|^--extra-index" requirements.txt > /tmp/req_cpu.txt
+              venv/bin/pip install --quiet -r /tmp/req_cpu.txt
+              echo "=== venv done ==="
+            fi
+
+            # Write .env if missing
+            if [ ! -f /home/ubuntu/app/.env ]; then
+              cat > /home/ubuntu/app/.env << ENVEOF
+            DATABASE_SYNC_URL=postgresql+psycopg2://postgres:${{ secrets.POSTGRES_PASSWORD }}@${{ secrets.E2_MICRO_INTERNAL_IP }}:5432/ukraine_footage
+            CELERY_BROKER_URL=redis://${{ secrets.E2_MICRO_INTERNAL_IP }}:6379/0
+            CELERY_RESULT_BACKEND=redis://${{ secrets.E2_MICRO_INTERNAL_IP }}:6379/1
+            REDIS_URL=redis://${{ secrets.E2_MICRO_INTERNAL_IP }}:6379/0
+            STORAGE_MODE=remote
+            REMOTE_STORAGE_BUCKET=ukraine-footage-media
+            GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}
+            GCP_TRAINING_VM_ZONE=us-central1-a
+            GCP_TRAINING_VM_NAME=ukraine-footage-training
+            GPU_DEVICE=cpu
+            ENVEOF
+              chown ubuntu:ubuntu /home/ubuntu/app/.env
+              echo "=== .env written ==="
+            fi
+
+            # Create service unit if missing
+            if [ ! -f /etc/systemd/system/celery-inference.service ]; then
+              printf '%s\n' \
+                '[Unit]' \
+                'Description=Celery Inference Worker + Beat' \
+                'After=network.target' \
+                '' \
+                '[Service]' \
+                'Type=simple' \
+                'User=ubuntu' \
+                'WorkingDirectory=/home/ubuntu/app/inference-engine' \
+                'EnvironmentFile=/home/ubuntu/app/.env' \
+                'Environment=OMP_NUM_THREADS=4' \
+                'ExecStart=/home/ubuntu/app/inference-engine/venv/bin/celery -A celery_app worker -Q pipeline --pool=prefork --concurrency=1 --loglevel=info --beat' \
+                'Restart=on-failure' \
+                'RestartSec=30' \
+                'StandardOutput=append:/var/log/celery-inference.log' \
+                'StandardError=append:/var/log/celery-inference.log' \
+                '' \
+                '[Install]' \
+                'WantedBy=multi-user.target' \
+                | sudo tee /etc/systemd/system/celery-inference.service > /dev/null
+              echo "=== service unit created ==="
+            fi
+
+            sudo systemctl daemon-reload
+            sudo systemctl enable celery-inference
             sudo systemctl restart celery-inference
+            sudo systemctl status celery-inference --no-pager
