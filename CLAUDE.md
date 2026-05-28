@@ -212,7 +212,7 @@ Run training-engine tests: `cd training-engine && python -m pytest tests/`
 | 1 | Scraper engine | ✅ Complete |
 | 2 | ML pipeline — baseline training | ✅ Complete (AIRCRAFT 0.929, VEHICLE 0.871, PERSONNEL 0.780, GENERAL 0.784) |
 | 3 | Web application | ✅ Complete (Celery E2E, hero video, WebSocket progress bar, integration smoke test — 58 annotated clips) |
-| 4 | Cloud & DevOps | ✅ Complete (GCP e2-micro ✅; T4 Spot VM ✅; GCS pipeline ✅; HTTPS ✅ ukrarchive.duckdns.org Let's Encrypt; CI/CD ✅ GitHub Actions deploy-on-push) |
+| 4 | Cloud & DevOps | ✅ Complete (GCP e2-micro ✅; T4 Spot VM ✅; GCS pipeline ✅; HTTPS ✅ ukrarchive.duckdns.org Let's Encrypt; CI/CD ✅ GitHub Actions deploy-on-push; mobile-responsive frontend ✅) |
 
 ---
 

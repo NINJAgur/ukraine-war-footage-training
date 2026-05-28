@@ -1,6 +1,6 @@
 # PROJECT_PLAN.md — Ukraine Combat Footage Web Application
 > **Source of Truth** — All phases, structure, and decisions are tracked here.
-> Last updated: 2026-05-28
+> Last updated: 2026-05-29
 
 ---
 
@@ -678,6 +678,8 @@ yolo-training-template/                  ← monorepo root
 - [x] **4.23** Test suite hardening: production DB guard added to all 3 conftests (`web-app/backend`, `scraper-engine`, `ml-engine`) — refuses to run if `DATABASE_URL` points to non-local host
 - [x] **4.24** Security: `.claude/settings.json` purged from all 140 git commits via `git filter-repo --invert-paths`; added to `.gitignore`; force-pushed to GitHub
 - [x] **4.25** `web-app/backend/config.py` hardened: removed insecure defaults for `JWT_SECRET`, `ADMIN_USERNAME`, `ADMIN_PASSWORD` — app fails fast at startup if not set in `.env`
+- [x] **4.26** `web-app/backend/api/public.py` `_model_stats` performance fix: replaced 8 sequential DB queries (2 per model × 4 models) with a single query fetching all DONE/RUNNING TrainingRuns at once; reduces API response time from 5–10s to <1s ✅
+- [x] **4.27** Mobile-responsive frontend: all pages and components made responsive across 3 breakpoints (≤900px tablet, ≤768px mobile, ≤480px small phone) — nav links hidden on mobile; hero stats pulled from absolute positioning into flow; archive sidebar collapses to horizontal scroll strip; AdminPanel tables wrapped in `overflow-x: auto` scroll containers; ML cards flatten trapezoid/parallelogram shapes at narrow widths; modal, data strip, footer all adapt ✅
 
 ---
 
@@ -739,6 +741,7 @@ Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 ✅, Phase 4 ✅
 - Public feed, archive, submit, hero, ticker, ML cards — all wired to live DB/API
 - Admin panel: clips table (APPROVE + DECLINE + preview modal), training runs table, train buttons, live WebSocket progress bar
 - Video pipeline: FFmpeg CRF 28 + faststart; 90% full-screen box filter; multi-model inference
+- Mobile-responsive across all pages (≤900px/768px/480px breakpoints)
 - 80 ANNOTATED clips in DB; all 4 pipelines verified end-to-end
 
 **Cloud deployment — complete ✅ (2026-05-26):**
@@ -754,6 +757,10 @@ Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 ✅, Phase 4 ✅
 - [x] Local E2E orchestrator: `training-engine/scripts/local/run_pipeline.py` — dispatches Celery tasks, polls DB, subcommands: `status | scrape | gdino | annotate | all`
 - [x] Terraform fixed: `inference_engine` scheduling block — removed `preemptible = true` (incompatible with Instance Scheduling resource policies); `training_engine` — added `provisioning_model = "SPOT"` + `instance_termination_action = "STOP"`
 - [x] `start_workers.sh` updated: removed stale "Phase 4 Docker" comment; added local runner hint
+
+**Phase 4 additions (2026-05-29):**
+- [x] `_model_stats` performance fix: 8 sequential DB queries → 1 query; API response time 5–10s → <1s
+- [x] Mobile-responsive frontend: 3-breakpoint CSS (≤900px/768px/480px); archive sidebar collapses to horizontal scroll; admin tables get horizontal scroll containers; hero stats pulled from absolute to flow; all pages verified
 
 ---
 

@@ -42,7 +42,7 @@ training-engine VM (n1-standard-4 + T4, on-demand):
 | Inference Engine | `inference-engine/` | inference-engine VM (T4) | ✅ Complete |
 | Training Engine | `training-engine/` | training-engine VM (T4) | ✅ Complete |
 | Backend API | `web-app/backend/` | e2-micro (Docker) | ✅ Complete |
-| Frontend | `web-app/frontend/` | e2-micro (Docker) | ✅ Complete |
+| Frontend | `web-app/frontend/` | e2-micro (Docker) | ✅ Complete (mobile-responsive) |
 
 ## ML Training — Best Runs
 
