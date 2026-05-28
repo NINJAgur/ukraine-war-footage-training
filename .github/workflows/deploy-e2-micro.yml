@@ -20,6 +20,7 @@ jobs:
           command_timeout: 30m
           script: |
             cd /home/ubuntu/app
-            sudo git pull
+            sudo git fetch origin
+            sudo git reset --hard origin/main
             sudo DOCKER_BUILDKIT=1 docker compose -f docker-compose.prod.yml build --parallel
             sudo docker compose -f docker-compose.prod.yml up -d --remove-orphans
