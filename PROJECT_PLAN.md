@@ -658,7 +658,7 @@ yolo-training-template/                  ← monorepo root
 - [x] **4.13j** VEHICLE finetune cycle 2 — mAP50=0.904 (run 76, 10 epochs from run 73, 56,440 train) ✅
 - [x] **4.13k** PERSONNEL finetune cycle 2 — mAP50=0.873 (run 75, 10 epochs from run 74, 10,962 train) ✅
 - [ ] **4.13l** GENERAL finetune cycle 1 — 50 epochs from baseline_GENERAL_30 on clean merged dataset
-- [x] **4.13m** Scraped pipeline end-to-end (2026-05-21): 10 clips auto-labeled → 5 datasets PACKAGED (ids 16/18/19) → 6 clips annotated (3 VEHICLE, 2 PERSONNEL, 1 GENERAL); 80 ANNOTATED total in DB ✅
+- [x] **4.13m** Scraped pipeline end-to-end (2026-05-21): 10 clips auto-labeled → 5 datasets PACKAGED → 6 clips annotated (3 VEHICLE, 2 PERSONNEL, 1 GENERAL); 80 ANNOTATED total in DB ✅
 - [x] **4.13n** Pipeline cleanup fixes (2026-05-21): cv2 corrupt-frame skip in `auto_label.py`; clip dataset dirs deleted immediately after `_merge_datasets()` (not post-training); `merged_dir` cleanup moved to `finally` block; `_cleanup_zero_score_clips()` added to `annotate_clips` end-of-run sweep ✅
 
 #### 4d — Cloud Deployment Architecture ✅/❌
@@ -735,7 +735,7 @@ Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 ✅, Phase 4 ✅
 - PERSONNEL: mAP50=0.780 (baseline run 29) → mAP50=0.873 (finetune run 75, cycle 2) ✅
 - GENERAL: mAP50=0.784 (baseline run 30) — finetune pending
 - All 4 merged datasets clean: AIRCRAFT (65,557/9,382), VEHICLE (56,440/6,638), PERSONNEL (10,962/1,302), GENERAL (144,466/19,920)
-- 3 PACKAGED scraped datasets (ids 16/18/19) ready for next finetune run
+
 
 **Web app — complete ✅:**
 - Public feed, archive, submit, hero, ticker, ML cards — all wired to live DB/API
