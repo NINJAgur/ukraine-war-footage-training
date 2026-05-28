@@ -132,6 +132,19 @@ def _live_map50(model: str) -> Optional[float]:
 
 
 async def _model_stats(db: AsyncSession) -> dict:
+    # Single query: fetch all training runs in one shot
+    all_runs = (await db.execute(
+        select(TrainingRun).where(TrainingRun.status.in_([TrainingStatus.DONE, TrainingStatus.RUNNING]))
+    )).scalars().all()
+
+    def _run_map50(r: TrainingRun) -> float:
+        m = r.metrics or {}
+        k = next((k for k in m if "map50" in k.lower() and "map50-95" not in k.lower()), None)
+        try:
+            return float(m[k]) if k else 0.0
+        except (ValueError, TypeError):
+            return 0.0
+
     result = {}
     for model in _MODELS:
         try:
@@ -140,35 +153,14 @@ async def _model_stats(db: AsyncSession) -> dict:
             result[model] = {"status": "QUEUED", "map50": None, "images": 0}
             continue
 
-        # Best completed run by mAP50 — source of truth for mAP and image count
-        done_runs = (await db.execute(
-            select(TrainingRun)
-            .where(TrainingRun.model_type == mtype, TrainingRun.status == TrainingStatus.DONE)
-        )).scalars().all()
-
-        def _run_map50(r: TrainingRun) -> float:
-            m = r.metrics or {}
-            k = next((k for k in m if "map50" in k.lower() and "map50-95" not in k.lower()), None)
-            try:
-                return float(m[k]) if k else 0.0
-            except (ValueError, TypeError):
-                return 0.0
-
+        done_runs = [r for r in all_runs if r.model_type == mtype and r.status == TrainingStatus.DONE]
+        active_run = next((r for r in all_runs if r.model_type == mtype and r.status == TrainingStatus.RUNNING), None)
         done_run = max(done_runs, key=_run_map50) if done_runs else None
-
-        # Active run — determines displayed status
-        active_run = (await db.execute(
-            select(TrainingRun)
-            .where(TrainingRun.model_type == mtype, TrainingRun.status == TrainingStatus.RUNNING)
-            .order_by(TrainingRun.id.desc())
-            .limit(1)
-        )).scalar_one_or_none()
 
         if done_run is None and active_run is None:
             result[model] = {"status": "QUEUED", "map50": None, "images": 0}
             continue
 
-        # mAP and images always come from the best DONE run
         map50 = None
         images = 0
         if done_run:
@@ -181,10 +173,7 @@ async def _model_stats(db: AsyncSession) -> dict:
                 except (ValueError, TypeError):
                     pass
 
-        if active_run:
-            result[model] = {"status": "TRAINING", "map50": map50, "images": images}
-        else:
-            result[model] = {"status": "DONE", "map50": map50, "images": images}
+        result[model] = {"status": "TRAINING" if active_run else "DONE", "map50": map50, "images": images}
 
     return result
 
