@@ -69,27 +69,29 @@
       <section class="panel-section">
         <div class="panel-section-title mono">TRAINING RUNS</div>
         <div v-if="runsLoading" class="panel-loading mono">LOADING...</div>
-        <table v-else class="panel-table">
-          <thead>
-            <tr>
-              <th>ID</th><th>MODEL</th><th>STAGE</th><th>STATUS</th><th>mAP50</th><th>STARTED</th><th>COMPLETED</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="r in runs" :key="r.id">
-              <td class="mono dim">#{{ r.id }}</td>
-              <td class="mono" :style="{ color: modelColor(r.model_type) }">{{ r.model_type }}</td>
-              <td class="mono dim">{{ r.stage }}</td>
-              <td><span :class="['run-status', r.status.toLowerCase()]" class="mono">{{ r.status }}</span></td>
-              <td class="mono">{{ r.map50 != null ? r.map50.toFixed(3) : '—' }}</td>
-              <td class="mono dim">{{ fmtDate(r.started_at) }}</td>
-              <td class="mono dim">{{ fmtDate(r.completed_at) }}</td>
-            </tr>
-            <tr v-if="!runs.length">
-              <td colspan="7" class="mono dim" style="text-align:center;padding:10px">NO TRAINING RUNS YET</td>
-            </tr>
-          </tbody>
-        </table>
+        <div v-else class="table-scroll">
+          <table class="panel-table">
+            <thead>
+              <tr>
+                <th>ID</th><th>MODEL</th><th>STAGE</th><th>STATUS</th><th>mAP50</th><th>STARTED</th><th>COMPLETED</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="r in runs" :key="r.id">
+                <td class="mono dim">#{{ r.id }}</td>
+                <td class="mono" :style="{ color: modelColor(r.model_type) }">{{ r.model_type }}</td>
+                <td class="mono dim">{{ r.stage }}</td>
+                <td><span :class="['run-status', r.status.toLowerCase()]" class="mono">{{ r.status }}</span></td>
+                <td class="mono">{{ r.map50 != null ? r.map50.toFixed(3) : '—' }}</td>
+                <td class="mono dim">{{ fmtDate(r.started_at) }}</td>
+                <td class="mono dim">{{ fmtDate(r.completed_at) }}</td>
+              </tr>
+              <tr v-if="!runs.length">
+                <td colspan="7" class="mono dim" style="text-align:center;padding:10px">NO TRAINING RUNS YET</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
         <div class="panel-pagination">
           <button class="page-btn mono" :disabled="runsPage <= 1" @click="runsPage--; loadRuns()">PREV</button>
           <span class="mono dim" style="font-size:11px">PAGE {{ runsPage }}</span>
@@ -99,9 +101,9 @@
 
       <!-- ── CLIPS ── -->
       <section class="panel-section">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div class="clip-section-header">
           <div class="panel-section-title mono" style="margin-bottom:0">CLIP ARCHIVE</div>
-          <div style="display:flex;gap:8px">
+          <div class="clip-filter-row">
             <button
               v-for="s in CLIP_STATUSES"
               :key="s"
@@ -111,29 +113,31 @@
           </div>
         </div>
         <div v-if="clipsLoading" class="panel-loading mono">LOADING...</div>
-        <table v-else class="panel-table">
-          <thead>
-            <tr><th>ID</th><th>TITLE</th><th>SOURCE</th><th>STATUS</th><th>DURATION</th><th>ADDED</th><th></th></tr>
-          </thead>
-          <tbody>
-            <tr v-for="c in clips" :key="c.id">
-              <td class="mono dim">#{{ c.id }}</td>
-              <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ c.title ?? c.url }}</td>
-              <td class="mono dim">{{ c.source }}</td>
-              <td><span :class="['clip-status', c.status.toLowerCase()]" class="mono">{{ c.status }}</span></td>
-              <td class="mono dim">{{ c.duration_seconds ? fmtDur(c.duration_seconds) : '—' }}</td>
-              <td class="mono dim">{{ fmtDate(c.created_at) }}</td>
-              <td style="display:flex;gap:6px;align-items:center">
-                <button class="preview-btn mono" @click.stop="openPreview(c)" title="Preview">&#9654;</button>
-                <button v-if="c.status === 'REVIEW'" class="approve-btn mono" @click="approveClip(c.id)">APPROVE</button>
-                <button v-if="c.status === 'REVIEW'" class="decline-btn mono" @click="declineClip(c.id)">DECLINE</button>
-              </td>
-            </tr>
-            <tr v-if="!clips.length">
-              <td colspan="7" class="mono dim" style="text-align:center;padding:10px">NO CLIPS FOUND</td>
-            </tr>
-          </tbody>
-        </table>
+        <div v-else class="table-scroll">
+          <table class="panel-table">
+            <thead>
+              <tr><th>ID</th><th>TITLE</th><th>SOURCE</th><th>STATUS</th><th>DURATION</th><th>ADDED</th><th></th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="c in clips" :key="c.id">
+                <td class="mono dim">#{{ c.id }}</td>
+                <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ c.title ?? c.url }}</td>
+                <td class="mono dim">{{ c.source }}</td>
+                <td><span :class="['clip-status', c.status.toLowerCase()]" class="mono">{{ c.status }}</span></td>
+                <td class="mono dim">{{ c.duration_seconds ? fmtDur(c.duration_seconds) : '—' }}</td>
+                <td class="mono dim">{{ fmtDate(c.created_at) }}</td>
+                <td style="display:flex;gap:6px;align-items:center">
+                  <button class="preview-btn mono" @click.stop="openPreview(c)" title="Preview">&#9654;</button>
+                  <button v-if="c.status === 'REVIEW'" class="approve-btn mono" @click="approveClip(c.id)">APPROVE</button>
+                  <button v-if="c.status === 'REVIEW'" class="decline-btn mono" @click="declineClip(c.id)">DECLINE</button>
+                </td>
+              </tr>
+              <tr v-if="!clips.length">
+                <td colspan="7" class="mono dim" style="text-align:center;padding:10px">NO CLIPS FOUND</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
         <div class="panel-pagination">
           <button class="page-btn mono" :disabled="clipsPage <= 1" @click="clipsPage--; loadClips()">PREV</button>
           <span class="mono dim" style="font-size:11px">PAGE {{ clipsPage }} · {{ clipsTotal }} TOTAL</span>
@@ -651,4 +655,29 @@ onMounted(() => { loadRuns(); loadClips() })
   text-overflow: ellipsis; text-decoration: none; max-width: 200px; display: block;
 }
 .preview-url-mini:hover { text-decoration: underline; }
+
+.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+.clip-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.clip-filter-row { display: flex; gap: 8px; }
+
+@media (max-width: 768px) {
+  .panel-header { padding: 0 16px; }
+  .panel-header > div { gap: 12px; }
+  .panel-main { padding: 12px 16px; }
+  .clip-section-header { flex-wrap: wrap; row-gap: 8px; }
+  .clip-filter-row { flex-wrap: wrap; row-gap: 6px; }
+  /* preview panel: full width on mobile */
+  .preview-panel { width: 98vw; max-height: 95vh; }
+  .preview-video { max-height: 45vh; }
+}
+
+@media (max-width: 480px) {
+  .model-grid { grid-template-columns: 1fr; }
+}
 </style>

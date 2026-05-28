@@ -988,3 +988,97 @@ footer { background: var(--bg-1); border-top: 1px solid var(--fg-3); padding: cl
 .fade-up-2 { animation-delay: 0.25s; opacity: 0; }
 .fade-up-3 { animation-delay: 0.4s; opacity: 0; }
 .fade-up-4 { animation-delay: 0.55s; opacity: 0; }
+
+/* ─── RESPONSIVE ─── */
+
+/* Tablet (≤ 900px) */
+@media (max-width: 900px) {
+  .ml-card {
+    width: clamp(200px, 70%, 500px);
+    height: clamp(150px, 22vh, 220px);
+  }
+  .ml-card-spacer-inner { grid-template-columns: 1fr 200px; }
+  .ml-spacer-index { display: none; }
+}
+
+/* Mobile (≤ 768px) */
+@media (max-width: 768px) {
+  /* NAV: hide secondary items, keep logo + admin */
+  .nav-links { display: none; }
+  .nav-status { display: none; }
+
+  /* HERO: pull stats into flow, hide decorative coords */
+  .hero-coords { display: none; }
+  .hero-stats {
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 16px 32px;
+    margin-top: 24px;
+    z-index: 10;
+  }
+  .hero-stat { text-align: left; }
+  .hero-stat-num { font-size: 22px; }
+
+  /* SECTION HEADER */
+  .section-header { flex-direction: column; gap: 12px; align-items: flex-start; margin-bottom: 40px; }
+
+  /* ARCHIVE CONTROLS */
+  .search-input { margin-left: 0; width: 100%; }
+
+  /* ML DETECTION: collapse 3-col spacer to 1-col */
+  .ml-card-spacer-inner { grid-template-columns: 1fr; gap: 20px; }
+  .ml-spacer-index { display: none; }
+  .ml-spacer-right {
+    border-left: none;
+    border-top: 1px solid var(--fg-3);
+    padding-left: 0;
+    padding-top: 16px;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 20px 32px;
+  }
+
+  /* ML CARDS: narrow + flat shapes */
+  .ml-card {
+    width: clamp(160px, 80%, 440px);
+    height: clamp(130px, 20vh, 200px);
+  }
+  .ml-card[data-cat="personnel"],
+  .ml-card[data-cat="vehicles"] {
+    clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%);
+  }
+  .ml-card.expanded { height: clamp(200px, 38vh, 360px); }
+
+  /* DATA STRIP */
+  .data-strip { grid-template-columns: 1fr 1fr; }
+
+  /* MODAL */
+  .modal-panel { width: 96%; max-height: 95vh; }
+  .modal-body { padding: 16px; }
+  .modal-header { padding: 14px 16px; }
+  .modal-meta-grid { grid-template-columns: repeat(2, 1fr); }
+
+  /* FOOTER */
+  .footer-bottom { flex-direction: column; gap: 8px; align-items: flex-start; }
+}
+
+/* Small mobile (≤ 480px) */
+@media (max-width: 480px) {
+  .btn-access { padding: 6px 12px; font-size: 10px; letter-spacing: 0.08em; }
+
+  .hero-headline { margin-bottom: 20px; }
+  .hero-sub { font-size: 14px; margin-bottom: 28px; }
+  .hero-actions { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .btn-primary, .btn-secondary { width: 100%; text-align: center; }
+
+  .data-strip { grid-template-columns: 1fr; }
+  .data-strip-item + .data-strip-item {
+    border-left: none;
+    border-top: 1px solid var(--fg-3);
+    padding-left: 0;
+    margin-left: 0;
+  }
+
+  .modal-meta-grid { grid-template-columns: 1fr; }
+}
