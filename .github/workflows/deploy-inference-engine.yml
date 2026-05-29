@@ -19,7 +19,8 @@ jobs:
 
             # Pull latest code and fix sparse checkout
             cd /home/ubuntu/app
-            sudo git pull --rebase
+            sudo git fetch origin
+            sudo git reset --hard origin/main
             sudo git sparse-checkout reapply
 
             # Build venv on first run
@@ -28,17 +29,17 @@ jobs:
               echo "=== Building venv ==="
               python3 -m venv venv
               venv/bin/pip install --quiet --upgrade pip
-              venv/bin/pip install --quiet "torch==2.5.1+cpu" "torchvision==0.20.1+cpu" \
-                --index-url https://download.pytorch.org/whl/cpu
-              grep -v "^torch\|^torchvision\|^--extra-index" requirements.txt > /tmp/req_cpu.txt
-              venv/bin/pip install --quiet -r /tmp/req_cpu.txt
+              venv/bin/pip install --quiet "torch==2.5.1+cu121" "torchvision==0.20.1+cu121" \
+                --index-url https://download.pytorch.org/whl/cu121
+              grep -v "^torch\|^torchvision\|^--extra-index" requirements.txt > /tmp/req_gpu.txt
+              venv/bin/pip install --quiet -r /tmp/req_gpu.txt
               echo "=== venv done ==="
             fi
 
             # Always enforce pinned versions (fast no-op if already correct)
             venv/bin/pip install --quiet \
-              "torch==2.5.1+cpu" "torchvision==0.20.1+cpu" \
-              --index-url https://download.pytorch.org/whl/cpu
+              "torch==2.5.1+cu121" "torchvision==0.20.1+cu121" \
+              --index-url https://download.pytorch.org/whl/cu121
             venv/bin/pip install --quiet "transformers==4.35.2"
 
             # Write .env if missing
@@ -50,10 +51,7 @@ jobs:
             REDIS_URL=redis://${{ secrets.E2_MICRO_INTERNAL_IP }}:6379/0
             STORAGE_MODE=remote
             REMOTE_STORAGE_BUCKET=ukraine-footage-media
-            GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}
-            GCP_TRAINING_VM_ZONE=us-central1-a
-            GCP_TRAINING_VM_NAME=ukraine-footage-training
-            GPU_DEVICE=cpu
+            GPU_DEVICE=cuda:0
             ENVEOF
               chown ubuntu:ubuntu /home/ubuntu/app/.env
               echo "=== .env written ==="

@@ -66,7 +66,7 @@ inference-engine/media/scraped_datasets/
         GENERAL/
 ```
 
-Pipeline per scrape batch (Beat schedule on inference-engine VM: GDINO @03:05, annotate @03:35 UTC):
+Pipeline per scrape batch (Beat schedule on inference-engine VM: GDINO @03:05, annotate @03:35 UTC — VM runs 03:00–04:00 UTC):
 
 **Phase 1 — GDINO** (`auto_label_batch` → `auto_label_clip × N`, Q=pipeline):
 1. `auto_label_batch` → finds all DOWNLOADED clips without a Dataset → dispatches `auto_label_clip × N`
@@ -93,10 +93,10 @@ Pipeline per scrape batch (Beat schedule on inference-engine VM: GDINO @03:05, a
 **Phase 4 — Finetune dispatch** (`prepare_finetune_batch`, Q=pipeline):
 7. Remote: upload `merged/<MODEL>/` → `gs://bucket/merged/<MODEL>/` for each qualifying model → delete local merged dir
 8. Local: leave merged dirs on disk (train_finetune reads directly)
-9. Start training VM via GCP API (remote only — no-op locally)
-10. Dispatch `train_finetune × N qualifying models` → Q=training
+9. Dispatch `train_finetune × N qualifying models` → Q=training (NO VM start — training-engine has its own Instance Schedule)
 
-**Phase 5 — Training** (`train_finetune`, Q=training, on training-engine):
+**Phase 5 — Training** (`train_finetune`, Q=training, on training-engine — starts at 04:30 UTC):
+10. Startup script: query DB for QUEUED TrainingRuns → if none, `sudo shutdown -h now` immediately
 11. Remote: download `gs://bucket/merged/<MODEL>/` → local temp dir; Local: read from local merged dir directly
 12. Build `combined_data.yaml`: Kaggle merged (persistent disk) + scraped merged dir
 13. Train → save weights → remote: upload `best.pt` to GCS
@@ -133,9 +133,10 @@ All services import via re-export stubs (`inference-engine/db/models.py`, `train
 
 **4 YOLO models:** AIRCRAFT + VEHICLE + PERSONNEL (specialists) + GENERAL — specialists train first.
 
-**2-VM production split (GCP):**
-- **inference-engine VM** (n1-standard-1 + T4, Instance Schedule 03:00–05:00 UTC, Q=pipeline): GDINO auto-labeling, dataset packaging, merged dataset creation, YOLO annotation of raw clips, starts training VM via GCP API
-- **training-engine VM** (n1-standard-4 + T4, on-demand started by inference-engine): downloads merged datasets from GCS (remote) or reads from local disk, trains 4 YOLO models, uploads weights, self-shuts down
+**2-VM production split (GCP) — 1 T4 quota constraint:**
+- **inference-engine VM** (n1-standard-1 + T4, Instance Schedule 03:00–04:00 UTC, Q=pipeline): GDINO auto-labeling, dataset packaging, merged dataset creation, YOLO annotation of raw clips. Does NOT start training VM.
+- **training-engine VM** (n1-standard-4 + T4, Instance Schedule 04:30 UTC start, self-shutdown): boots at 04:30, checks DB for QUEUED TrainingRuns → if none, `sudo shutdown -h now` immediately; if runs exist, trains all models → self-shuts down when done.
+- **1 T4 constraint:** inference-engine stops at 04:00 (Instance Schedule). Training-engine starts at 04:30 (30-min buffer). They never overlap.
 
 | Service | Directory | Phase |
 |---------|-----------|-------|

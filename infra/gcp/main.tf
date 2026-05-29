@@ -161,7 +161,8 @@ resource "google_compute_disk" "datasets" {
   }
 }
 
-# ── inference-engine VM (n2-standard-4 CPU, daily 03:00–05:00 UTC) ──
+# ── inference-engine VM (CPU, daily 03:00–04:00 UTC) ─────────────────
+# 1-hour window: GDINO @03:05 + annotate @03:35; stops at 04:00 (30-min buffer before training starts)
 
 resource "google_compute_resource_policy" "inference_schedule" {
   name   = "inference-daily-schedule"
@@ -169,21 +170,43 @@ resource "google_compute_resource_policy" "inference_schedule" {
 
   instance_schedule_policy {
     vm_start_schedule { schedule = "0 3 * * *" }
-    vm_stop_schedule  { schedule = "0 5 * * *" }
+    vm_stop_schedule  { schedule = "0 4 * * *" }
+    time_zone         = "UTC"
+  }
+}
+
+# ── training-engine Instance Schedule (04:30 UTC start, self-shuts) ──
+# Standard (non-preemptible) required — Spot VMs cannot have Instance Scheduling policies.
+# Self-shutdown: startup script exits early if no QUEUED runs; train_finetune shuts down after last model.
+
+resource "google_compute_resource_policy" "training_schedule" {
+  name   = "training-daily-schedule"
+  region = var.region
+
+  instance_schedule_policy {
+    vm_start_schedule { schedule = "30 4 * * *" }
     time_zone         = "UTC"
   }
 }
 
 resource "google_compute_instance" "inference_engine" {
   name                      = "ukraine-footage-inference"
-  machine_type              = "e2-standard-4"
+  machine_type              = "n1-standard-1"
   zone                      = var.inference_zone
   tags                      = ["inference-worker"]
   allow_stopping_for_update = true
 
   scheduling {
-    on_host_maintenance = "MIGRATE"
-    automatic_restart   = true
+    provisioning_model          = "SPOT"
+    instance_termination_action = "STOP"
+    preemptible                 = true
+    automatic_restart           = false
+    on_host_maintenance         = "TERMINATE"
+  }
+
+  guest_accelerator {
+    type  = "nvidia-tesla-t4"
+    count = 1
   }
 
   boot_disk {
@@ -208,13 +231,21 @@ resource "google_compute_instance" "inference_engine" {
       set -e
       exec >> /var/log/startup-script.log 2>&1
 
-      # First-boot: install system deps
-      if [ ! -f /var/lib/base-deps-installed ]; then
+      # First-boot: install system deps + NVIDIA driver
+      if [ ! -f /var/lib/nvidia-driver-installed ]; then
         apt-get update -qq
         apt-get install -y --no-install-recommends \
-          git python3 python3-venv python3-pip wget ffmpeg
-        touch /var/lib/base-deps-installed
+          build-essential gcc-12 linux-headers-$(uname -r) \
+          ubuntu-drivers-common git python3 python3-venv python3-pip wget ffmpeg
+        update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-12 12
+        ubuntu-drivers autoinstall
+        touch /var/lib/nvidia-driver-installed
+        reboot
+        exit 0
       fi
+
+      # Wait for NVIDIA driver
+      until nvidia-smi &>/dev/null; do sleep 10; done
 
       # Sparse clone on first boot only
       if [ ! -d /home/ubuntu/app ]; then
@@ -227,14 +258,14 @@ resource "google_compute_instance" "inference_engine" {
         chown -R ubuntu:ubuntu /home/ubuntu/app
       fi
 
-      # Python venv + CPU-only torch + deps (skip if already built)
+      # Python venv + CUDA torch + deps (skip if already built)
       cd /home/ubuntu/app/inference-engine
       if [ ! -f venv/bin/celery ]; then
         python3 -m venv venv
-        venv/bin/pip install --quiet "torch==2.5.1+cpu" "torchvision==0.20.1+cpu" \
-          --index-url https://download.pytorch.org/whl/cpu
-        grep -v "^torch\|^torchvision" requirements.txt > /tmp/requirements_cpu.txt
-        venv/bin/pip install --quiet -r /tmp/requirements_cpu.txt
+        venv/bin/pip install --quiet "torch==2.5.1+cu121" "torchvision==0.20.1+cu121" \
+          --index-url https://download.pytorch.org/whl/cu121
+        grep -v "^torch\|^torchvision" requirements.txt > /tmp/requirements_gpu.txt
+        venv/bin/pip install --quiet -r /tmp/requirements_gpu.txt
       fi
 
       # GroundingDINO checkpoint (661MB, gitignored — download once)
@@ -268,10 +299,7 @@ CELERY_RESULT_BACKEND=redis://${google_compute_instance.e2_micro.network_interfa
 REDIS_URL=redis://${google_compute_instance.e2_micro.network_interface[0].network_ip}:6379/0
 STORAGE_MODE=remote
 REMOTE_STORAGE_BUCKET=${var.bucket_name}
-GCP_PROJECT_ID=${var.project_id}
-GCP_TRAINING_VM_ZONE=${var.zone}
-GCP_TRAINING_VM_NAME=ukraine-footage-training
-GPU_DEVICE=cpu
+GPU_DEVICE=cuda:0
 ENVEOF
       chown ubuntu:ubuntu /home/ubuntu/app/.env
 
@@ -312,7 +340,8 @@ output "inference_engine_ip" {
   value = google_compute_instance.inference_engine.network_interface[0].access_config[0].nat_ip
 }
 
-# ── training-engine VM (n1-standard-4 + T4, on-demand via API) ───────
+# ── training-engine VM (n1-standard-4 + T4, Instance Schedule 04:30 UTC start) ─
+# Spot VM. Self-shuts after training or immediately if no QUEUED runs.
 
 resource "google_compute_instance" "training_engine" {
   name                      = "ukraine-footage-training"
@@ -328,6 +357,8 @@ resource "google_compute_instance" "training_engine" {
     automatic_restart           = false
     on_host_maintenance         = "TERMINATE"
   }
+
+  resource_policies = [google_compute_resource_policy.training_schedule.id]
 
   guest_accelerator {
     type  = "nvidia-tesla-t4"
@@ -458,11 +489,27 @@ CELERY_RESULT_BACKEND=redis://${google_compute_instance.e2_micro.network_interfa
 REDIS_URL=redis://${google_compute_instance.e2_micro.network_interface[0].network_ip}:6379/0
 STORAGE_MODE=remote
 REMOTE_STORAGE_BUCKET=ukraine-footage-media
-GCP_PROJECT_ID=${var.project_id}
-GCP_TRAINING_VM_ZONE=${var.zone}
-GCP_TRAINING_VM_NAME=ukraine-footage-training
 ENVEOF
       chown ubuntu:ubuntu /home/ubuntu/app/.env
+
+      # Early exit: shut down immediately if no QUEUED training runs
+      QUEUED_COUNT=$(su - ubuntu -c "cd /home/ubuntu/app/training-engine && \
+        venv/bin/python3 -c \"
+import os, sys
+sys.path.insert(0, 'shared')
+os.environ.setdefault('DATABASE_SYNC_URL', open('/home/ubuntu/app/.env').read().split('DATABASE_SYNC_URL=')[1].split('\n')[0])
+from sqlalchemy import create_engine, text
+engine = create_engine(os.environ['DATABASE_SYNC_URL'])
+with engine.connect() as conn:
+    result = conn.execute(text(\\\"SELECT COUNT(*) FROM training_runs WHERE status='QUEUED'\\\"))
+    print(result.scalar())
+\"" 2>/dev/null || echo "0")
+      if [ "$QUEUED_COUNT" = "0" ]; then
+        echo "[startup] No QUEUED training runs — shutting down." >> /var/log/startup-script.log
+        sudo shutdown -h now
+        exit 0
+      fi
+      echo "[startup] Found $QUEUED_COUNT QUEUED training run(s) — starting worker." >> /var/log/startup-script.log
 
       # systemd service
       cat > /etc/systemd/system/celery-training.service <<SVCEOF
@@ -499,3 +546,4 @@ SVCEOF
 output "training_engine_ip" {
   value = google_compute_instance.training_engine.network_interface[0].access_config[0].nat_ip
 }
+

@@ -42,7 +42,8 @@ An automated, full-stack web application that:
                      ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │   INFERENCE LAYER  (inference-engine — n1-standard-1 + T4, Q=pipeline) │
-│   Instance Schedule: 03:00 start / 05:00 stop UTC                  │
+│   Instance Schedule: 03:00 start / 04:00 stop UTC  (1-hour window) │
+│   [1 T4 quota — inference MUST stop before training starts]        │
 │                                                                     │
 │  [Beat @03:05] auto_label_batch → auto_label_clip × N              │
 │       └──► Phase 1 GDINO: frames → canonical labels → Dataset(LABELED)  │
@@ -57,7 +58,8 @@ An automated, full-stack web application that:
 │            Phase 4 prepare_finetune_batch (Q=pipeline):             │
 │              → remote: upload merged/<MODEL>/ to GCS → delete local │
 │              → local: leave merged dirs on disk                     │
-│              → start training VM → dispatch train_finetune × N      │
+│              → dispatch train_finetune × N (NO VM start — training  │
+│                engine has its own Instance Schedule at 04:30)       │
 │                                                                     │
 │  [Beat @03:35] annotate_clips (Q=pipeline, waits behind GDINO):    │
 │       └──► YOLO inference (AIRCRAFT→VEHICLE→PERSONNEL→GENERAL)     │
@@ -70,11 +72,16 @@ An automated, full-stack web application that:
 │                FAIL → delete raw GCS object, status=PENDING        │
 │            _shutdown_if_no_training (shuts VM if no active runs)   │
 └─────────────────────────────────────────────────────────────────────┘
-                     │ (dispatch train_finetune → Q=training)
+                     │ (QUEUED TrainingRuns in DB — no direct dispatch)
                      ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │   TRAINING LAYER  (training-engine — n1-standard-4 + T4, Q=training) │
-│   On-demand: started by inference-engine via GCP Compute Engine API │
+│   Instance Schedule: 04:30 UTC start (30-min buffer after inference) │
+│   Self-shutdown: after last model trains, or immediately if no work │
+│                                                                     │
+│  Startup script (before Celery):                                    │
+│       → query DB for QUEUED TrainingRuns                            │
+│       → if none → sudo shutdown -h now  (avoids idle GPU cost)     │
 │                                                                     │
 │  train_finetune × 4 (AIRCRAFT, VEHICLE, PERSONNEL, GENERAL):        │
 │       download gs://bucket/merged/<MODEL>_<run_id>/ → local         │

@@ -83,11 +83,6 @@ class Settings(BaseSettings):
     # ── Fine-tune trigger threshold ───────────────────────────────────
     YOLO_FINETUNE_MAX_CYCLES: int = 4   # baseline(10) + 4×finetune(10) = 50 total epochs
 
-    # ── GCP VM management (for starting training VM) ──────────────────
-    GCP_PROJECT_ID: str = ""
-    GCP_TRAINING_VM_ZONE: str = "us-central1-a"
-    GCP_TRAINING_VM_NAME: str = "ukraine-footage-training"
-
     def model_post_init(self, __context):
         # Resolve GDINO config via installed package — the default relative path
         # "groundingdino/config/..." doesn't exist inside Docker containers.

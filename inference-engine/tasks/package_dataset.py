@@ -9,7 +9,8 @@ Phase 3 — Trigger check (chord callback, once after ALL clips in batch are don
 
 Phase 4 — Finetune dispatch (Q=pipeline):
   prepare_finetune_batch: upload merged/<MODEL>/ to GCS (remote) or leave on disk (local)
-  → start training VM → dispatch train_finetune × N → Q=training
+  → dispatch train_finetune × N → Q=training
+  (training-engine starts on its own Instance Schedule at 04:30 UTC)
 """
 import logging
 import random
@@ -152,20 +153,6 @@ def _upload_merged_to_gcs(merged_dir: Path, model: str, bucket: str) -> None:
     logger.info(f"[prepare_finetune_batch] Uploaded {merged_dir.name} → gs://{bucket}/{prefix}/")
 
 
-def _start_training_vm() -> None:
-    """Start the training VM via GCP Compute Engine API. No-op if GCP_PROJECT_ID is unset."""
-    if not settings.GCP_PROJECT_ID:
-        return
-    from googleapiclient import discovery
-    compute = discovery.build("compute", "v1")
-    compute.instances().start(
-        project=settings.GCP_PROJECT_ID,
-        zone=settings.GCP_TRAINING_VM_ZONE,
-        instance=settings.GCP_TRAINING_VM_NAME,
-    ).execute()
-    logger.info(f"[prepare_finetune_batch] Started training VM: {settings.GCP_TRAINING_VM_NAME}")
-
-
 def _create_finetune_run(model_type: ModelType) -> Optional[tuple]:
     """Create a QUEUED TrainingRun for model_type if eligible. Returns (run_id, dataset_ids) or None."""
     with get_session() as session:
@@ -294,14 +281,12 @@ def prepare_finetune_batch(run_ids: list) -> dict:
     Merged dirs already built incrementally by package_dataset.
     1. Remote: upload merged/<MODEL>/ → GCS; delete local merged dir
        Local: leave merged dir on disk (train_finetune reads directly)
-    2. Start training VM (no-op locally)
-    3. Dispatch train_finetune per run → Q=training
+    2. Dispatch train_finetune per run → Q=training
+       (training-engine boots at 04:30 UTC on its own Instance Schedule)
     """
     with get_session() as session:
         runs = session.query(TrainingRun).filter(TrainingRun.id.in_(run_ids)).all()
         run_snapshots = [(r.id, r.model_type) for r in runs]
-
-    _start_training_vm()
 
     for run_id, model_type in run_snapshots:
         merged_dir = settings.DATASETS_DIR / "merged" / model_type.value
