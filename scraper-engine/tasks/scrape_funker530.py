@@ -253,12 +253,16 @@ def _download_video(video_url: str, output_path: Path) -> dict:
 
     duration = int(info.get("duration") or 0)
     if not duration and final_path.exists():
-        import cv2 as _cv2
-        cap = _cv2.VideoCapture(str(final_path))
-        fps = cap.get(_cv2.CAP_PROP_FPS) or 30
-        frames = cap.get(_cv2.CAP_PROP_FRAME_COUNT)
-        cap.release()
-        duration = int(frames / fps) if fps > 0 else 0
+        import subprocess, json as _json
+        try:
+            probe = subprocess.run(
+                ["ffprobe", "-v", "quiet", "-print_format", "json",
+                 "-show_format", str(final_path)],
+                capture_output=True, text=True, timeout=10
+            )
+            duration = int(float(_json.loads(probe.stdout).get("format", {}).get("duration", 0)))
+        except Exception:
+            pass
 
     return {
         "file_path": str(final_path),
