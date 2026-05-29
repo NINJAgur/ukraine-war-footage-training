@@ -14,6 +14,7 @@ pydantic-settings==2.3.4
 ultralytics==8.2.34
 opencv-python-headless
 groundingdino-py==0.4.0
+transformers==4.35.2
 
 google-cloud-storage==2.17.0
 supervision
