@@ -231,10 +231,16 @@ resource "google_compute_instance" "inference_engine" {
       cd /home/ubuntu/app/inference-engine
       if [ ! -f venv/bin/celery ]; then
         python3 -m venv venv
-        venv/bin/pip install --quiet torch torchvision \
+        venv/bin/pip install --quiet "torch==2.5.1+cpu" "torchvision==0.20.1+cpu" \
           --index-url https://download.pytorch.org/whl/cpu
         grep -v "^torch\|^torchvision" requirements.txt > /tmp/requirements_cpu.txt
         venv/bin/pip install --quiet -r /tmp/requirements_cpu.txt
+      fi
+
+      # GroundingDINO checkpoint (661MB, gitignored — download once)
+      if [ ! -f /home/ubuntu/app/inference-engine/groundingdino_swint_ogc.pth ]; then
+        wget -q -O /home/ubuntu/app/inference-engine/groundingdino_swint_ogc.pth \
+          https://github.com/IDEA-Research/GroundingDINO/releases/download/v0.1.0-alpha/groundingdino_swint_ogc.pth
       fi
 
       # Download weights from GCS on first boot
