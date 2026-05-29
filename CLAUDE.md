@@ -82,6 +82,7 @@ Pipeline per scrape batch (Beat schedule on inference-engine VM: GDINO @03:05, a
 3. `package_dataset` per clip:
    - 80/20 train/val split
    - Filter + append clip's YOLO data into `merged/<MODEL>/` for each detected model (specialist class filter applied)
+   - Immediately upload updated `merged/<MODEL>/` → `gs://bucket/merged/<MODEL>/` (remote mode) — survives VM recreation
    - Delete `scraped_datasets/<hash>/` immediately after appending to all relevant merged dirs
    - Mark `Dataset(PACKAGED)`
 

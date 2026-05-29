@@ -251,9 +251,18 @@ def _download_video(video_url: str, output_path: Path) -> dict:
         if matches:
             final_path = matches[0]
 
+    duration = int(info.get("duration") or 0)
+    if not duration and final_path.exists():
+        import cv2 as _cv2
+        cap = _cv2.VideoCapture(str(final_path))
+        fps = cap.get(_cv2.CAP_PROP_FPS) or 30
+        frames = cap.get(_cv2.CAP_PROP_FRAME_COUNT)
+        cap.release()
+        duration = int(frames / fps) if fps > 0 else 0
+
     return {
         "file_path": str(final_path),
-        "duration_seconds": int(info.get("duration") or 0),
+        "duration_seconds": duration,
         "width": info.get("width"),
         "height": info.get("height"),
         "title": (info.get("title") or "")[:500],
