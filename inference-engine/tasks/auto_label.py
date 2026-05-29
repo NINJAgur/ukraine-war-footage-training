@@ -168,6 +168,7 @@ def auto_label_clip(self, clip_id: int) -> dict:
         checkpoint_path=settings.GDINO_CHECKPOINT,
         box_threshold=settings.GDINO_BOX_THRESHOLD,
         text_threshold=settings.GDINO_TEXT_THRESHOLD,
+        device=settings.GPU_DEVICE,
     )
     shutil.rmtree(frames_dir, ignore_errors=True)
     logger.info(f"[{self.request.id}] Deleted frames scratch dir {frames_dir}")

@@ -16,6 +16,7 @@ def create_yolo_dataset(
     checkpoint_path="groundingdino_swint_ogc.pth",
     box_threshold=0.35,
     text_threshold=0.25,
+    device="cuda",
 ):
     """
     Annotate images using GroundingDINO and create a YOLO-compatible dataset.
@@ -37,7 +38,8 @@ def create_yolo_dataset(
     os.makedirs(train_images_dir, exist_ok=True)
     os.makedirs(train_labels_dir, exist_ok=True)
 
-    model = load_model(config_path, checkpoint_path)
+    cpu_only = device == "cpu"
+    model = load_model(config_path, checkpoint_path, cpu_only=cpu_only)
 
     for image_file in os.listdir(input_folder):
         if image_file.lower().endswith((".jpg", ".jpeg", ".png")):
@@ -58,6 +60,7 @@ def create_yolo_dataset(
                 caption=text_prompt,
                 box_threshold=box_threshold,
                 text_threshold=text_threshold,
+                device=device,
             )
 
             label_path = os.path.join(
