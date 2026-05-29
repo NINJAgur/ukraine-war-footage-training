@@ -372,6 +372,11 @@ def package_dataset(self, dataset_id: Optional[int]) -> dict:
             f"[{self.request.id}] Appended dataset {dataset_id} → "
             f"merged/{model_type.value}  images={n}"
         )
+        # Back up merged dir to GCS immediately so it survives VM recreation
+        if settings.STORAGE_MODE == "remote" and settings.REMOTE_STORAGE_BUCKET:
+            merged_dir = settings.DATASETS_DIR / "merged" / model_type.value
+            _upload_merged_to_gcs(merged_dir, model_type.value, settings.REMOTE_STORAGE_BUCKET)
+            logger.info(f"[{self.request.id}] Backed up merged/{model_type.value} → GCS")
 
     # Delete clip hash dir immediately — no longer needed
     shutil.rmtree(dataset_dir, ignore_errors=True)
