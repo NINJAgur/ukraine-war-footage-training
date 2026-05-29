@@ -38,8 +38,7 @@ def create_yolo_dataset(
     os.makedirs(train_images_dir, exist_ok=True)
     os.makedirs(train_labels_dir, exist_ok=True)
 
-    cpu_only = device == "cpu"
-    model = load_model(config_path, checkpoint_path, cpu_only=cpu_only)
+    model = load_model(config_path, checkpoint_path, device=device)
 
     for image_file in os.listdir(input_folder):
         if image_file.lower().endswith((".jpg", ".jpeg", ".png")):
