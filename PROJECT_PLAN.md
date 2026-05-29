@@ -42,7 +42,7 @@ An automated, full-stack web application that:
                      ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │   INFERENCE LAYER  (inference-engine — n1-standard-1 + T4, Q=pipeline) │
-│   Instance Schedule: 03:00 start / 04:00 stop UTC                  │
+│   Instance Schedule: 03:00 start / 05:00 stop UTC                  │
 │                                                                     │
 │  [Beat @03:05] auto_label_batch → auto_label_clip × N              │
 │       └──► Phase 1 GDINO: frames → canonical labels → Dataset(LABELED)  │
@@ -747,7 +747,7 @@ Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 ✅, Phase 4 ✅
 **Cloud deployment — complete ✅ (2026-05-26):**
 - Architecture: GCP e2-micro free tier (CPU, $0/mo) + 2× T4 Spot VM (GPU, ~$20/mo)
 - e2-micro live ✅ — all 6 CPU services deployed; HTTPS via ukrarchive.duckdns.org + Let's Encrypt
-- inference-engine VM ✅ — n1-standard-1 + T4; Instance Schedule 03:00–04:00 UTC; Q=pipeline: auto_label_batch (GDINO @03:05) + annotate_clips (YOLO @03:35) + package_dataset + prepare_finetune_batch; starts training VM via GCP API when ≥5 PACKAGED datasets
+- inference-engine VM ✅ — n1-standard-1 + T4; Instance Schedule 03:00–05:00 UTC; Q=pipeline: auto_label_batch (GDINO @03:05) + annotate_clips (YOLO @03:35) + package_dataset + prepare_finetune_batch; starts training VM via GCP API when ≥5 PACKAGED datasets
 - training-engine VM ✅ — n1-standard-4 + T4; on-demand (started by inference-engine API call); Q=training: train_finetune × 4 models; downloads merged datasets from GCS, trains, uploads weights, self-shuts
 - CI/CD live ✅ — GitHub Actions: frontend build + ruff lint → auto-deploy to e2-micro on push to main
 - Security ✅ — no insecure config defaults; .claude/settings.json purged from history

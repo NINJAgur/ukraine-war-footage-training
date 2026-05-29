@@ -134,7 +134,7 @@ All services import via re-export stubs (`inference-engine/db/models.py`, `train
 **4 YOLO models:** AIRCRAFT + VEHICLE + PERSONNEL (specialists) + GENERAL — specialists train first.
 
 **2-VM production split (GCP):**
-- **inference-engine VM** (n1-standard-1 + T4, Instance Schedule 03:00–04:00 UTC, Q=pipeline): GDINO auto-labeling, dataset packaging, merged dataset creation, YOLO annotation of raw clips, starts training VM via GCP API
+- **inference-engine VM** (n1-standard-1 + T4, Instance Schedule 03:00–05:00 UTC, Q=pipeline): GDINO auto-labeling, dataset packaging, merged dataset creation, YOLO annotation of raw clips, starts training VM via GCP API
 - **training-engine VM** (n1-standard-4 + T4, on-demand started by inference-engine): downloads merged datasets from GCS (remote) or reads from local disk, trains 4 YOLO models, uploads weights, self-shuts down
 
 | Service | Directory | Phase |
