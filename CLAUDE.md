@@ -281,3 +281,4 @@ If a senior engineer would want to glance at it before merging — spawn. Roughl
 - Start GPU workers with `concurrency > 1`
 - Write code for phases not yet reached (stay sequential)
 - Commit without explicit user approval
+- Assume a push is done without verifying CI passes — after every push run `gh run list --repo NINJAgur/ukraine-war-footage-training --workflow CI --limit 1` and wait for `completed success`; if CI fails fix it immediately. A failed CI skips the deploy silently and broken code runs in production overnight.
