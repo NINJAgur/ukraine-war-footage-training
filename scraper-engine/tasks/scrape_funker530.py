@@ -253,7 +253,8 @@ def _download_video(video_url: str, output_path: Path) -> dict:
 
     duration = int(info.get("duration") or 0)
     if not duration and final_path.exists():
-        import subprocess, json as _json
+        import json as _json
+        import subprocess
         try:
             probe = subprocess.run(
                 ["ffprobe", "-v", "quiet", "-print_format", "json",
