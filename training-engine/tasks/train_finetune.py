@@ -27,7 +27,7 @@ from db.models import ModelType, TrainingRun, TrainingStage, TrainingStatus
 from db.session import get_session
 from tasks.train_baseline import _make_epoch_callbacks
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "core"))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 logger = logging.getLogger(__name__)
 
