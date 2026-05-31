@@ -212,6 +212,12 @@ def _create_finetune_run(model_type: ModelType) -> Optional[tuple]:
             baseline_weights = None
             logger.warning(f"[finetune] {model_type.value}: no baseline weights found — will use yolov8m.pt")
 
+        # Sync sequence to actual max id to prevent UniqueViolation if rows were
+        # inserted with explicit ids during testing (sequence can lag behind).
+        session.execute(
+            "SELECT setval('training_runs_id_seq', COALESCE(MAX(id), 1)) FROM training_runs"
+        )
+
         run = TrainingRun(
             stage=TrainingStage.FINETUNE,
             model_type=model_type,
