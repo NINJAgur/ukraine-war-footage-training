@@ -187,6 +187,7 @@ def train_finetune(self, training_run_id: int, scraped_merged_path: str = None) 
             raise FileNotFoundError(f"Training finished but best.pt not found: {weights_path}")
 
         metrics = _extract_metrics(results)
+        metrics["total_train_images"] = total_train
 
         if settings.STORAGE_MODE == "remote" and settings.REMOTE_STORAGE_BUCKET:
             _upload_weights_to_gcs(
