@@ -1,6 +1,6 @@
 # PROJECT_PLAN.md — Ukraine Combat Footage Web Application
 > **Source of Truth** — All phases, structure, and decisions are tracked here.
-> Last updated: 2026-05-29
+> Last updated: 2026-05-31
 
 ---
 
@@ -736,32 +736,37 @@ docker compose exec ml-worker celery -A celery_app call tasks.annotate_clips.ann
 
 Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 ✅, Phase 4 ✅
 
-**Training status (2026-05-26):**
-- AIRCRAFT: mAP50=0.929 (baseline run 13) → mAP50=0.968 (finetune run 68) ✅
+**Training status (2026-05-31):**
+- AIRCRAFT: mAP50=0.929 (baseline run 13) → mAP50=0.968 (finetune run 68, cycle 1) ✅
 - VEHICLE: mAP50=0.871 (baseline run 25) → mAP50=0.904 (finetune run 76, cycle 2) ✅
 - PERSONNEL: mAP50=0.780 (baseline run 29) → mAP50=0.873 (finetune run 75, cycle 2) ✅
-- GENERAL: mAP50=0.784 (baseline run 30) — finetune pending
-- All 4 merged datasets clean: AIRCRAFT (65,557/9,382), VEHICLE (56,440/6,638), PERSONNEL (10,962/1,302), GENERAL (144,466/19,920)
-
+- GENERAL: mAP50=0.784 (baseline run 30) — finetune cycle 1 QUEUED (run 79) 🔄
+- AIRCRAFT finetune cycle 2 QUEUED (run 77) 🔄
+- VEHICLE finetune cycle 3 QUEUED (run 78) 🔄
+- 62 ANNOTATED clips in DB; 8 PACKAGED scraped datasets accumulated
 
 **Web app — complete ✅:**
 - Public feed, archive, submit, hero, ticker, ML cards — all wired to live DB/API
 - Admin panel: clips table (APPROVE + DECLINE + preview modal), training runs table, train buttons, live WebSocket progress bar
 - Video pipeline: FFmpeg CRF 28 + faststart; 90% full-screen box filter; multi-model inference
 - Mobile-responsive across all pages (≤900px/768px/480px breakpoints)
-- 80 ANNOTATED clips in DB; all 4 pipelines verified end-to-end
+- Gzip compression enabled on nginx (94KB → 38KB main JS bundle)
 
-**Cloud deployment — complete ✅ (2026-05-26):**
+**Cloud deployment — complete ✅ (2026-05-31):**
 - Architecture: GCP e2-micro free tier (CPU, $0/mo) + 2× T4 Spot VM (GPU, ~$20/mo)
 - e2-micro live ✅ — all 6 CPU services deployed; HTTPS via ukrarchive.duckdns.org + Let's Encrypt
-- inference-engine VM ✅ — n1-standard-1 + T4; Instance Schedule 03:00–05:00 UTC; Q=pipeline: auto_label_batch (GDINO @03:05) + annotate_clips (YOLO @03:35) + package_dataset + prepare_finetune_batch; starts training VM via GCP API when ≥5 PACKAGED datasets
-- training-engine VM ✅ — n1-standard-4 + T4; on-demand (started by inference-engine API call); Q=training: train_finetune × 4 models; downloads merged datasets from GCS, trains, uploads weights, self-shuts
-- CI/CD live ✅ — GitHub Actions: frontend build + ruff lint → auto-deploy to e2-micro on push to main
-- Security ✅ — no insecure config defaults; .claude/settings.json purged from history
+- inference-engine VM ✅ — n1-standard-1 + T4 Spot; Instance Schedule 03:00–04:00 UTC; Q=pipeline: auto_label_batch (GDINO @03:05) + annotate_clips (YOLO @03:35) + package_dataset + prepare_finetune_batch; merged dirs backed up to GCS after every append
+- training-engine VM ✅ — n1-standard-4 + T4 Spot; Instance Schedule 04:30 UTC start; startup script checks DB for QUEUED TrainingRuns → shuts down immediately if none; Q=training: train_finetune × 4 models; downloads merged from GCS, trains, uploads weights, self-shuts
+- CI/CD live ✅ — GitHub Actions: frontend build + ruff lint → auto-deploy to e2-micro on push to main; deploy-inference-engine manual workflow
+- 1-T4 quota constraint enforced: inference stops at 04:00, training starts at 04:30 (30-min buffer)
 
-**Phase 4 additions (2026-05-28):**
-- [x] Pipeline scripts refactored: all 4 (`aircraft_pipeline.py`, `vehicle_pipeline.py`, `personnel_pipeline.py`, `general_pipeline.py`) now expose `run(limit=10) -> dict` callable; `__main__` delegates to `run()`
-- [x] Local E2E orchestrator: `training-engine/scripts/local/run_pipeline.py` — dispatches Celery tasks, polls DB, subcommands: `status | scrape | gdino | annotate | all`
+**Bug fixes applied (2026-05-29 → 2026-05-31):**
+- [x] `package_dataset`: merged dirs backed up to GCS after every append (survives VM recreation)
+- [x] `package_dataset`: PostgreSQL sequence synced before TrainingRun insert (prevents UniqueViolation crash)
+- [x] `annotate_clips`: GCS 404 caught per-clip (missing raw → ERROR, continues instead of crashing worker)
+- [x] `scrape_funker530`: ffprobe fallback for duration when yt-dlp returns 0
+- [x] nginx: gzip compression enabled (94KB → 38KB JS)
+- [x] AboutSection: "Self-hosted" → "Google Cloud Platform"
 - [x] Terraform fixed: `inference_engine` scheduling block — removed `preemptible = true` (incompatible with Instance Scheduling resource policies); `training_engine` — added `provisioning_model = "SPOT"` + `instance_termination_action = "STOP"`
 - [x] `start_workers.sh` updated: removed stale "Phase 4 Docker" comment; added local runner hint
 

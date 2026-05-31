@@ -1,7 +1,9 @@
 # Ukraine Combat Footage Archival System
 
 [![CI](https://github.com/NINJAgur/ukraine-war-footage-training/actions/workflows/ci.yml/badge.svg)](https://github.com/NINJAgur/ukraine-war-footage-training/actions/workflows/ci.yml)
-[![Deploy](https://github.com/NINJAgur/ukraine-war-footage-training/actions/workflows/deploy-e2-micro.yml/badge.svg)](https://github.com/NINJAgur/ukraine-war-footage-training/actions/workflows/deploy-e2-micro.yml)
+[![Deploy e2-micro](https://github.com/NINJAgur/ukraine-war-footage-training/actions/workflows/deploy-e2-micro.yml/badge.svg)](https://github.com/NINJAgur/ukraine-war-footage-training/actions/workflows/deploy-e2-micro.yml)
+[![Deploy inference-engine](https://github.com/NINJAgur/ukraine-war-footage-training/actions/workflows/deploy-inference-engine.yml/badge.svg)](https://github.com/NINJAgur/ukraine-war-footage-training/actions/workflows/deploy-inference-engine.yml)
+[![Deploy training-engine](https://github.com/NINJAgur/ukraine-war-footage-training/actions/workflows/deploy-training-engine.yml/badge.svg)](https://github.com/NINJAgur/ukraine-war-footage-training/actions/workflows/deploy-training-engine.yml)
 
 Automated full-stack application that scrapes, auto-labels, and publicly displays
 archival combat footage from the war in Ukraine, with a secure admin panel for
@@ -18,18 +20,22 @@ e2-micro (Docker, always-on):
                                       ↓
                                Clip(DOWNLOADED, scores in DB) → GCS raw/
 
-inference-engine VM (n1-standard-1 + T4, 03:00–04:00 UTC):
+inference-engine VM (n1-standard-1 + T4 Spot, Instance Schedule 03:00–04:00 UTC):
   beat @03:05 → auto_label_batch → auto_label_clip × N (GDINO)
                                 → package_dataset (Dataset PACKAGED)
-                                → [≥5 PACKAGED] prepare_finetune_batch
-                                    → upload merged/ to GCS
-                                    → start training-engine VM
-                                    → dispatch train_finetune × 4 → Q=training
+                                    → upload merged/<MODEL>/ to GCS after every append
+                                → [≥5 PACKAGED] trigger_finetune_check
+                                    → TrainingRun(QUEUED) per model
+                                    → prepare_finetune_batch → dispatch train_finetune × N → Q=training
   beat @03:35 → annotate_clips (YOLO → annotated MP4 → GCS annotated/)
+               → _shutdown_if_no_training (self-shuts VM if no active runs)
 
-training-engine VM (n1-standard-4 + T4, on-demand):
-  train_finetune × 4 models → download merged/ from GCS → YOLO → upload best.pt
+training-engine VM (n1-standard-4 + T4 Spot, Instance Schedule 04:30 UTC start):
+  startup: query DB for QUEUED TrainingRuns → shutdown immediately if none
+  train_finetune × N models → download merged/ from GCS → YOLO → upload best.pt
   → self-shutdown after last model
+
+1-T4 quota: inference stops at 04:00, training starts at 04:30 (30-min buffer)
 ```
 
 **Scraper → ML decoupling:** scrapers write keyword scores to DB (`score_aircraft`, `score_vehicle`, `score_personnel`, `score_uas`, `is_pov`). Pipelines query by score thresholds — no re-scraping at inference time.
@@ -46,12 +52,12 @@ training-engine VM (n1-standard-4 + T4, on-demand):
 
 ## ML Training — Best Runs
 
-| Model | mAP50 | Images | Stage | Run |
-|-------|-------|--------|-------|-----|
-| AIRCRAFT | 0.968 | 64,916 | Finetune | 68 |
-| VEHICLE | 0.904 | 56,440 | Finetune | 76 |
-| PERSONNEL | 0.873 | 10,962 | Finetune | 75 |
-| GENERAL | 0.784 | 144,466 | Baseline | 30 |
+| Model | mAP50 | Images | Stage | Run | Status |
+|-------|-------|--------|-------|-----|--------|
+| AIRCRAFT | 0.968 | 64,916 | Finetune | 68 | Cycle 2 queued (run 77) 🔄 |
+| VEHICLE | 0.904 | 56,440 | Finetune | 76 | Cycle 3 queued (run 78) 🔄 |
+| PERSONNEL | 0.873 | 10,962 | Finetune | 75 | Cycle 3 pending |
+| GENERAL | 0.784 | 144,466 | Baseline | 30 | Cycle 1 queued (run 79) 🔄 |
 
 ## Dataset Inventory (8 Kaggle datasets)
 
@@ -177,11 +183,13 @@ Domain-specific review, QA, and research agents in `.claude/commands/`:
 
 ## Tech Stack
 
-- **Scraping:** Funker530 REST API + GeoConfirmed REST API + yt-dlp
-- **Queue:** Celery + Redis
-- **Database:** PostgreSQL 16 (`ukraine_footage`)
-- **ML:** Ultralytics YOLOv8 + GroundingDINO + PyTorch (CUDA 12.1, RTX 3060 Ti)
-- **Backend:** FastAPI + SQLAlchemy 2.x (async) + Pydantic v2
-- **Frontend:** Vue 3 (`<script setup>`) + Vite + Tailwind CSS + Pinia + Vue Router 4
+- **Scraping:** Funker530 REST API + GeoConfirmed REST API + yt-dlp + ffprobe (duration)
+- **Queue:** Celery 5 + Redis (broker + result backend)
+- **Database:** PostgreSQL 16 (`ukraine_footage`) + SQLAlchemy 2.x
+- **ML:** Ultralytics YOLOv8m + GroundingDINO (SwinT) + PyTorch 2.5.1 (CUDA 12.1)
+- **Storage:** Google Cloud Storage — raw clips, annotated videos, merged training datasets, model weights
+- **Backend:** FastAPI (async) + Pydantic v2 + WebSocket (live training progress)
+- **Frontend:** Vue 3 (`<script setup>`) + Vite + Tailwind CSS + Pinia + Vue Router 4; nginx with gzip
+- **Infra:** GCP e2-micro (free tier) + 2× n1-standard T4 Spot VMs; GCP Instance Schedules; GitHub Actions CI/CD; Let's Encrypt HTTPS
 
 See [PROJECT_PLAN.md](PROJECT_PLAN.md) for full architecture and implementation plan.
