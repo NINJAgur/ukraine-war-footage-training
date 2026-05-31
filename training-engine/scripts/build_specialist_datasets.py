@@ -288,7 +288,7 @@ def build_all_models(out_root: Path, models: List[str]) -> None:
                     required_class = d["required_class"]
 
                     if required_class is not None:
-                        filtered = [l for l in remapped_text.splitlines() if l.strip() and int(l.split()[0]) == required_class]
+                        filtered = [ln for ln in remapped_text.splitlines() if ln.strip() and int(ln.split()[0]) == required_class]
                         label_text = "\n".join(filtered) + ("\n" if filtered else "")
                         if not filtered:
                             counters[model_name]["skipped"] += 1
