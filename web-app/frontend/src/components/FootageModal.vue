@@ -16,12 +16,14 @@
         <div class="modal-video-placeholder">
           <video
             v-if="item.videoUrl"
+            ref="videoEl"
             :src="item.videoUrl"
             class="modal-video"
             controls
-            autoplay
             muted
             playsinline
+            preload="auto"
+            @canplay="tryPlay"
           />
           <div v-else class="modal-video-label">
             ANNOTATED FOOTAGE<br>{{ item.detClass }} — {{ item.source }}
@@ -44,9 +46,14 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 const props = defineProps({ item: { type: Object, required: true } })
 defineEmits(['close'])
+
+const videoEl = ref(null)
+function tryPlay() {
+  videoEl.value?.play().catch(() => {})
+}
 
 const metaCells = computed(() => [
   { k: 'Source',     v: props.item.source },

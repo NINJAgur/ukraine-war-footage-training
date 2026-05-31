@@ -8,7 +8,7 @@
         class="card-video"
         muted playsinline
         preload="metadata"
-        @mouseenter="videoEl.play()"
+        @mouseenter="videoEl.play().catch(() => {})"
         @mouseleave="videoEl.pause(); videoEl.currentTime = 0"
         @click.stop="$emit('open', item)"
       />
