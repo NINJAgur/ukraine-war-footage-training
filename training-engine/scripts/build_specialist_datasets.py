@@ -128,6 +128,61 @@ IMG_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 _KAGGLEHUB_CACHE = Path.home() / ".cache" / "kagglehub" / "datasets"
 
 
+def _make_split_links(parent: Path, splits: Dict[str, tuple]) -> None:
+    """Create train/ and val/ dirs with images/ and labels/ symlinks pointing to actual dirs."""
+    for split_name, (img_src, lbl_src) in splits.items():
+        split_dir = parent / split_name
+        split_dir.mkdir(exist_ok=True)
+        for link_name, src in (("images", img_src), ("labels", lbl_src)):
+            link = split_dir / link_name
+            if not link.exists() and src is not None and Path(src).exists():
+                link.symlink_to(Path(src).resolve())
+
+
+def _normalize_dataset_structure(dataset_path: Path) -> None:
+    """
+    Detect non-standard dataset layouts and create standard train/val symlinks.
+    Handles two patterns found in our Kaggle datasets:
+
+    Pattern A — flat split dirs (nzigulic):
+      <root>/images_train/  labels_train/  images_val/  labels_val/
+
+    Pattern B — nested split subdirs (rookieengg):
+      <root>/images/<X>_train/  labels/<X>_train/
+             images/<X>_val/    labels/<X>_val/
+    """
+    # Pattern A: images_train / labels_train at any depth
+    for img_train in dataset_path.rglob("images_train"):
+        if not img_train.is_dir():
+            continue
+        parent = img_train.parent
+        _make_split_links(parent, {
+            "train": (parent / "images_train", parent / "labels_train"),
+            "val":   (parent / "images_val",   parent / "labels_val"),
+        })
+        log.info(f"  Normalized pattern-A structure in {parent.relative_to(dataset_path)}")
+        return
+
+    # Pattern B: images/<X>_train + labels/<X>_train nested dirs
+    for images_dir in dataset_path.rglob("images"):
+        if not images_dir.is_dir():
+            continue
+        labels_dir = images_dir.parent / "labels"
+        if not labels_dir.is_dir():
+            continue
+        subdirs = {d.name.lower(): d for d in images_dir.iterdir() if d.is_dir()}
+        train_img = next((d for k, d in subdirs.items() if "train" in k), None)
+        val_img   = next((d for k, d in subdirs.items() if "val" in k), None)
+        if train_img and val_img:
+            parent = images_dir.parent
+            _make_split_links(parent, {
+                "train": (train_img, labels_dir / train_img.name),
+                "val":   (val_img,   labels_dir / val_img.name),
+            })
+            log.info(f"  Normalized pattern-B structure in {parent.relative_to(dataset_path)}")
+            return
+
+
 def _local_dataset_path(handle: str) -> Path:
     owner, name = handle.split("/")
     for search_root in (settings.KAGGLE_CACHE_DIR / "imported", settings.KAGGLE_CACHE_DIR, _KAGGLEHUB_CACHE):
@@ -188,6 +243,7 @@ def build_model_dataset(model_name: str, out_root: Path) -> Tuple[int, int]:
             log.error(str(e))
             continue
 
+        _normalize_dataset_structure(dataset_path)
         paths, _ = detect_dataset_structure(str(dataset_path))
         if not paths:
             log.warning(f"No train/val structure in {handle} — skipping")

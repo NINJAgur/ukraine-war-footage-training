@@ -21,23 +21,23 @@ if [ -d "$MERGED_DIR/GENERAL/train/images" ] && [ -n "$(ls -A "$MERGED_DIR/GENER
     exit 0
 fi
 
-echo "[setup_datasets] Downloading 8 Kaggle datasets (~10 GB, may take 30-60 min)..."
+echo "[setup_datasets] Downloading 7 Kaggle datasets (~10 GB, may take 30-60 min)..."
 $PYTHON - <<'PY'
 import sys
 sys.path.insert(0, ".")
-import kagglehub
+import kagglehub, pathlib
 
+# piterfm is excluded — it requires GDINO-generated labels not present in the
+# Kaggle download. It is pre-processed and stored in GCS; downloaded below.
 datasets = [
     "mihprofi/drone-detect",
     "shakedlevnat/military-aircraft-database-prepared-for-yolo",
     "nzigulic/military-equipment",
-    "piterfm/2022-ukraine-russia-war-equipment-losses-oryx",
     "sudipchakrabarty/kiit-mita",
     "rookieengg/military-aircraft-detection-dataset-yolo-format",
     "rawsi18/military-assets-dataset-12-classes-yolo8-format",
     "rupankarmajumdar/amad-5-aerial-military-asset-detection-dataset",
 ]
-import pathlib
 
 cache_root = pathlib.Path.home() / ".cache" / "kagglehub"
 
@@ -46,7 +46,6 @@ for handle in datasets:
     print(f"  {handle}...", flush=True)
     try:
         kagglehub.dataset_download(handle)
-        # Delete zip files after extraction to save disk space
         for z in cache_root.rglob("*.zip"):
             z.unlink()
             print(f"  Deleted zip: {z.name}", flush=True)
@@ -58,6 +57,18 @@ if failed:
     sys.exit(1)
 print("All datasets downloaded.")
 PY
+
+echo "[setup_datasets] Downloading piterfm (GDINO-labeled) from GCS..."
+PITERFM_DST="$HOME/.cache/kagglehub/datasets/piterfm/2022-ukraine-russia-war-equipment-losses-oryx/versions/1"
+if [ ! -d "$PITERFM_DST/train/images" ]; then
+    mkdir -p "$PITERFM_DST"
+    gsutil cp gs://ukraine-footage-media/datasets/piterfm.zip /tmp/piterfm.zip
+    unzip -q /tmp/piterfm.zip -d "$PITERFM_DST"
+    rm /tmp/piterfm.zip
+    echo "[setup_datasets] piterfm extracted to $PITERFM_DST"
+else
+    echo "[setup_datasets] piterfm already present — skipping"
+fi
 
 echo "[setup_datasets] Building merged specialist datasets..."
 $PYTHON scripts/build_specialist_datasets.py
