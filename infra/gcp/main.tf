@@ -522,7 +522,7 @@ Type=simple
 User=ubuntu
 WorkingDirectory=/home/ubuntu/app/training-engine
 EnvironmentFile=/home/ubuntu/app/.env
-ExecStart=/home/ubuntu/app/training-engine/venv/bin/celery -A celery_app worker -Q training --concurrency=1 --loglevel=info
+ExecStart=/home/ubuntu/app/training-engine/venv/bin/celery -A celery_app worker -Q training --pool=solo --concurrency=1 --loglevel=info
 Restart=on-failure
 RestartSec=30
 StandardOutput=append:/var/log/celery-training.log
