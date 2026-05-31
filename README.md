@@ -5,6 +5,8 @@
 [![Deploy inference-engine](https://github.com/NINJAgur/ukraine-war-footage-training/actions/workflows/deploy-inference-engine.yml/badge.svg)](https://github.com/NINJAgur/ukraine-war-footage-training/actions/workflows/deploy-inference-engine.yml)
 [![Deploy training-engine](https://github.com/NINJAgur/ukraine-war-footage-training/actions/workflows/deploy-training-engine.yml/badge.svg)](https://github.com/NINJAgur/ukraine-war-footage-training/actions/workflows/deploy-training-engine.yml)
 
+> Built on top of [YOLO Training Template](https://github.com/computer-vision-with-marco/yolo-training-template) by [Marco Franzon](https://github.com/computer-vision-with-marco) — a clean starting point for YOLO training workflows with GroundingDINO auto-labeling.
+
 Automated full-stack application that scrapes, auto-labels, and publicly displays
 archival combat footage from the war in Ukraine, with a secure admin panel for
 YOLOv8 model retraining.
@@ -190,6 +192,6 @@ Domain-specific review, QA, and research agents in `.claude/commands/`:
 - **Storage:** Google Cloud Storage — raw clips, annotated videos, merged training datasets, model weights
 - **Backend:** FastAPI (async) + Pydantic v2 + WebSocket (live training progress)
 - **Frontend:** Vue 3 (`<script setup>`) + Vite + Tailwind CSS + Pinia + Vue Router 4; nginx with gzip
-- **Infra:** GCP e2-micro (free tier) + 2× n1-standard T4 Spot VMs; GCP Instance Schedules; GitHub Actions CI/CD; Let's Encrypt HTTPS
+- **Infra:** GCP e2-micro (free tier) + 2× n1-standard T4 Spot VMs; GCP Instance Schedules; Terraform; GitHub Actions CI/CD; Let's Encrypt HTTPS
 
 See [PROJECT_PLAN.md](PROJECT_PLAN.md) for full architecture and implementation plan.

@@ -12,7 +12,7 @@ from pathlib import Path
 
 from celery_app import celery_app
 from config import settings
-from db.models import Clip, ClipStatus, TrainingRun, TrainingStatus
+from db.models import Clip, ClipStatus
 from db.session import get_session
 from tasks.weights import _latest_weights
 
@@ -279,19 +279,14 @@ def _run_general() -> dict:
 
 
 def _shutdown_if_no_training() -> None:
-    """Shut down this VM if no training run is QUEUED or RUNNING. No-op on Windows."""
+    """Shut down this VM after annotation completes. No-op on Windows.
+    Training runs are handled by training-engine (Q=training) — this VM has no training worker.
+    """
     import sys
     import subprocess
     if sys.platform == "win32":
         return
-    with get_session() as session:
-        active = session.query(TrainingRun).filter(
-            TrainingRun.status.in_([TrainingStatus.QUEUED, TrainingStatus.RUNNING])
-        ).first()
-    if active:
-        logger.info("[shutdown] Training run active — keeping VM alive")
-        return
-    logger.info("[shutdown] No active training — shutting down VM")
+    logger.info("[shutdown] Annotation complete — shutting down VM")
     subprocess.run(["sudo", "shutdown", "-h", "now"])
 
 
