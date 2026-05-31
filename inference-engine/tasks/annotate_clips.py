@@ -114,13 +114,19 @@ def _run_specialist(
         )
 
         for clip in candidates:
-            raw_path = _resolve_clip_path(clip.file_path)
             title = clip.title or f"clip_{clip.id}"
             logger.info(
                 f"[{model_name}] clip_id={clip.id}  "
                 f"aircraft={clip.score_aircraft:.2f}  vehicle={clip.score_vehicle:.2f}  personnel={clip.score_personnel:.2f}\n"
                 f"    title: {title}"
             )
+            try:
+                raw_path = _resolve_clip_path(clip.file_path)
+            except Exception as exc:
+                logger.warning(f"[{model_name}]   -> ERROR: failed to resolve raw file: {exc}")
+                clip.status = ClipStatus.ERROR
+                errors += 1
+                continue
 
             if not raw_path.exists():
                 logger.warning(f"[{model_name}]   -> ERROR: file missing: {raw_path}")
