@@ -216,24 +216,35 @@ def _remap_lines(text: str, class_map: Optional[Dict[int, int]]) -> Tuple[str, s
     return ("\n".join(kept) + ("\n" if kept else "")), classes
 
 
-def build_model_dataset(model_name: str, out_root: Path) -> Tuple[int, int]:
-    handles = BASELINE_DATASETS[model_name]
-    required_class = SPECIALIST_REQUIRED_CLASS[model_name]
+def build_all_models(out_root: Path, models: List[str]) -> None:
+    """
+    Single-pass build: process each source dataset once, write to all relevant
+    model dirs simultaneously. ~4x faster than building each model separately.
+    """
+    # Set up output dirs for all requested models
+    dirs: Dict[str, Dict] = {}
+    for model_name in models:
+        out_dir = out_root / model_name
+        if out_dir.exists():
+            shutil.rmtree(out_dir)
+        d = {}
+        for split in ("train", "val"):
+            (out_dir / split / "images").mkdir(parents=True, exist_ok=True)
+            (out_dir / split / "labels").mkdir(parents=True, exist_ok=True)
+            d[f"{split}_img"] = out_dir / split / "images"
+            d[f"{split}_lbl"] = out_dir / split / "labels"
+        d["required_class"] = SPECIALIST_REQUIRED_CLASS[model_name]
+        d["train"] = d["val"] = 0
+        dirs[model_name] = d
 
-    out_dir   = out_root / model_name
-    train_img = out_dir / "train" / "images"
-    train_lbl = out_dir / "train" / "labels"
-    val_img   = out_dir / "val"   / "images"
-    val_lbl   = out_dir / "val"   / "labels"
+    # Collect all unique handles and which models use each
+    all_handles: Dict[str, List[str]] = {}
+    for model_name in models:
+        for handle in BASELINE_DATASETS[model_name]:
+            all_handles.setdefault(handle, []).append(model_name)
 
-    if out_dir.exists():
-        shutil.rmtree(out_dir)
-    for d in (train_img, train_lbl, val_img, val_lbl):
-        d.mkdir(parents=True, exist_ok=True)
-
-    total_train = total_val = 0
-
-    for handle in handles:
+    # Process each source dataset exactly once
+    for handle, model_names in all_handles.items():
         prefix = handle.split("/")[0] + "_"
         class_map = DATASET_CLASS_MAP.get(handle)
 
@@ -249,55 +260,70 @@ def build_model_dataset(model_name: str, out_root: Path) -> Tuple[int, int]:
             log.warning(f"No train/val structure in {handle} — skipping")
             continue
 
-        for src_img_key, src_lbl_key, dst_img_dir, dst_lbl_dir in [
-            ("train_images", "train_labels", train_img, train_lbl),
-            ("val_images",   "val_labels",   val_img,   val_lbl),
+        for src_img_key, src_lbl_key, split in [
+            ("train_images", "train_labels", "train"),
+            ("val_images",   "val_labels",   "val"),
         ]:
             src_img = paths.get(src_img_key)
             src_lbl = paths.get(src_lbl_key)
             if not src_img:
                 continue
 
-            copied = skipped = 0
+            counters: Dict[str, Dict] = {m: {"copied": 0, "skipped": 0} for m in model_names}
+
             for img_src in Path(src_img).iterdir():
                 if img_src.suffix.lower() not in IMG_EXTS:
                     continue
 
                 lbl_src = Path(src_lbl) / (img_src.stem + ".txt") if src_lbl else None
                 raw_text = lbl_src.read_text() if (lbl_src and lbl_src.exists()) else ""
-                label_text, classes_present = _remap_lines(raw_text, class_map)
-
-                # Specialist models: drop annotation lines for other classes
-                if required_class is not None:
-                    filtered = [line for line in label_text.splitlines() if line.strip() and int(line.split()[0]) == required_class]
-                    label_text = "\n".join(filtered) + ("\n" if filtered else "")
-                    classes_present = {required_class} if filtered else set()
-
-                if required_class is not None and required_class not in classes_present:
-                    skipped += 1
-                    continue
+                # Remap labels once, shared across all models
+                remapped_text, classes_present = _remap_lines(raw_text, class_map)
 
                 dst_name = prefix + img_src.name
-                shutil.copy2(img_src, dst_img_dir / dst_name)
-                (dst_lbl_dir / (prefix + img_src.stem + ".txt")).write_text(label_text)
-                copied += 1
+                img_copied = False
 
-            split = "train" if src_img_key == "train_images" else "val"
-            log.info(f"  [{model_name}] {handle} {split}: {copied} copied, {skipped} skipped")
-            if src_img_key == "train_images":
-                total_train += copied
-            else:
-                total_val += copied
+                for model_name in model_names:
+                    d = dirs[model_name]
+                    required_class = d["required_class"]
 
-    (out_dir / "dataset.yaml").write_text(
-        f"path: {out_dir.as_posix()}\n"
-        f"train: train/images\n"
-        f"val: val/images\n"
-        f"nc: 3\n"
-        f"names: {CANONICAL_CLASSES}\n"
-    )
-    log.info(f"[{model_name}] DONE — train={total_train}  val={total_val}")
-    return total_train, total_val
+                    if required_class is not None:
+                        filtered = [l for l in remapped_text.splitlines() if l.strip() and int(l.split()[0]) == required_class]
+                        label_text = "\n".join(filtered) + ("\n" if filtered else "")
+                        if not filtered:
+                            counters[model_name]["skipped"] += 1
+                            continue
+                    else:
+                        label_text = remapped_text
+
+                    # Copy image once (first model to need it), symlink for the rest
+                    dst_img = d[f"{split}_img"] / dst_name
+                    if not img_copied:
+                        shutil.copy2(img_src, dst_img)
+                        img_copied = True
+                    else:
+                        shutil.copy2(img_src, dst_img)
+
+                    (d[f"{split}_lbl"] / (prefix + img_src.stem + ".txt")).write_text(label_text)
+                    counters[model_name]["copied"] += 1
+
+            for model_name in model_names:
+                c = counters[model_name]
+                log.info(f"  [{model_name}] {handle} {split}: {c['copied']} copied, {c['skipped']} skipped")
+                dirs[model_name][split] += counters[model_name]["copied"]
+
+    # Write dataset.yaml for each model
+    for model_name in models:
+        out_dir = out_root / model_name
+        (out_dir / "dataset.yaml").write_text(
+            f"path: {out_dir.as_posix()}\n"
+            f"train: train/images\n"
+            f"val: val/images\n"
+            f"nc: 3\n"
+            f"names: {CANONICAL_CLASSES}\n"
+        )
+        d = dirs[model_name]
+        log.info(f"[{model_name}] DONE — train={d['train']}  val={d['val']}")
 
 
 def verify(out_root: Path, models: List[str]) -> None:
@@ -332,9 +358,8 @@ def main():
     args = parser.parse_args()
 
     out_root = settings.KAGGLE_CACHE_DIR / "merged"
-    for model_name in args.models:
-        log.info(f"=== Building {model_name} ===")
-        build_model_dataset(out_root=out_root, model_name=model_name)
+    log.info(f"Building models: {args.models} (single-pass)")
+    build_all_models(out_root=out_root, models=args.models)
 
     verify(out_root, args.models)
 
