@@ -211,8 +211,16 @@ def train_finetune(self, training_run_id: int, scraped_merged_path: str = None) 
         )
         import subprocess
         if sys.platform != "win32":
-            logger.info("[shutdown] All training complete — shutting down VM")
-            subprocess.run(["sudo", "shutdown", "-h", "now"])
+            with get_session() as _s:
+                remaining = _s.query(TrainingRun).filter(
+                    TrainingRun.status.in_([TrainingStatus.QUEUED, TrainingStatus.RUNNING]),
+                    TrainingRun.id != training_run_id,
+                ).count()
+            if remaining == 0:
+                logger.info("[shutdown] No more QUEUED/RUNNING runs — shutting down VM")
+                subprocess.run(["sudo", "shutdown", "-h", "now"])
+            else:
+                logger.info(f"[shutdown] {remaining} run(s) still pending — keeping VM alive")
         return {
             "status": "done",
             "training_run_id": training_run_id,
