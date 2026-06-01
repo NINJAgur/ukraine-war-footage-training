@@ -57,6 +57,16 @@ def _upload_weights_to_gcs(local: Path, bucket: str, model: str, run_id: int) ->
     logger.info(f"[train_finetune] Uploaded weights → gs://{bucket}/{blob_name}")
 
 
+def _delete_gcs_merged(bucket: str, model: str) -> None:
+    """Delete gs://bucket/merged/MODEL/ after training — datasets are consumed, don't accumulate."""
+    from google.cloud import storage as gcs
+    client = gcs.Client()
+    blobs = list(client.list_blobs(bucket, prefix=f"merged/{model}/"))
+    if blobs:
+        client.bucket(bucket).delete_blobs(blobs)
+        logger.info(f"[train_finetune] Deleted gs://{bucket}/merged/{model}/ ({len(blobs)} blobs)")
+
+
 def _extract_metrics(results) -> dict:
     try:
         return dict(results.results_dict)
@@ -194,6 +204,7 @@ def train_finetune(self, training_run_id: int, scraped_merged_path: str = None) 
                 weights_path, settings.REMOTE_STORAGE_BUCKET,
                 model_type.value, training_run_id,
             )
+            _delete_gcs_merged(settings.REMOTE_STORAGE_BUCKET, model_type.value)
 
         with get_session() as session:
             run = session.get(TrainingRun, training_run_id)

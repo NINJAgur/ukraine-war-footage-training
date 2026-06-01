@@ -155,7 +155,7 @@ async def _model_stats(db: AsyncSession) -> dict:
 
         done_runs = [r for r in all_runs if r.model_type == mtype and r.status == TrainingStatus.DONE]
         active_run = next((r for r in all_runs if r.model_type == mtype and r.status == TrainingStatus.RUNNING), None)
-        done_run = max(done_runs, key=_run_map50) if done_runs else None
+        done_run = max(done_runs, key=lambda r: r.completed_at or r.created_at) if done_runs else None
 
         if done_run is None and active_run is None:
             result[model] = {"status": "QUEUED", "map50": None, "images": 0}
