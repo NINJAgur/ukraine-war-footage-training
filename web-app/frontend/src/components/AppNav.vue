@@ -1,7 +1,7 @@
 <template>
   <nav :style="{ boxShadow: scrolled ? '0 1px 0 rgba(255,255,255,0.04)' : 'none' }">
     <router-link to="/" class="nav-logo" style="text-decoration:none;cursor:pointer">
-      <div class="nav-logo-mark"></div>
+      <img src="/favicon.svg" alt="" style="width:28px;height:28px;flex-shrink:0" />
       UKRARCHIVE
       <span class="mono" style="color: var(--fg-3); font-size: 10px">v1.0.0</span>
     </router-link>

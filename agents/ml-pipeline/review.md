@@ -4,13 +4,13 @@
 ---
 
 ## Current Project State
-*Last updated: 2026-05-28*
+*Last updated: 2026-06-02*
 
 **Best weights (finetune > baseline):**
-- AIRCRAFT: mAP50=0.968, run 68, `runs/finetune/AIRCRAFT/finetune_AIRCRAFT_68/weights/best.pt`
-- VEHICLE:  mAP50=0.904, run 76, `runs/finetune/VEHICLE/finetune_VEHICLE_76/weights/best.pt`
+- AIRCRAFT: mAP50=0.968, run 68, `runs/finetune/AIRCRAFT/finetune_AIRCRAFT_68/weights/best.pt` (scraped cycle run 77 also done: 0.964)
+- VEHICLE:  mAP50=0.904, run 76, `runs/finetune/VEHICLE/finetune_VEHICLE_76/weights/best.pt` (scraped cycle run 78 QUEUED 🔄)
 - PERSONNEL: mAP50=0.873, run 75, `runs/finetune/PERSONNEL/finetune_PERSONNEL_75/weights/best.pt`
-- GENERAL:  mAP50=0.784, run 30 (baseline only — finetune pending)
+- GENERAL:  mAP50=0.784, run 30 (baseline — scraped finetune run 79 QUEUED 🔄)
 
 **2-VM architecture:**
 - `inference-engine/` (n1-standard-1 + T4, Q=pipeline): GDINO auto-label, dataset packaging, finetune dispatch, YOLO annotation

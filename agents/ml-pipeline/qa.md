@@ -4,21 +4,21 @@
 ---
 
 ## Current Project State
-*Last updated: 2026-05-28*
+*Last updated: 2026-06-02*
 
-**DB state:** 80+ ANNOTATED clips. All 4 baselines + finetune cycles complete.
-**Training runs:** runs 13/25/29/30 (baselines), 68/73/74/75/76 (finetunes) — all DONE.
+**DB state:** 62+ ANNOTATED clips. All 4 baselines + Kaggle finetune cycles done; scraped finetuning ongoing.
+**Training runs:** runs 13/25/29/30 (baselines), 68/73/74/75/76 (Kaggle finetunes), 77 (scraped AIRCRAFT) — all DONE. Runs 78 VEHICLE + 79 GENERAL QUEUED for overnight Instance Schedule.
 **Celery E2E:** fully verified end-to-end (GDINO → PACKAGED → finetune trigger → annotate)
-**Architecture:** inference-engine (n1-standard-1+T4, Q=pipeline, 03:00–04:00 UTC) + training-engine (n1-standard-4+T4, Q=training, on-demand)
+**Architecture:** inference-engine (n1-standard-1+T4, Q=pipeline, 03:00–04:00 UTC) + training-engine (n1-standard-4+T4, Instance Schedule 04:30 UTC, self-shutdown after last model)
 **GCS pipeline:** confirmed working — raw clips uploaded by scraper, T4 downloads/annotates/uploads annotated MP4
 
 **Best weights by model:**
 | Model | Best run | mAP50 | Stage |
 |-------|----------|-------|-------|
-| AIRCRAFT | 68 | 0.968 | Finetune |
-| VEHICLE | 76 | 0.904 | Finetune |
-| PERSONNEL | 75 | 0.873 | Finetune |
-| GENERAL | 30 | 0.784 | Baseline |
+| AIRCRAFT | 68 | 0.968 | Kaggle Finetune (scraped run 77: 0.964) |
+| VEHICLE | 76 | 0.904 | Kaggle Finetune (scraped run 78: QUEUED) |
+| PERSONNEL | 75 | 0.873 | Kaggle Finetune |
+| GENERAL | 30 | 0.784 | Baseline (scraped run 79: QUEUED) |
 
 ---
 

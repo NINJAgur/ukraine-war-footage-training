@@ -4,7 +4,7 @@
     <!-- header -->
     <header class="panel-header">
       <a href="/" class="nav-logo" style="text-decoration:none;cursor:pointer">
-        <div class="nav-logo-mark"></div>
+        <img src="/favicon.svg" alt="" style="width:28px;height:28px;flex-shrink:0" />
         UKRARCHIVE
         <span class="mono" style="color:var(--fg-3);font-size:10px">ADMIN</span>
       </a>
@@ -559,21 +559,6 @@ onMounted(() => { loadRuns(); loadClips() })
 .status-filter-btn:hover { color: var(--fg-0); border-color: var(--fg-1); }
 .status-filter-btn.active { border-color: var(--amber-border); color: var(--amber); }
 
-/* reuse global logo mark */
-.nav-logo-mark {
-  width: 28px; height: 28px;
-  border: 1.5px solid var(--amber);
-  display: flex; align-items: center; justify-content: center;
-  position: relative;
-  flex-shrink: 0;
-}
-.nav-logo-mark::before {
-  content: '';
-  position: absolute;
-  width: 8px; height: 8px;
-  background: var(--amber);
-  clip-path: polygon(50% 0%, 100% 100%, 0% 100%);
-}
 
 .decline-btn {
   background: none;

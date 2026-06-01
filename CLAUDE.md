@@ -44,10 +44,10 @@
 **Cold-start training order (8 Kaggle datasets total):**
 1. Dataset prep: all 8 datasets downloaded fresh; class remapping applied in build script (source files never modified); nzigulic + rookieengg reorganized to standard train/val layout ✅
 2. Merged folders rebuilt clean via `scripts/build_specialist_datasets.py` ✅ — in-memory class remapping + specialist class filter; verified 0 bad class IDs across all models
-3. AIRCRAFT baseline: mAP50=0.929 @ 10 epochs, run 13 ✅ (stale — retraining needed on clean merged/, 65,557 train images)
-4. VEHICLE: baseline run 25 (0.871) → finetune run 73 (0.901, 10 epochs on clean merged/, 56,440 train) ✅
-5. PERSONNEL: baseline run 29 (0.780) → finetune run 74 (0.872, 20 epochs on clean merged/, 10,962 train) ✅
-6. GENERAL: mAP50=0.784 @ 10 epochs, run 30 ✅ (finetune pending)
+3. AIRCRAFT: baseline run 13 (0.929) → finetune run 68 (0.968, Kaggle-only) → scraped finetune run 77 (0.964) ✅ — run 68 remains best weights
+4. VEHICLE: baseline run 25 (0.871) → finetune run 76 (0.904, Kaggle-only) → scraped finetune run 78 QUEUED 🔄
+5. PERSONNEL: baseline run 29 (0.780) → finetune run 74 (0.872) → finetune run 75 (0.873) ✅
+6. GENERAL: baseline run 30 (0.784) → scraped finetune run 79 QUEUED 🔄
 
 **Scraped dataset pipeline (GDINO → fine-tune):**
 
@@ -212,7 +212,7 @@ Run training-engine tests: `cd training-engine && python -m pytest tests/`
 |-------|-------|--------|
 | 0 | Agentic workspace | ✅ Complete |
 | 1 | Scraper engine | ✅ Complete |
-| 2 | ML pipeline — baseline training | ✅ Complete (AIRCRAFT 0.929, VEHICLE 0.871, PERSONNEL 0.780, GENERAL 0.784) |
+| 2 | ML pipeline — training | ✅ Complete (AIRCRAFT 0.968 run 68, VEHICLE 0.904 run 76, PERSONNEL 0.873 run 75, GENERAL 0.784 run 30; scraped finetuning ongoing) |
 | 3 | Web application | ✅ Complete (Celery E2E, hero video, WebSocket progress bar, integration smoke test — 58 annotated clips) |
 | 4 | Cloud & DevOps | ✅ Complete (GCP e2-micro ✅; T4 Spot VM ✅; GCS pipeline ✅; HTTPS ✅ ukrarchive.duckdns.org Let's Encrypt; CI/CD ✅ GitHub Actions deploy-on-push; mobile-responsive frontend ✅) |
 

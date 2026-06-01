@@ -2,7 +2,7 @@
   <main class="login-root">
     <div class="login-card">
       <div class="login-header">
-        <div class="nav-logo-mark"></div>
+        <img src="/favicon.svg" alt="" style="width:28px;height:28px;flex-shrink:0" />
         <div class="login-title mono">UKRARCHIVE // ADMIN</div>
         <div class="login-sub mono">RESTRICTED ACCESS</div>
       </div>
@@ -105,23 +105,6 @@ async function submit() {
   gap: 16px;
 }
 
-.nav-logo-mark {
-  width: 36px;
-  height: 36px;
-  border: 1.5px solid var(--amber);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-}
-.nav-logo-mark::before {
-  content: '';
-  position: absolute;
-  width: 10px;
-  height: 10px;
-  background: var(--amber);
-  clip-path: polygon(50% 0%, 100% 100%, 0% 100%);
-}
 
 .login-title {
   font-size: 14px;

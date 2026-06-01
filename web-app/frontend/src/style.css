@@ -101,19 +101,6 @@ nav {
   cursor: pointer;
 }
 
-.nav-logo-mark {
-  width: 28px; height: 28px;
-  border: 1.5px solid var(--amber);
-  display: flex; align-items: center; justify-content: center;
-  position: relative;
-}
-.nav-logo-mark::before {
-  content: '';
-  position: absolute;
-  width: 8px; height: 8px;
-  background: var(--amber);
-  clip-path: polygon(50% 0%, 100% 100%, 0% 100%);
-}
 
 .nav-links {
   display: flex;

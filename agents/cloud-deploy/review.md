@@ -4,7 +4,7 @@
 ---
 
 ## Current Project State
-*Last updated: 2026-05-28*
+*Last updated: 2026-06-02*
 
 **Production compose:** `docker-compose.prod.yml` (root of repo) — CPU services only (no GPU workers)
 **Local dev compose:** `docker-compose.yml` (scraper + web-app only, bind mounts)
@@ -79,7 +79,7 @@ Flag issues as CRITICAL, WARNING, or SUGGESTION.
 | `scraper-engine/Dockerfile` | Celery scraper worker |
 | `inference-engine/Dockerfile` | Celery inference worker (GDINO + YOLO annotation) |
 | `infra/gcp/main.tf` | Terraform: GCS bucket, e2-micro, inference-engine VM (n1-std-1+T4 scheduled), training-engine VM (n1-std-4+T4 on-demand) |
-| `infra/gcp/upload_weights.py` | One-time: upload local `training-engine/runs/*/best.pt` to GCS |
+| `infra/gcp/upload_weights.py` | One-time fallback: upload local `.pt` files to GCS (normally auto-uploaded by `train_finetune`) |
 
 ---
 

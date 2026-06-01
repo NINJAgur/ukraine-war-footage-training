@@ -56,10 +56,10 @@ training-engine VM (n1-standard-4 + T4 Spot, Instance Schedule 04:30 UTC start):
 
 | Model | mAP50 | Images | Stage | Run | Status |
 |-------|-------|--------|-------|-----|--------|
-| AIRCRAFT | 0.968 | 64,916 | Finetune | 68 | Cycle 2 queued (run 77) 🔄 |
-| VEHICLE | 0.904 | 56,440 | Finetune | 76 | Cycle 3 queued (run 78) 🔄 |
-| PERSONNEL | 0.873 | 10,962 | Finetune | 75 | Cycle 3 pending |
-| GENERAL | 0.784 | 144,466 | Baseline | 30 | Cycle 1 queued (run 79) 🔄 |
+| AIRCRAFT | 0.968 | 65,553 | Finetune (Kaggle) | 68 | Scraped cycle done (run 77: 0.964) ✅ |
+| VEHICLE | 0.904 | 56,440 | Finetune (Kaggle) | 76 | Scraped cycle queued (run 78) 🔄 |
+| PERSONNEL | 0.873 | 10,962 | Finetune (Kaggle) | 75 | Awaiting ≥5 scraped datasets |
+| GENERAL | 0.784 | 144,387 | Baseline | 30 | Scraped cycle queued (run 79) 🔄 |
 
 ## Dataset Inventory (8 Kaggle datasets)
 

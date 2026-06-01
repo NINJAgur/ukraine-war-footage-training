@@ -150,7 +150,8 @@ An automated, full-stack web application that:
 | **Async Queue** | Celery + Redis (broker + result backend) |
 | **ML** | Ultralytics YOLOv8 + PyTorch (`torch+cu121`) + OpenCV |
 | **Containers** | Docker + Docker Compose (scraper/backend/frontend in Docker Desktop; ml-engine runs natively) |
-| **Cloud** | GCP e2-micro free tier (CPU services, $0/mo) + GCP T4 Spot VM (GPU, ~$10/mo) |
+| **Cloud** | GCP e2-micro free tier (CPU, $0/mo) + 2× T4 Spot VMs: inference-engine (n1-std-1) + training-engine (n1-std-4, ~$20/mo total) |
+| **IaC** | Terraform (GCS bucket, e2-micro, inference-engine + training-engine VMs + Instance Schedules) |
 
 ---
 
@@ -378,7 +379,8 @@ yolo-training-template/                  ← monorepo root
 │   └── workflows/
 │       ├── ci.yml                       ← frontend build + ruff lint on push/PR
 │       ├── deploy-e2-micro.yml          ← SSH deploy after CI passes (workflow_run)
-│       └── deploy-weights.yml           ← manual: SSH T4 → upload weights to GCS
+│       ├── deploy-inference-engine.yml  ← manual: SSH deploy to inference-engine VM
+│       └── deploy-training-engine.yml   ← manual: SSH deploy to training-engine VM
 │
 ```
 
@@ -664,7 +666,7 @@ yolo-training-template/                  ← monorepo root
 - [x] **4.13h-i** `train_baseline.py` hardened: removed `--weights` option entirely; baseline always cold-starts from `yolov8m.pt`; `train_finetune.py __main__` gets `--epochs` arg
 - [x] **4.13j** VEHICLE finetune cycle 2 — mAP50=0.904 (run 76, 10 epochs from run 73, 56,440 train) ✅
 - [x] **4.13k** PERSONNEL finetune cycle 2 — mAP50=0.873 (run 75, 10 epochs from run 74, 10,962 train) ✅
-- [ ] **4.13l** GENERAL finetune cycle 1 — 50 epochs from baseline_GENERAL_30 on clean merged dataset
+- [ ] **4.13l** GENERAL finetune cycle 1 (scraped) — run 79 QUEUED for overnight 2026-06-02 🔄
 - [x] **4.13m** Scraped pipeline end-to-end (2026-05-21): 10 clips auto-labeled → 5 datasets PACKAGED → 6 clips annotated (3 VEHICLE, 2 PERSONNEL, 1 GENERAL); 80 ANNOTATED total in DB ✅
 - [x] **4.13n** Pipeline cleanup fixes (2026-05-21): cv2 corrupt-frame skip in `auto_label.py`; clip dataset dirs deleted immediately after `_merge_datasets()` (not post-training); `merged_dir` cleanup moved to `finally` block; `_cleanup_zero_score_clips()` added to `annotate_clips` end-of-run sweep ✅
 
@@ -679,7 +681,7 @@ yolo-training-template/                  ← monorepo root
 - [x] **4.21** CI/CD — GitHub Actions workflows:
   - [x] **4.21a** `ci.yml` — frontend build (`npm run build`) + ruff lint on push/PR to main
   - [x] **4.21b** `deploy-e2-micro.yml` — SSH deploy via `appleboy/ssh-action` on push to main after CI passes (`workflow_run` trigger)
-  - [x] **4.21c** `deploy-weights.yml` — manual `workflow_dispatch` to SSH into T4 and run `upload_weights.py`
+  - [x] **4.21c** `deploy-weights.yml` — DELETED; weights now auto-uploaded to GCS at end of each `train_finetune` run (no manual step needed)
   - [x] **4.21d** GitHub secrets set: `E2_MICRO_HOST`, `E2_MICRO_SSH_KEY`, `T4_SSH_KEY`; e2-micro uses sparse checkout; CI/CD pipeline confirmed passing end-to-end (2026-05-26)
 - [x] **4.22** Admin panel `latestRun()` fix: prefer DONE runs over ERROR for model status cards — was showing ERROR for all models despite successful DONE runs
 - [x] **4.23** Test suite hardening: production DB guard added to all 3 conftests (`web-app/backend`, `scraper-engine`, `ml-engine`) — refuses to run if `DATABASE_URL` points to non-local host
@@ -736,14 +738,12 @@ docker compose exec ml-worker celery -A celery_app call tasks.annotate_clips.ann
 
 Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 ✅, Phase 4 ✅
 
-**Training status (2026-05-31):**
-- AIRCRAFT: mAP50=0.929 (baseline run 13) → mAP50=0.968 (finetune run 68, cycle 1) ✅
-- VEHICLE: mAP50=0.871 (baseline run 25) → mAP50=0.904 (finetune run 76, cycle 2) ✅
-- PERSONNEL: mAP50=0.780 (baseline run 29) → mAP50=0.873 (finetune run 75, cycle 2) ✅
-- GENERAL: mAP50=0.784 (baseline run 30) — finetune cycle 1 QUEUED (run 79) 🔄
-- AIRCRAFT finetune cycle 2 QUEUED (run 77) 🔄
-- VEHICLE finetune cycle 3 QUEUED (run 78) 🔄
-- 62 ANNOTATED clips in DB; 8 PACKAGED scraped datasets accumulated
+**Training status (2026-06-02):**
+- AIRCRAFT: 0.929 (baseline run 13) → 0.968 (Kaggle finetune run 68) → 0.964 (scraped finetune run 77) ✅ — run 68 still best weights
+- VEHICLE: 0.871 (baseline run 25) → 0.904 (Kaggle finetune run 76) → scraped finetune run 78 QUEUED overnight 🔄
+- PERSONNEL: 0.780 (baseline run 29) → 0.873 (Kaggle finetune run 75, cycle 2) ✅
+- GENERAL: 0.784 (baseline run 30) → scraped finetune run 79 QUEUED overnight 🔄
+- 62+ ANNOTATED clips in DB; scraped merged datasets in GCS (merged/VEHICLE, merged/GENERAL)
 
 **Web app — complete ✅:**
 - Public feed, archive, submit, hero, ticker, ML cards — all wired to live DB/API
@@ -759,6 +759,16 @@ Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 ✅, Phase 4 ✅
 - training-engine VM ✅ — n1-standard-4 + T4 Spot; Instance Schedule 04:30 UTC start; startup script checks DB for QUEUED TrainingRuns → shuts down immediately if none; Q=training: train_finetune × 4 models; downloads merged from GCS, trains, uploads weights, self-shuts
 - CI/CD live ✅ — GitHub Actions: frontend build + ruff lint → auto-deploy to e2-micro on push to main; deploy-inference-engine manual workflow
 - 1-T4 quota constraint enforced: inference stops at 04:00, training starts at 04:30 (30-min buffer)
+
+**Bug fixes applied (2026-06-01):**
+- [x] `train_finetune`: `acks_late=True + reject_on_worker_lost=True` — tasks survive VM preemption/SIGKILL; no task loss on spot preemption
+- [x] `train_finetune`: shutdown now checks remaining QUEUED/RUNNING runs — was shutting down after first model completed
+- [x] `train_finetune`: `_delete_gcs_merged()` cleans up `merged/<MODEL>/` from GCS after training (was accumulating indefinitely)
+- [x] `train_finetune`: `total_train_images` saved to run metrics (fixes zero on training stats page)
+- [x] `infra/gcp/main.tf`: `--pool=solo` added to celery-training ExecStart (YOLO spawns child processes; billiard daemon restriction)
+- [x] `web-app/backend/api/public.py`: `/api/stats` shows latest completed run mAP, not historical best
+- [x] `web-app/frontend`: video autoplay race condition fixed — `@canplay` handler in FootageModal; `.catch()` on FootageCard hover-play
+- [x] `web-app/frontend`: nav logo mark replaced with favicon SVG across AppNav, AdminPanel, AdminLogin
 
 **Bug fixes applied (2026-05-29 → 2026-05-31):**
 - [x] `package_dataset`: merged dirs backed up to GCS after every append (survives VM recreation)
