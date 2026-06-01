@@ -78,6 +78,8 @@ def _extract_metrics(results) -> dict:
     bind=True,
     name="tasks.train_finetune.train_finetune",
     queue="training",
+    acks_late=True,
+    reject_on_worker_lost=True,
     autoretry_for=(Exception,),
     max_retries=1,
     default_retry_delay=300,
