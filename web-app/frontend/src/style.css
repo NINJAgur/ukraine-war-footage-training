@@ -918,12 +918,15 @@ section { padding: clamp(60px, 8vw, 100px) clamp(20px, 5vw, 80px); }
 .pipeline-wrap {
   padding: 0 clamp(20px, 5vw, 80px) clamp(20px, 3vw, 32px);
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
 }
+.pipeline-wrap::-webkit-scrollbar { display: none; }
 .pipeline-svg {
   display: block;
   width: 100%;
   height: auto;
-  min-width: 700px;
+  min-width: 680px;
 }
 
 /* ─── FOOTER ─── */
@@ -1060,6 +1063,9 @@ footer { background: var(--bg-1); border-top: 1px solid var(--fg-3); padding: cl
 
   /* FOOTER */
   .footer-bottom { flex-direction: column; gap: 8px; align-items: flex-start; }
+}
+@media (max-width: 480px) {
+  .footer-top { grid-template-columns: 1fr; gap: 32px; }
 }
 
 /* Small mobile (≤ 480px) */
