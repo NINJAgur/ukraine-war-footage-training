@@ -48,13 +48,12 @@
     <!-- Per-run drill-down -->
     <div class="drill-header" style="position:relative;z-index:1">
       <span class="drill-label mono">Run drill-down</span>
-      <div class="drill-tabs">
-        <button
-          v-for="r in availableRuns" :key="r.run_id"
-          :class="['drill-tab mono', `tab-${r.model.toLowerCase()}`, { active: selectedRunId === r.run_id }]"
-          @click="selectRun(r.run_id)"
-        >#{{ r.run_id }} {{ r.model }} <span class="tab-stage">{{ r.stage.toLowerCase() }}</span></button>
-      </div>
+      <select class="drill-select mono" @change="e => selectRun(+e.target.value || null)">
+        <option value="">— Select a run —</option>
+        <option v-for="r in availableRuns" :key="r.run_id" :value="r.run_id">
+          #{{ r.run_id }} {{ r.model }} · {{ r.stage.toLowerCase() }} · mAP50={{ (r.map50||0).toFixed(3) }}
+        </option>
+      </select>
     </div>
 
     <transition name="drill-expand">
@@ -171,7 +170,10 @@ const cmLabels = computed(() => {
 })
 
 const availableRuns = computed(() =>
-  epochData.value.filter(r => r.epochs?.length).sort((a,b) => a.run_id - b.run_id)
+  epochData.value.filter(r => r.epochs?.length).map(r => ({
+    ...r,
+    map50: r.epochs ? Math.max(...r.epochs.map(e => e['metrics/mAP50(B)'] || 0)) : null,
+  })).sort((a,b) => a.run_id - b.run_id)
 )
 const selectedRun = computed(() => epochData.value.find(r => r.run_id === selectedRunId.value))
 
@@ -374,14 +376,14 @@ onMounted(fetch_)
 /* Drill-down */
 .drill-header { display: flex; align-items: center; gap: 20px; padding: 20px clamp(20px,5vw,80px); border-top: 1px solid var(--fg-3); flex-wrap: wrap; }
 .drill-label { font-size: 10px; color: var(--fg-3); letter-spacing: 0.18em; flex-shrink: 0; }
-.drill-tabs { display: flex; gap: 2px; flex-wrap: wrap; }
-.drill-tab { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; padding: 5px 12px; border: 1px solid var(--fg-3); background: none; color: var(--fg-3); cursor: pointer; transition: all 0.15s; }
-.drill-tab .tab-stage { opacity: 0.6; font-size: 9px; }
-.drill-tab:hover { color: var(--fg-0); border-color: var(--fg-1); }
-.tab-aircraft.active  { color: var(--cat-color-aircraft);   border-color: var(--cat-color-aircraft); }
-.tab-vehicle.active   { color: var(--cat-color-vehicles);   border-color: var(--cat-color-vehicles); }
-.tab-personnel.active { color: var(--cat-color-personnel);  border-color: var(--cat-color-personnel); }
-.tab-general.active   { color: var(--cat-color-generalist); border-color: var(--cat-color-generalist); }
+.drill-select {
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em;
+  background: var(--bg-2); color: var(--fg-1); border: 1px solid var(--fg-3);
+  padding: 7px 14px; cursor: pointer; outline: none; min-width: 280px;
+  transition: border-color 0.15s;
+}
+.drill-select:focus, .drill-select:hover { border-color: var(--amber); }
+.drill-select option { background: var(--bg-2); color: var(--fg-1); }
 
 .drill-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 2px; padding: 2px; }
 
