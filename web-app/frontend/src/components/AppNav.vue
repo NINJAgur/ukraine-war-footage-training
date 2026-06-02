@@ -59,15 +59,18 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
+import { useRoute } from 'vue-router'
 
 const sections = ['detection', 'archive', 'capabilities']
 const scrolled = ref(false)
-const activeSection = ref('detection')
+const activeSection = ref('')
 const menuOpen = ref(false)
+const route = useRoute()
 
 function onScroll() {
   scrolled.value = window.scrollY > 20
-  let current = 'archive'
+  if (route.path !== '/') return
+  let current = ''
   for (const id of sections) {
     const el = document.getElementById(id)
     if (el && el.getBoundingClientRect().top <= 80) current = id
