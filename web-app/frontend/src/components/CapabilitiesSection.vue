@@ -65,11 +65,11 @@
             letter-spacing="1.8">{{ node.sub }}</text>
         </g>
 
-        <!-- grey animated dashes through each chevron junction -->
+        <!-- grey animated dashes at each chevron junction (tip of node i-1 → notch of node i) -->
         <line v-for="i in 5" :key="`l${i}`"
-          :x1="i*190 + 148" y1="85"
-          :x2="i*190 + 42 + 190" y2="85"
-          stroke="rgba(255,255,255,0.18)" stroke-width="1.5"
+          :x1="i*190 - 28" y1="85"
+          :x2="i*190 + 52" y2="85"
+          stroke="rgba(255,255,255,0.2)" stroke-width="1.5"
           stroke-dasharray="4 7"
         >
           <animate attributeName="stroke-dashoffset"
