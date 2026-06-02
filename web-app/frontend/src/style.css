@@ -962,12 +962,37 @@ section { padding: clamp(60px, 8vw, 100px) clamp(20px, 5vw, 80px); }
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
-.pipeline-arrow {
-  font-family: var(--font-mono);
-  font-size: 18px;
-  color: var(--fg-3);
-  padding: 0 8px;
+.pipeline-connector {
+  position: relative;
+  width: 40px;
+  height: 2px;
+  background: rgba(255,255,255,0.08);
   flex-shrink: 0;
+  align-self: center;
+  overflow: visible;
+}
+.connector-dot {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: var(--amber);
+  border-radius: 50%;
+  top: -3px;
+  box-shadow: 0 0 6px var(--amber);
+  animation: pipe-travel 2.4s ease-in-out infinite;
+}
+@keyframes pipe-travel {
+  0%   { left: -8px; opacity: 0; }
+  15%  { opacity: 1; }
+  85%  { opacity: 1; }
+  100% { left: 40px; opacity: 0; }
+}
+.pipeline-node {
+  animation: node-breathe 3s ease-in-out infinite;
+}
+@keyframes node-breathe {
+  0%, 100% { border-color: var(--fg-3); }
+  50%       { border-color: rgba(223, 105, 0, 0.4); }
 }
 @media (max-width: 768px) {
   .pipeline-diagram { padding: 32px 20px 0; gap: 0; }

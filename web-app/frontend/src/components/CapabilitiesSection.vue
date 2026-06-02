@@ -12,12 +12,14 @@
     <!-- Pipeline diagram -->
     <div class="pipeline-diagram">
       <div v-for="(node, i) in pipeline" :key="node.id" class="pipeline-row">
-        <div class="pipeline-node">
+        <div class="pipeline-node" :style="{ animationDelay: `${i * 0.4}s` }">
           <div class="pipeline-node-label">{{ node.label }}</div>
           <div class="pipeline-node-stat">{{ node.stat }}</div>
           <div class="pipeline-node-sub">{{ node.sub }}</div>
         </div>
-        <div v-if="i < pipeline.length - 1" class="pipeline-arrow">→</div>
+        <div v-if="i < pipeline.length - 1" class="pipeline-connector">
+          <div class="connector-dot" :style="{ animationDelay: `${i * 0.4}s` }"></div>
+        </div>
       </div>
     </div>
 
