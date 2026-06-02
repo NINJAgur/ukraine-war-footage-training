@@ -30,13 +30,13 @@
       <!-- Clips over time -->
       <div class="chart-card chart-wide">
         <div class="chart-label mono">Clips annotated · last {{ days }} days</div>
-        <canvas ref="clipsChart" height="90"></canvas>
+        <canvas ref="clipsChart"></canvas>
       </div>
 
       <!-- Class breakdown -->
       <div class="chart-card">
         <div class="chart-label mono">By detection class</div>
-        <canvas ref="breakdownChart" height="180"></canvas>
+        <canvas ref="breakdownChart"></canvas>
       </div>
 
       <!-- Model evolution — always full history -->
@@ -97,7 +97,8 @@ const detectionIndex = computed(() => {
 
 const BASE = {
   responsive: true,
-  maintainAspectRatio: false,
+  maintainAspectRatio: true,
+  aspectRatio: 3,
   plugins: { legend: { display: false } },
   scales: {
     x: { grid: { color: C.grid }, ticks: { color: C.tick, font: { family: 'IBM Plex Mono', size: 10 }, maxRotation: 0 } },
@@ -130,13 +131,7 @@ function buildCharts() {
         labels: d.detection_breakdown.map(r => r.class),
         datasets: [{ data: d.detection_breakdown.map(r => r.count), backgroundColor: d.detection_breakdown.map(r => CLASS_COLORS[r.class] || C.amber), borderWidth: 0 }],
       },
-      options: {
-        ...BASE,
-        scales: {
-          x: { ...BASE.scales.x },
-          y: { ...BASE.scales.y },
-        },
-      },
+      options: { ...BASE, aspectRatio: 1.8 },
     })
   }
 
