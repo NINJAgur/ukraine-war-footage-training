@@ -21,33 +21,33 @@
         <div class="det-index-num" :style="{ color: item.color }">{{ item.count }}</div>
         <div class="det-index-label mono">{{ item.label }}</div>
       </div>
-      <div class="det-index-note mono">detections in open-source footage · YOLOv8m conf≥0.25 · last {{ days }} days</div>
+      <div class="det-index-note mono">det_class annotations · YOLOv8m conf≥0.25 iou=0.45 · {{ days }}d window</div>
     </div>
 
     <div v-if="loading" class="analytics-loading mono" style="position:relative;z-index:1">Loading...</div>
 
     <div v-else class="analytics-grid" style="position:relative;z-index:1">
-      <!-- Clips over time -->
+      <!-- Annotated clips per day -->
       <div class="chart-card chart-wide">
-        <div class="chart-label mono">Clips annotated · last {{ days }} days</div>
+        <div class="chart-label mono">Inference throughput — annotated clips / day · conf≥0.25</div>
         <canvas ref="clipsChart"></canvas>
       </div>
 
-      <!-- Class breakdown -->
+      <!-- Class distribution (det_class) -->
       <div class="chart-card">
-        <div class="chart-label mono">By detection class</div>
+        <div class="chart-label mono">Detection class distribution · {{ days }}d window</div>
         <canvas ref="breakdownChart"></canvas>
       </div>
 
-      <!-- Clips by source -->
+      <!-- Bounding box volume per day -->
       <div class="chart-card">
-        <div class="chart-label mono">Clips by source</div>
+        <div class="chart-label mono">Bounding box volume / day · all classes · iou=0.45</div>
         <canvas ref="sourceChart"></canvas>
       </div>
 
-      <!-- Model evolution -->
+      <!-- mAP50 per training run -->
       <div class="chart-card chart-wide">
-        <div class="chart-label mono">Model mAP50 — self-improving flywheel · last {{ days }} days</div>
+        <div class="chart-label mono">mAP50@0.5 per training run — Kaggle baseline → scraped finetune</div>
         <canvas ref="mapChart"></canvas>
       </div>
     </div>
@@ -172,14 +172,29 @@ function buildCharts() {
     })
   }
 
-  if (sourceChart.value && d.by_source.length) {
+  if (sourceChart.value) {
+    const boxes = d.detection_boxes_per_day || []
+    const labels = boxes.map(r => r.date.slice(5))
     charts.source = new Chart(sourceChart.value, {
       type: 'bar',
       data: {
-        labels: d.by_source.map(r => r.source.toUpperCase()),
-        datasets: [{ data: d.by_source.map(r => r.count), backgroundColor: [C.amber, 'oklch(0.62 0.16 220deg)'], borderWidth: 0 }],
+        labels,
+        datasets: [
+          { label: 'AIRCRAFT',  data: boxes.map(r => r.aircraft),  backgroundColor: C.aircraft,  borderWidth: 0 },
+          { label: 'VEHICLE',   data: boxes.map(r => r.vehicle),   backgroundColor: C.vehicle,   borderWidth: 0 },
+          { label: 'PERSONNEL', data: boxes.map(r => r.personnel), backgroundColor: C.personnel, borderWidth: 0 },
+        ],
       },
-      options: { ...BASE, aspectRatio: 1.8, indexAxis: 'y' },
+      options: {
+        ...BASE, aspectRatio: 1.8,
+        scales: {
+          x: { ...BASE.scales.x, stacked: true },
+          y: { ...BASE.scales.y, stacked: true, title: { display: true, text: 'bbox count', color: C.tick, font: { family: 'IBM Plex Mono', size: 9 } } },
+        },
+        plugins: {
+          legend: { display: true, position: 'bottom', labels: { color: C.tick, font: { family: 'IBM Plex Mono', size: 9 }, boxWidth: 10, padding: 10 } },
+        },
+      },
     })
   }
 }

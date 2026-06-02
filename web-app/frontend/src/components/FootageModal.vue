@@ -28,14 +28,14 @@
           <div v-else class="modal-video-label">
             ANNOTATED FOOTAGE<br>{{ item.detClass }} — {{ item.source }}
           </div>
-          <div v-if="item.videoUrl" class="speed-controls mono">
-            <span class="speed-label">SPEED</span>
-            <button
-              v-for="s in speeds" :key="s"
-              :class="{ active: speed === s }"
-              @click="setSpeed(s)"
-            >{{ s }}×</button>
-          </div>
+        </div>
+        <div v-if="item.videoUrl" class="speed-controls mono">
+          <span class="speed-label">SPEED</span>
+          <button
+            v-for="s in speeds" :key="s"
+            :class="{ active: speed === s }"
+            @click="setSpeed(s)"
+          >{{ s }}×</button>
         </div>
         <div class="modal-meta-grid">
           <div v-for="cell in metaCells" :key="cell.k" class="modal-meta-cell">

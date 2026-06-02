@@ -115,9 +115,28 @@ const endpoints = [
   },
   {
     method: 'GET',
-    path: '/api/stats/charts',
-    desc: 'Aggregated chart data: clips per day, detection breakdown, mAP50 timeline. (Coming in Phase 5.4)',
-    example: `# Not yet available — coming soon`,
+    path: '/api/stats/charts?days=30',
+    desc: 'Aggregated analytics data — all time-filtered. days param: 7, 30, or 90.',
+    example: `curl https://ukrarchive.duckdns.org/api/stats/charts?days=30
+
+{
+  "clips_per_day": [{ "date": "2026-06-01", "count": 4 }, ...],
+  "detection_breakdown": [
+    { "class": "VEHICLE",   "count": 38 },
+    { "class": "AIRCRAFT",  "count": 12 },
+    { "class": "PERSONNEL", "count": 9  }
+  ],
+  "by_class_per_day": [
+    { "date": "2026-06-01", "VEHICLE": 3, "AIRCRAFT": 1 },
+    ...
+  ],
+  "map50_timeline": [
+    { "run_id": 13, "model": "AIRCRAFT", "stage": "BASELINE", "map50": 0.929, "date": "..." },
+    { "run_id": 68, "model": "AIRCRAFT", "stage": "FINETUNE",  "map50": 0.968, "date": "..." },
+    ...
+  ],
+  "days": 30
+}`,
   },
 ]
 </script>

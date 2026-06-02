@@ -5,7 +5,7 @@ from typing import Optional
 
 import cv2
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import Integer as sqlalchemy_Integer, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models import Clip, ClipSource, ClipStatus, ModelType, TrainingRun, TrainingStatus
@@ -316,13 +316,20 @@ async def get_stats_charts(
     )).all()
     detection_breakdown = [{"class": r.det_class, "count": r.count} for r in breakdown_rows]
 
-    # Clips by source (time-filtered)
-    source_rows = (await db.execute(
-        select(Clip.source, func.count(Clip.id).label("count"))
-        .where(Clip.status == ClipStatus.ANNOTATED, Clip.created_at >= cutoff)
-        .group_by(Clip.source)
+    # Total detection box counts per day from detection_counts JSON column
+    from sqlalchemy import cast, Date as SADate
+    det_rows = (await db.execute(
+        select(
+            cast(Clip.created_at, SADate).label("day"),
+            func.coalesce(func.sum(func.cast(Clip.detection_counts["aircraft"].astext, sqlalchemy_Integer)), 0).label("aircraft"),
+            func.coalesce(func.sum(func.cast(Clip.detection_counts["vehicle"].astext, sqlalchemy_Integer)), 0).label("vehicle"),
+            func.coalesce(func.sum(func.cast(Clip.detection_counts["personnel"].astext, sqlalchemy_Integer)), 0).label("personnel"),
+        )
+        .where(Clip.status == ClipStatus.ANNOTATED, Clip.detection_counts.isnot(None), Clip.created_at >= cutoff)
+        .group_by(cast(Clip.created_at, SADate))
+        .order_by(cast(Clip.created_at, SADate))
     )).all()
-    by_source = [{"source": r.source.value if r.source else "unknown", "count": r.count} for r in source_rows]
+    detection_boxes_per_day = [{"date": str(r.day), "aircraft": int(r.aircraft), "vehicle": int(r.vehicle), "personnel": int(r.personnel)} for r in det_rows]
 
     # mAP50 timeline across training runs
     runs = (await db.execute(
@@ -350,7 +357,7 @@ async def get_stats_charts(
     return {
         "clips_per_day": clips_per_day,
         "detection_breakdown": detection_breakdown,
-        "by_source": by_source,
+        "detection_boxes_per_day": detection_boxes_per_day,
         "map50_timeline": map50_timeline,
         "days": days,
     }
