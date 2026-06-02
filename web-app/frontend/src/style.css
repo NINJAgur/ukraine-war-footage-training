@@ -914,6 +914,61 @@ section { padding: clamp(60px, 8vw, 100px) clamp(20px, 5vw, 80px); }
 .about-list li { padding: 14px 0; border-bottom: 1px solid var(--fg-3); font-size: 13px; color: var(--fg-1); display: flex; gap: 16px; font-family: var(--font-mono); }
 .about-list li .list-marker { color: var(--amber); font-size: 10px; }
 
+/* ─── PIPELINE MOBILE ─── */
+.pipeline-mobile { display: none; }
+@media (max-width: 640px) {
+  .pipeline-mobile {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    padding: 0 20px 32px;
+    gap: 0;
+  }
+  .pipeline-mobile-row { display: flex; flex-direction: column; align-items: center; }
+  .pipeline-mobile-node {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    border: 1px solid var(--fg-3);
+    background: var(--bg-2);
+    padding: 14px 20px;
+    gap: 16px;
+  }
+  .pipeline-mobile-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    color: var(--amber);
+    text-transform: uppercase;
+    min-width: 80px;
+  }
+  .pipeline-mobile-stat {
+    font-family: var(--font-mono);
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--fg-0);
+    flex: 1;
+    text-align: center;
+  }
+  .pipeline-mobile-sub {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--fg-3);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    text-align: right;
+    min-width: 80px;
+  }
+  .pipeline-mobile-arrow {
+    font-size: 14px;
+    color: var(--amber);
+    opacity: 0.5;
+    padding: 4px 0;
+  }
+  .pipeline-wrap { display: none; }
+}
+
 /* ─── PIPELINE SVG ─── */
 .pipeline-wrap {
   padding: 0 clamp(20px, 5vw, 80px) clamp(20px, 3vw, 32px);

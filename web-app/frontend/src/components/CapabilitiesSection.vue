@@ -9,7 +9,19 @@
         <h2 class="section-title">Automated pipeline</h2>
       </div>
     </div>
-    <!-- Pipeline SVG diagram -->
+    <!-- Mobile pipeline: vertical list (hidden on desktop) -->
+    <div class="pipeline-mobile">
+      <div v-for="(node, i) in pipeline" :key="node.id" class="pipeline-mobile-row">
+        <div class="pipeline-mobile-node">
+          <span class="pipeline-mobile-label">{{ node.label }}</span>
+          <span class="pipeline-mobile-stat">{{ node.stat }}</span>
+          <span class="pipeline-mobile-sub">{{ node.sub }}</span>
+        </div>
+        <div v-if="i < pipeline.length - 1" class="pipeline-mobile-arrow">↓</div>
+      </div>
+    </div>
+
+    <!-- Desktop pipeline SVG (hidden on mobile) -->
     <div class="pipeline-wrap">
       <svg class="pipeline-svg" viewBox="0 0 1140 170" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
         <defs>
