@@ -83,7 +83,7 @@
             <div class="cm-grid" :style="{ gridTemplateColumns: `repeat(${selectedRun.confusion_matrix.length}, 1fr)` }">
               <template v-for="(row, r) in selectedRun.confusion_matrix" :key="r">
                 <div v-for="(val, c) in row" :key="c" class="cm-cell"
-                  :style="{ opacity: 0.15 + 0.85 * (val / cmMax), background: `var(--cat-color-aircraft)` }"
+                  :style="{ background: `rgba(96,165,250,${0.08 + 0.92 * (val / (cmMax||1))})` }"
                   :title="`${cmLabels[r]}→${cmLabels[c]}: ${val.toFixed(0)}`">
                   <span class="cm-val mono">{{ val > 0 ? val.toFixed(0) : '' }}</span>
                 </div>

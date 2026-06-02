@@ -429,7 +429,8 @@ async def get_stats_charts(
     # Radar needs all-time best per model — add separately if not in filtered runs
     for r in runs:
         model_name2 = r.model_type.value if r.model_type else None
-        if not model_name2: continue
+        if not model_name2:
+            continue
         already = any(t["model"] == model_name2 for t in training_scatter)
         if not already:
             m2 = r.metrics or {}
