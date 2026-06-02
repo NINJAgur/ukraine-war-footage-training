@@ -764,11 +764,15 @@ Hero → TickerBar → DataStrip → MLDetectionSection → AnalyticsSection →
 - [x] **5.2a** Animated SVG chevron pipeline diagram above cap-grid — chevron arrow shapes, animated grey dashes at junctions, traveling amber dot, live stats from `/api/stats`
 - [x] **5.2b** Mobile: vertical list layout ≤640px (SVG hidden)
 
-#### 5.3 — Model Hub (in CapabilitiesSection + API)
-- [ ] **5.3a** Make GCS weight objects public-read — AIRCRAFT run 68, VEHICLE run 76, PERSONNEL run 75, GENERAL run 30
-- [ ] **5.3b** `GET /api/models` — 4 models: latest DONE run, mAP50, training images, GCS download URL
-- [ ] **5.3c** Model download cards in `CapabilitiesSection.vue` — 4 cards with mAP50 badge + training images + download `.pt` button; wired to `/api/models`
-- [ ] **5.3d** API docs page (`/api-docs`) — endpoint reference, example curl, model spec, disclaimer
+#### 5.3 — Model Hub ✅
+- [x] **5.3a** GCS weights already public-read (bucket `allUsers` objectViewer IAM)
+- [x] **5.3b** `GET /api/models` — all DONE runs per model with `is_best` flag + GCS download URL
+- [x] **5.3c** Model download cards in `CapabilitiesSection.vue` — 4-col responsive grid (2-col ≤900px, 1-col ≤480px); badge colors from `--cat-color-*` vars
+- [x] **5.3d** `/api-docs` page — endpoint reference, curl examples, model spec
+- [x] **5.3e** `/models` page — version history table grouped by model (all runs, date/mAP50/download, best highlighted)
+- [x] **5.3f** AppNav updated: Models + API route links (desktop + mobile menu); scroll-spy disabled on non-home routes
+- [x] **5.3g** SiteFooter Models column links to `/models` and `/api-docs`
+- [x] **5.3h** `/api/annotated-clips` returns `description` field; FootageModal shows real clip description
 
 #### 5.4 — Analytics & Detection Index (new AnalyticsSection)
 - [ ] **5.4a** Add `detection_counts` JSON column to `clips` table in `shared/db/models.py` — `{aircraft: N, vehicle: N, personnel: N, total: N}`; alembic migration
@@ -776,12 +780,6 @@ Hero → TickerBar → DataStrip → MLDetectionSection → AnalyticsSection →
 - [ ] **5.4c** `GET /api/stats/charts` — clips annotated per day (7d + 30d), detection breakdown by class, clips by source, mAP50 timeline across training runs
 - [ ] **5.4d** New `AnalyticsSection.vue` — Chart.js bar/line/pie charts wired to `/api/stats/charts`; amber/slate palette
 - [ ] **5.4e** Weekly detection index in AnalyticsSection — "Week of Jun 2–8: 47 aircraft, 183 vehicle — conf≥0.25" with methodology note
-
-#### 5.5 — Live Inference Demo (placement TBD)
-- [ ] **5.5a** `POST /api/infer` — multipart image upload, CPU YOLO inference, returns `{detections, counts, model, inference_ms}`; rate-limited per IP via Redis
-- [ ] **5.5b** File validation: max 10MB, JPG/PNG/WEBP; 429 on rate limit exceeded
-- [ ] **5.5c** Frontend demo page (`/demo`) — drag-and-drop upload, annotated result overlay, detection list
-
 
 ---
 

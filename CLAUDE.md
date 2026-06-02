@@ -215,6 +215,7 @@ Run training-engine tests: `cd training-engine && python -m pytest tests/`
 | 2 | ML pipeline — training | ✅ Complete (AIRCRAFT 0.968 run 68, VEHICLE 0.904 run 76, PERSONNEL 0.873 run 75, GENERAL 0.784 run 30; scraped finetuning ongoing) |
 | 3 | Web application | ✅ Complete (Celery E2E, hero video, WebSocket progress bar, integration smoke test — 58 annotated clips) |
 | 4 | Cloud & DevOps | ✅ Complete (GCP e2-micro ✅; T4 Spot VM ✅; GCS pipeline ✅; HTTPS ✅ ukrarchive.duckdns.org Let's Encrypt; CI/CD ✅ GitHub Actions deploy-on-push; mobile-responsive frontend ✅) |
+| 5 | ML Showcase — **models as the product** | 🔄 In progress (5.1–5.3 ✅: restructure + pipeline diagram + model hub; 5.4 analytics pending) |
 
 ---
 
@@ -237,6 +238,9 @@ Slash commands in `.claude/commands/` wire up the `agents/` domain docs. Invoke 
 | `/research-deploy` | Before new infra/cloud changes | `agents/cloud-deploy/research.md` |
 | `/review-deploy` | Docker Compose + Dockerfile review | `agents/cloud-deploy/review.md` |
 | `/qa-deploy` | Production deployment health check | `agents/cloud-deploy/qa.md` |
+| `/research-showcase` | Before new Phase 5 features (analytics charts, detection index) | `agents/ml-showcase/research.md` |
+| `/review-showcase` | After Phase 5 code changes | `agents/ml-showcase/review.md` |
+| `/qa-showcase` | Phase 5 QA — API correctness, chart data, weight downloads | `agents/ml-showcase/qa.md` |
 
 ### When to spawn (demand criteria)
 
