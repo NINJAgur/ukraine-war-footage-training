@@ -918,19 +918,20 @@ section { padding: clamp(60px, 8vw, 100px) clamp(20px, 5vw, 80px); }
 .model-downloads { padding: clamp(40px, 5vw, 60px) clamp(20px, 5vw, 80px); border-top: 1px solid var(--fg-3); }
 .model-downloads-header { margin-bottom: 24px; }
 .model-downloads-title { font-size: 20px; font-weight: 600; margin: 8px 0 0; }
-.model-dl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 2px; margin-bottom: 20px; }
-.model-dl-card { background: var(--bg-2); padding: 20px; display: flex; flex-direction: column; gap: 12px; border: 1px solid var(--fg-3); }
-.model-dl-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.model-dl-rows { display: flex; flex-direction: column; margin-bottom: 20px; }
 .model-badge { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.18em; padding: 3px 10px; border: 1px solid; flex-shrink: 0; }
 .badge-aircraft  { color: var(--cat-color-aircraft);   border-color: color-mix(in oklch, var(--cat-color-aircraft)  40%, transparent); }
 .badge-vehicle   { color: var(--cat-color-vehicles);   border-color: color-mix(in oklch, var(--cat-color-vehicles)  40%, transparent); }
 .badge-personnel { color: var(--cat-color-personnel);  border-color: color-mix(in oklch, var(--cat-color-personnel) 40%, transparent); }
 .badge-general   { color: var(--cat-color-generalist); border-color: color-mix(in oklch, var(--cat-color-generalist) 40%, transparent); }
-.model-dl-map { font-size: 11px; color: var(--fg-2); }
-.model-dl-desc { font-size: 11px; color: var(--fg-3); line-height: 1.5; letter-spacing: 0.02em; }
-.model-dl-btn { display: block; text-align: center; padding: 9px 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; color: var(--amber); border: 1px solid var(--amber-border); text-decoration: none; transition: background 0.15s; margin-top: auto; }
+.model-dl-row { display: grid; grid-template-columns: 110px 1fr 130px 100px; align-items: center; gap: 24px; padding: 16px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
+.model-dl-row:first-child { border-top: 1px solid rgba(255,255,255,0.06); }
+.model-dl-desc { font-size: 12px; color: var(--fg-3); letter-spacing: 0.02em; }
+.model-dl-map { font-size: 15px; font-weight: 600; color: var(--fg-0); text-align: right; white-space: nowrap; }
+.model-dl-btn { display: block; text-align: center; padding: 8px 12px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; color: var(--amber); border: 1px solid var(--amber-border); text-decoration: none; transition: background 0.15s; }
 .model-dl-btn:hover { background: var(--amber-glow); }
 .model-dl-pending { color: var(--fg-3); border-color: var(--fg-3); }
+@media (max-width: 600px) { .model-dl-row { grid-template-columns: 90px 1fr 80px; } .model-dl-desc { display: none; } }
 .model-all-link { font-size: 12px; color: var(--fg-3); text-decoration: none; letter-spacing: 0.08em; transition: color 0.15s; }
 .model-all-link:hover { color: var(--amber); }
 

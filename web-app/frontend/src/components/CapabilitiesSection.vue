@@ -129,23 +129,20 @@
       </div>
     </div>
 
-    <!-- Model download cards -->
+    <!-- Model download rows -->
     <div class="model-downloads">
       <div class="model-downloads-header">
         <div class="section-tag">Models</div>
         <h3 class="model-downloads-title">Download Best Weights</h3>
       </div>
-      <div class="model-dl-grid">
-        <div v-for="m in bestModels" :key="m.model" class="model-dl-card">
-          <div class="model-dl-top">
-            <span class="model-badge" :class="`badge-${m.model.toLowerCase()}`">{{ m.model }}</span>
-            <span class="model-dl-map mono" v-if="m.map50 != null">{{ m.map50.toFixed(3) }} mAP50</span>
-          </div>
-          <div class="model-dl-desc mono">{{ m.classes?.covers }}</div>
-          <a v-if="m.download_url" :href="m.download_url" class="model-dl-btn" download>
-            best.pt &nbsp;~49MB
-          </a>
-          <span v-else class="model-dl-btn model-dl-pending mono">Training...</span>
+      <div class="model-dl-rows">
+        <div v-for="m in bestModels" :key="m.model" class="model-dl-row">
+          <span class="model-badge" :class="`badge-${m.model.toLowerCase()}`">{{ m.model }}</span>
+          <span class="model-dl-desc mono">{{ m.classes?.covers }}</span>
+          <span class="model-dl-map mono" v-if="m.map50 != null">{{ m.map50.toFixed(3) }} <span style="color:var(--fg-3);font-size:10px">mAP50</span></span>
+          <span class="model-dl-map mono" v-else style="color:var(--fg-3)">—</span>
+          <a v-if="m.download_url" :href="m.download_url" class="model-dl-btn" download>best.pt</a>
+          <span v-else class="model-dl-btn model-dl-pending mono">Training</span>
         </div>
       </div>
       <router-link to="/models" class="model-all-link mono">View all versions →</router-link>
