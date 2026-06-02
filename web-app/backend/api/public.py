@@ -363,20 +363,28 @@ async def get_stats_charts(
     )).all()
     detection_breakdown = [{"class": r.det_class, "count": r.count} for r in breakdown_rows]
 
-    # Total detection box counts per day from detection_counts JSON column
-    from sqlalchemy import cast, Date as SADate
-    det_rows = (await db.execute(
-        select(
-            cast(Clip.created_at, SADate).label("day"),
-            func.coalesce(func.sum(func.cast(Clip.detection_counts["aircraft"].astext, sqlalchemy_Integer)), 0).label("aircraft"),
-            func.coalesce(func.sum(func.cast(Clip.detection_counts["vehicle"].astext, sqlalchemy_Integer)), 0).label("vehicle"),
-            func.coalesce(func.sum(func.cast(Clip.detection_counts["personnel"].astext, sqlalchemy_Integer)), 0).label("personnel"),
-        )
-        .where(Clip.status == ClipStatus.ANNOTATED, Clip.detection_counts.isnot(None), Clip.created_at >= cutoff)
-        .group_by(cast(Clip.created_at, SADate))
-        .order_by(cast(Clip.created_at, SADate))
-    )).all()
-    detection_boxes_per_day = [{"date": str(r.day), "aircraft": int(r.aircraft), "vehicle": int(r.vehicle), "personnel": int(r.personnel)} for r in det_rows]
+    # Total detection box counts per day — raw SQL for JSON extraction
+    from sqlalchemy import cast, Date as SADate, text as sql_text
+    try:
+        det_rows = (await db.execute(
+            sql_text("""
+                SELECT
+                    DATE(created_at) AS day,
+                    COALESCE(SUM((detection_counts->>'aircraft')::int), 0) AS aircraft,
+                    COALESCE(SUM((detection_counts->>'vehicle')::int),  0) AS vehicle,
+                    COALESCE(SUM((detection_counts->>'personnel')::int),0) AS personnel
+                FROM clips
+                WHERE status = 'ANNOTATED'
+                  AND detection_counts IS NOT NULL
+                  AND created_at >= :cutoff
+                GROUP BY DATE(created_at)
+                ORDER BY DATE(created_at)
+            """),
+            {"cutoff": cutoff},
+        )).all()
+        detection_boxes_per_day = [{"date": str(r.day), "aircraft": int(r.aircraft), "vehicle": int(r.vehicle), "personnel": int(r.personnel)} for r in det_rows]
+    except Exception:
+        detection_boxes_per_day = []
 
     # All completed training runs with full metrics (for radar + scatter)
     runs = (await db.execute(
