@@ -65,6 +65,19 @@
             letter-spacing="1.8">{{ node.sub }}</text>
         </g>
 
+        <!-- grey animated dashes through each chevron junction -->
+        <line v-for="i in 5" :key="`l${i}`"
+          :x1="i*190 + 148" y1="85"
+          :x2="i*190 + 42 + 190" y2="85"
+          stroke="rgba(255,255,255,0.18)" stroke-width="1.5"
+          stroke-dasharray="4 7"
+        >
+          <animate attributeName="stroke-dashoffset"
+            from="22" to="0"
+            :dur="`${0.85 + i*0.04}s`"
+            repeatCount="indefinite" />
+        </line>
+
         <!-- animated dots traveling over the chevron tips -->
         <circle v-for="i in 5" :key="`d${i}`" r="4" cy="85"
           fill="#df6900" filter="url(#amber-glow)">
