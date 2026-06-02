@@ -135,9 +135,13 @@ def auto_label_clip(self, clip_id: int) -> dict:
         clip_hash = clip.url_hash[:12]
         clip_title = (clip.title or f"clip_{clip_id}")[:60]
         source = "funker530" if "funker530" in (clip.file_path or "") else "geoconfirmed"
+        score_aircraft  = clip.score_aircraft  or 0
+        score_vehicle   = clip.score_vehicle   or 0
+        score_personnel = clip.score_personnel or 0
+        score_uas       = clip.score_uas       or 0
         logger.info(
             f"[{self.request.id}] clip_id={clip_id}  source={source}  hash={clip_hash}  "
-            f"aircraft={clip.score_aircraft:.2f}  vehicle={clip.score_vehicle:.2f}  personnel={clip.score_personnel:.2f}\n"
+            f"aircraft={score_aircraft:.2f}  vehicle={score_vehicle:.2f}  personnel={score_personnel:.2f}  uas={score_uas:.2f}\n"
             f"    title: {clip_title}"
         )
 
@@ -248,7 +252,18 @@ def auto_label_clip(self, clip_id: int) -> dict:
                         detected_types.add(mt)
         except Exception:
             pass
-    detected_model_types_list = sorted(detected_types)
+    # Cross-validate GDINO detections against keyword scores.
+    # If GDINO detected a class but the clip has zero keyword score for it,
+    # treat it as a hallucination and exclude from training data.
+    _score_ok = {
+        "AIRCRAFT":  (score_aircraft > 0 or score_uas > 0),
+        "VEHICLE":   (score_vehicle > 0),
+        "PERSONNEL": (score_personnel > 0),
+    }
+    hallucinated = detected_types - {mt for mt in detected_types if _score_ok.get(mt, True)}
+    if hallucinated:
+        logger.info(f"[{self.request.id}] Dropping hallucinated GDINO types (score=0): {hallucinated}")
+    detected_model_types_list = sorted(mt for mt in detected_types if _score_ok.get(mt, True))
     logger.info(f"[{self.request.id}] detected_model_types={detected_model_types_list}")
 
     # ── Create Dataset record ─────────────────────────────────────────
