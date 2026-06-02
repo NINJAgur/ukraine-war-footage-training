@@ -28,6 +28,14 @@
           <div v-else class="modal-video-label">
             ANNOTATED FOOTAGE<br>{{ item.detClass }} — {{ item.source }}
           </div>
+          <div v-if="item.videoUrl" class="speed-controls mono">
+            <span class="speed-label">SPEED</span>
+            <button
+              v-for="s in speeds" :key="s"
+              :class="{ active: speed === s }"
+              @click="setSpeed(s)"
+            >{{ s }}×</button>
+          </div>
         </div>
         <div class="modal-meta-grid">
           <div v-for="cell in metaCells" :key="cell.k" class="modal-meta-cell">
@@ -49,8 +57,15 @@ const props = defineProps({ item: { type: Object, required: true } })
 defineEmits(['close'])
 
 const videoEl = ref(null)
+const speeds = [0.5, 1, 1.5, 2]
+const speed = ref(1)
+
 function tryPlay() {
   videoEl.value?.play().catch(() => {})
+}
+function setSpeed(s) {
+  speed.value = s
+  if (videoEl.value) videoEl.value.playbackRate = s
 }
 
 const metaCells = computed(() => [
