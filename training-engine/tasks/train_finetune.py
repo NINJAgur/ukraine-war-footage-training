@@ -67,11 +67,51 @@ def _delete_gcs_merged(bucket: str, model: str) -> None:
         logger.info(f"[train_finetune] Deleted gs://{bucket}/merged/{model}/ ({len(blobs)} blobs)")
 
 
-def _extract_metrics(results) -> dict:
+def _extract_metrics(results, run_dir: Path = None) -> dict:
+    metrics = {}
     try:
-        return dict(results.results_dict)
+        metrics.update(dict(results.results_dict))
     except Exception:
-        return {}
+        pass
+
+    # Epoch-by-epoch data from results.csv
+    if run_dir:
+        csv_path = run_dir / "results.csv"
+        if csv_path.exists():
+            try:
+                import csv as _csv
+                with open(csv_path, newline="") as f:
+                    rows = list(_csv.DictReader(f))
+                metrics["epochs_data"] = [
+                    {k.strip(): float(v.strip()) for k, v in row.items() if v.strip()}
+                    for row in rows
+                ]
+            except Exception as e:
+                logger.warning(f"Could not parse results.csv: {e}")
+
+    # Confusion matrix raw data
+    try:
+        cm = getattr(results, "confusion_matrix", None)
+        if cm is None and hasattr(results, "validator"):
+            cm = getattr(results.validator, "confusion_matrix", None)
+        if cm is not None and hasattr(cm, "matrix"):
+            metrics["confusion_matrix"] = cm.matrix.tolist()
+            metrics["confusion_matrix_nc"] = int(cm.nc) if hasattr(cm, "nc") else None
+    except Exception as e:
+        logger.warning(f"Could not extract confusion matrix: {e}")
+
+    # PR / P / R curve data from curves_results if available
+    try:
+        if hasattr(results, "curves_results"):
+            for name, val in results.curves_results.items():
+                try:
+                    metrics[f"curve_{name}"] = [float(v) for v in val] if hasattr(val, '__iter__') else float(val)
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+    return metrics
 
 
 @celery_app.task(
@@ -198,7 +238,7 @@ def train_finetune(self, training_run_id: int, scraped_merged_path: str = None) 
         if not weights_path.exists():
             raise FileNotFoundError(f"Training finished but best.pt not found: {weights_path}")
 
-        metrics = _extract_metrics(results)
+        metrics = _extract_metrics(results, run_dir=run_dir / run_name)
         metrics["total_train_images"] = total_train
 
         if settings.STORAGE_MODE == "remote" and settings.REMOTE_STORAGE_BUCKET:

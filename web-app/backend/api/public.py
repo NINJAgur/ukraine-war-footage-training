@@ -92,6 +92,7 @@ async def get_annotated_clips(db: AsyncSession = Depends(get_db)) -> list[dict]:
 
 _KAGGLE_DIR  = Path(__file__).parent.parent.parent.parent / "training-engine" / "media" / "kaggle_datasets"
 _RUNS_DIR    = Path(__file__).parent.parent.parent.parent / "training-engine" / "runs" / "baseline"
+_ALL_RUNS_DIR = Path(__file__).parent.parent.parent.parent / "training-engine" / "runs"
 _SOURCE_DATASETS = {"mihprofi", "nzigulic", "piterfm", "shakedlevnat", "sudipchakrabarty"}
 _MODELS = ["AIRCRAFT", "VEHICLE", "PERSONNEL", "GENERAL"]
 
@@ -283,6 +284,52 @@ def _run_map50(r: TrainingRun) -> float:
         return float(m[k]) if k else 0.0
     except (ValueError, TypeError):
         return 0.0
+
+
+@router.get("/training/epoch-data")
+async def get_epoch_data(db: AsyncSession = Depends(get_db)) -> list[dict]:
+    """Return per-epoch training metrics for all completed runs.
+    Reads from TrainingRun.metrics.epochs_data (set by train_finetune).
+    Falls back to local results.csv files on dev."""
+    import csv as _csv
+
+    runs = (await db.execute(
+        select(TrainingRun)
+        .where(TrainingRun.status == TrainingStatus.DONE)
+        .order_by(TrainingRun.id)
+    )).scalars().all()
+
+    result = []
+    for r in runs:
+        m = r.metrics or {}
+        model = r.model_type.value if r.model_type else None
+        stage = r.stage.value if r.stage else None
+        epochs_data = m.get("epochs_data")
+        confusion_matrix = m.get("confusion_matrix")
+
+        # Dev fallback: read from local runs directory
+        if not epochs_data and _ALL_RUNS_DIR.exists():
+            run_name = f"{stage.lower()}_{model}_{r.id}" if stage and model else None
+            if run_name:
+                for csv_path in _ALL_RUNS_DIR.rglob(f"*{r.id}/results.csv"):
+                    try:
+                        with open(csv_path, newline="") as f:
+                            epochs_data = [{k.strip(): float(v.strip()) for k, v in row.items() if v.strip()} for row in _csv.DictReader(f)]
+                        break
+                    except Exception:
+                        pass
+
+        if epochs_data:
+            result.append({
+                "run_id": r.id,
+                "model": model,
+                "stage": stage,
+                "completed_at": r.completed_at.isoformat() if r.completed_at else None,
+                "epochs": epochs_data,
+                "confusion_matrix": confusion_matrix,
+            })
+
+    return result
 
 
 @router.get("/stats/charts")
