@@ -1,4 +1,5 @@
 import hashlib
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -282,6 +283,77 @@ def _run_map50(r: TrainingRun) -> float:
         return float(m[k]) if k else 0.0
     except (ValueError, TypeError):
         return 0.0
+
+
+@router.get("/stats/charts")
+async def get_stats_charts(
+    days: int = Query(30, ge=7, le=90),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Aggregated chart data for the analytics section."""
+    from datetime import timedelta
+    from sqlalchemy import cast, Date as SADate
+
+    cutoff = datetime.utcnow() - timedelta(days=days)
+
+    # Clips annotated per day
+    clips_per_day_rows = (await db.execute(
+        select(
+            cast(Clip.created_at, SADate).label("day"),
+            func.count(Clip.id).label("count"),
+        )
+        .where(Clip.status == ClipStatus.ANNOTATED, Clip.created_at >= cutoff)
+        .group_by(cast(Clip.created_at, SADate))
+        .order_by(cast(Clip.created_at, SADate))
+    )).all()
+    clips_per_day = [{"date": str(r.day), "count": r.count} for r in clips_per_day_rows]
+
+    # Detection breakdown by det_class
+    breakdown_rows = (await db.execute(
+        select(Clip.det_class, func.count(Clip.id).label("count"))
+        .where(Clip.status == ClipStatus.ANNOTATED, Clip.det_class.isnot(None))
+        .group_by(Clip.det_class)
+    )).all()
+    detection_breakdown = [{"class": r.det_class, "count": r.count} for r in breakdown_rows]
+
+    # Clips by source
+    source_rows = (await db.execute(
+        select(Clip.source, func.count(Clip.id).label("count"))
+        .where(Clip.status == ClipStatus.ANNOTATED)
+        .group_by(Clip.source)
+    )).all()
+    by_source = [{"source": r.source.value if r.source else "unknown", "count": r.count} for r in source_rows]
+
+    # mAP50 timeline across training runs
+    runs = (await db.execute(
+        select(TrainingRun)
+        .where(TrainingRun.status == TrainingStatus.DONE, TrainingRun.completed_at.isnot(None))
+        .order_by(TrainingRun.completed_at)
+    )).scalars().all()
+    map50_timeline = []
+    for r in runs:
+        m = r.metrics or {}
+        k = next((k for k in m if "map50" in k.lower() and "map50-95" not in k.lower()), None)
+        try:
+            val = round(float(m[k]), 3) if k else None
+        except (ValueError, TypeError):
+            val = None
+        if val is not None:
+            map50_timeline.append({
+                "run_id": r.id,
+                "model": r.model_type.value if r.model_type else None,
+                "stage": r.stage.value if r.stage else None,
+                "map50": val,
+                "date": r.completed_at.isoformat(),
+            })
+
+    return {
+        "clips_per_day": clips_per_day,
+        "detection_breakdown": detection_breakdown,
+        "by_source": by_source,
+        "map50_timeline": map50_timeline,
+        "days": days,
+    }
 
 
 @router.get("/feed")

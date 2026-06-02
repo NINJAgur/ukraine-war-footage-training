@@ -25,6 +25,18 @@ CONF_THRESH = 0.25
 MIN_RATE = 0.10
 BATCH_SIZE = 10
 
+_CLASS_KEY = {"AIRCRAFT": "aircraft", "VEHICLE": "vehicle", "PERSONNEL": "personnel"}
+
+def _detection_counts(model_name: str, det_counts: dict) -> dict:
+    """Build canonical detection_counts dict from infer_video_multi_model output."""
+    counts = {"aircraft": 0, "vehicle": 0, "personnel": 0}
+    for k, v in det_counts.items():
+        canon = _CLASS_KEY.get(k.upper())
+        if canon:
+            counts[canon] += v
+    counts["total"] = sum(counts[c] for c in ("aircraft", "vehicle", "personnel"))
+    return counts
+
 
 def _delete_gcs_object(gs_url: str) -> None:
     """Delete a gs:// object from GCS."""
@@ -165,6 +177,7 @@ def _run_specialist(
 
             clip.mp4_path = finalize_clip(clip, temp_out, model_name)
             clip.det_class = model_name
+            clip.detection_counts = _detection_counts(model_name, det_counts)
             clip.status = ClipStatus.ANNOTATED
             clip.updated_at = datetime.now(timezone.utc)
             if raw_path.exists():
@@ -262,6 +275,7 @@ def _run_general() -> dict:
 
             clip.mp4_path = finalize_clip(clip, temp_out, "GENERAL")
             clip.det_class = "GENERAL"
+            clip.detection_counts = _detection_counts("GENERAL", det_counts)
             clip.status = ClipStatus.ANNOTATED
             clip.updated_at = datetime.now(timezone.utc)
             if raw_path.exists():

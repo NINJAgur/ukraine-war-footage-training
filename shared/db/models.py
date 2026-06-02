@@ -66,6 +66,7 @@ class Clip(Base):
     is_pov = Column(Integer, default=0)
     
     det_class = Column(String(20))       # dominant detected class (AIRCRAFT/VEHICLE/PERSONNEL/GENERAL)
+    detection_counts = Column(JSON, nullable=True)  # {aircraft: N, vehicle: N, personnel: N, total: N}
     file_size_bytes = Column(BigInteger)
     duration_seconds = Column(Integer)
     width = Column(Integer)

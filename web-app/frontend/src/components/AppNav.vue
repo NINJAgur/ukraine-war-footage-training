@@ -61,7 +61,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 
-const sections = ['detection', 'archive', 'capabilities']
+const sections = ['detection', 'archive', 'analytics', 'capabilities']
 const scrolled = ref(false)
 const activeSection = ref('')
 const menuOpen = ref(false)
