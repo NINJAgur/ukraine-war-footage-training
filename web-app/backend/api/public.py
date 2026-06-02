@@ -386,17 +386,19 @@ async def get_stats_charts(
     except Exception:
         detection_boxes_per_day = []
 
-    # All completed training runs with full metrics (for radar + scatter)
+    # All completed training runs (unfiltered for scatter/radar — full history needed)
+    # mAP50 timeline filtered by cutoff
     runs = (await db.execute(
         select(TrainingRun)
         .where(TrainingRun.status == TrainingStatus.DONE, TrainingRun.completed_at.isnot(None))
         .order_by(TrainingRun.completed_at)
     )).scalars().all()
+    runs_filtered = [r for r in runs if r.completed_at and r.completed_at >= cutoff]
 
     map50_timeline = []
     training_scatter = []  # all runs: {model, stage, map50, images, run_id}
 
-    for r in runs:
+    for r in runs_filtered:
         m = r.metrics or {}
         k50    = next((k for k in m if "map50" in k.lower() and "map50-95" not in k.lower()), None)
         k5095  = next((k for k in m if "map50-95" in k.lower()), None)
@@ -423,6 +425,19 @@ async def get_stats_charts(
             }
             map50_timeline.append(run_dict)
             training_scatter.append(run_dict)
+
+    # Radar needs all-time best per model — add separately if not in filtered runs
+    for r in runs:
+        model_name2 = r.model_type.value if r.model_type else None
+        if not model_name2: continue
+        already = any(t["model"] == model_name2 for t in training_scatter)
+        if not already:
+            m2 = r.metrics or {}
+            k2 = next((k for k in m2 if "map50" in k.lower() and "map50-95" not in k.lower()), None)
+            try: v2 = round(float(m2[k2]), 3) if k2 else None
+            except: v2 = None
+            if v2:
+                training_scatter.append({"run_id": r.id, "model": model_name2, "stage": r.stage.value if r.stage else None, "map50": v2, "map50_95": None, "precision": None, "recall": None, "images": m2.get("total_train_images") or 0, "date": r.completed_at.isoformat() if r.completed_at else None, "is_best": False})
 
     return {
         "clips_per_day": clips_per_day,
