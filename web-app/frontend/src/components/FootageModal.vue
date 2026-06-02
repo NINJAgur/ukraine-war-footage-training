@@ -36,9 +36,7 @@
           </div>
         </div>
         <p class="modal-desc">
-          Footage scraped from {{ item.source }} and processed through the automated pipeline.
-          Detection class: {{ item.detClass }}. Bounding boxes drawn by the specialist YOLO model.
-          Source ID is SHA-256 deduplicated — this exact clip will not be ingested twice.
+          {{ item.description || 'No description available.' }}
         </p>
       </div>
     </div>

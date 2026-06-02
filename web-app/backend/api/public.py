@@ -75,12 +75,13 @@ async def get_annotated_clips(db: AsyncSession = Depends(get_db)) -> list[dict]:
             duration_str = _video_duration(mp4)
 
         items.append({
-            "id":       clip.url_hash[:12],
-            "title":    (clip.title or clip.url_hash[:12]).upper(),
-            "date":     clip.created_at.strftime("%Y-%m-%d") if clip.created_at else "",
-            "duration": duration_str,
-            "detClass": clip.det_class,
-            "source":   _SOURCE_DISPLAY.get((clip.source.value if clip.source else ""), "Unknown"),
+            "id":          clip.url_hash[:12],
+            "title":       (clip.title or clip.url_hash[:12]).upper(),
+            "description": clip.description or "",
+            "date":        clip.created_at.strftime("%Y-%m-%d") if clip.created_at else "",
+            "duration":    duration_str,
+            "detClass":    clip.det_class,
+            "source":      _SOURCE_DISPLAY.get((clip.source.value if clip.source else ""), "Unknown"),
             "tag":      "annotated",
             "src":      clip.url_hash[:8].upper(),
             "videoUrl": video_url,
