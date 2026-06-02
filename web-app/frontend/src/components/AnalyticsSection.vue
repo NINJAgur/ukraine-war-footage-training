@@ -79,7 +79,21 @@
         <!-- Row 2 -->
         <div class="chart-card">
           <div class="chart-label mono">Confusion matrix (val set)</div>
-          <canvas :ref="el => dc.cm = el"></canvas>
+          <div class="cm-wrap" v-if="selectedRun?.confusion_matrix">
+            <div class="cm-grid" :style="{ gridTemplateColumns: `repeat(${selectedRun.confusion_matrix.length}, 1fr)` }">
+              <template v-for="(row, r) in selectedRun.confusion_matrix" :key="r">
+                <div v-for="(val, c) in row" :key="c" class="cm-cell"
+                  :style="{ opacity: 0.15 + 0.85 * (val / cmMax), background: `var(--cat-color-aircraft)` }"
+                  :title="`${cmLabels[r]}→${cmLabels[c]}: ${val.toFixed(0)}`">
+                  <span class="cm-val mono">{{ val > 0 ? val.toFixed(0) : '' }}</span>
+                </div>
+              </template>
+            </div>
+            <div class="cm-labels mono">
+              <span v-for="l in cmLabels" :key="l" class="cm-label">{{ l }}</span>
+            </div>
+          </div>
+          <div v-else class="chart-empty mono">No data yet</div>
         </div>
         <div class="chart-card">
           <div class="chart-label mono">BoxPR curve (P vs R)</div>
@@ -142,6 +156,18 @@ const detectionIndex = computed(() => {
     { label: 'VEHICLE', count: get('VEHICLE'), color: C.vehicle },
     { label: 'PERSONNEL', count: get('PERSONNEL'), color: C.personnel },
   ]
+})
+
+const cmMax = computed(() => {
+  const cm = selectedRun.value?.confusion_matrix
+  if (!cm) return 1
+  return Math.max(...cm.flat())
+})
+const cmLabels = computed(() => {
+  const nc = selectedRun.value?.confusion_matrix_nc || selectedRun.value?.confusion_matrix?.length || 0
+  if (nc === 2) return ['aircraft', 'bg']
+  if (nc === 3) return ['aircraft', 'vehicle', 'personnel']
+  return Array.from({length: nc}, (_, i) => `c${i}`)
 })
 
 const availableRuns = computed(() =>
@@ -265,24 +291,7 @@ async function buildDrill(runId) {
     options: lineOpts('val loss',null,null),
   })
 
-  // Confusion matrix heatmap
-  const cm = run.confusion_matrix
-  if (dc.value.cm && cm) {
-    const nc = cm.length
-    const classNames = nc === 2 ? ['aircraft','bg'] : nc === 3 ? ['aircraft','vehicle','personnel'] : Array.from({length:nc},(_,i)=>`c${i}`)
-    const labels = []
-    const cmData = []
-    for (let r=0; r<nc; r++) for (let c=0; c<nc; c++) {
-      labels.push(`${classNames[r]}→${classNames[c]}`)
-      cmData.push({ x:c, y:r, v: cm[r][c] })
-    }
-    const maxVal = Math.max(...cm.flat())
-    drillCharts.cm = new Chart(dc.value.cm, {
-      type:'scatter',
-      data:{ datasets:[{ data:cmData, backgroundColor: ctx => { const alpha = ctx.raw?.v/maxVal; return `rgba(223,105,0,${alpha})`}, pointRadius: ctx => { const sz = 30*(ctx.raw?.v/maxVal||0)+8; return sz }, pointStyle:'rect' }] },
-      options:{ responsive:true, maintainAspectRatio:true, aspectRatio:1.3, scales:{ x:{...BS,min:-0.5,max:nc-0.5,ticks:{callback:v=>classNames[v]||v,stepSize:1}}, y:{...BS,min:-0.5,max:nc-0.5,ticks:{callback:v=>classNames[v]||v,stepSize:1},reverse:true} }, plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`${classNames[ctx.raw.y]}→${classNames[ctx.raw.x]}: ${ctx.raw.v}`}}} },
-    })
-  }
+  // Confusion matrix rendered as HTML (not Chart.js) — see template
 
   // BoxPR (P vs R scatter from curve data)
   const curveKeys = Object.keys(run).filter(k => k.startsWith('curve_'))
@@ -375,6 +384,14 @@ onMounted(fetch_)
 .tab-general.active   { color: var(--cat-color-generalist); border-color: var(--cat-color-generalist); }
 
 .drill-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 2px; padding: 2px; }
+
+.cm-wrap { display: flex; flex-direction: column; gap: 8px; }
+.cm-grid { display: grid; gap: 2px; }
+.cm-cell { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; border-radius: 2px; }
+.cm-val { font-family: var(--font-mono); font-size: 10px; color: rgba(255,255,255,0.9); }
+.cm-labels { display: flex; gap: 2px; }
+.cm-label { flex: 1; font-family: var(--font-mono); font-size: 9px; color: var(--fg-3); text-align: center; letter-spacing: 0.05em; overflow: hidden; text-overflow: ellipsis; }
+.chart-empty { font-family: var(--font-mono); font-size: 11px; color: var(--fg-3); padding: 40px 0; text-align: center; }
 
 .drill-expand-enter-active, .drill-expand-leave-active { transition: max-height 0.4s ease, opacity 0.3s ease; overflow: hidden; }
 .drill-expand-enter-from, .drill-expand-leave-to { max-height: 0; opacity: 0; }
