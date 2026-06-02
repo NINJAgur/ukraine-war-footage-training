@@ -341,7 +341,7 @@ output "inference_engine_ip" {
 }
 
 # ── training-engine VM (n1-standard-4 + T4, Instance Schedule 04:30 UTC start) ─
-# Spot VM. Self-shuts after training or immediately if no QUEUED runs.
+# Standard (non-preemptible) VM. Self-shuts after training or immediately if no QUEUED/RUNNING runs.
 
 resource "google_compute_instance" "training_engine" {
   name                      = "ukraine-footage-training"
@@ -351,11 +351,9 @@ resource "google_compute_instance" "training_engine" {
   allow_stopping_for_update = true
 
   scheduling {
-    provisioning_model          = "SPOT"
-    instance_termination_action = "STOP"
-    preemptible                 = true
-    automatic_restart           = false
-    on_host_maintenance         = "TERMINATE"
+    automatic_restart   = true
+    on_host_maintenance = "TERMINATE"
+    preemptible         = false
   }
 
   resource_policies = [google_compute_resource_policy.training_schedule.id]
@@ -492,7 +490,8 @@ REMOTE_STORAGE_BUCKET=ukraine-footage-media
 ENVEOF
       chown ubuntu:ubuntu /home/ubuntu/app/.env
 
-      # Early exit: shut down immediately if no QUEUED training runs
+      # Reset any RUNNING runs to QUEUED (orphaned from prior restart/preemption)
+      # then shut down immediately if no QUEUED runs remain
       QUEUED_COUNT=$(su - ubuntu -c "cd /home/ubuntu/app/training-engine && \
         venv/bin/python3 -c \"
 import os, sys
@@ -501,6 +500,10 @@ os.environ.setdefault('DATABASE_SYNC_URL', open('/home/ubuntu/app/.env').read().
 from sqlalchemy import create_engine, text
 engine = create_engine(os.environ['DATABASE_SYNC_URL'])
 with engine.connect() as conn:
+    reset = conn.execute(text(\\\"UPDATE training_runs SET status='QUEUED', started_at=NULL WHERE status='RUNNING'\\\"))
+    conn.commit()
+    if reset.rowcount > 0:
+        print(f'Reset {reset.rowcount} RUNNING run(s) to QUEUED', flush=True)
     result = conn.execute(text(\\\"SELECT COUNT(*) FROM training_runs WHERE status='QUEUED'\\\"))
     print(result.scalar())
 \"" 2>/dev/null || echo "0")
