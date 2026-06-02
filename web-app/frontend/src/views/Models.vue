@@ -111,10 +111,10 @@ onMounted(async () => {
 .model-group { margin-bottom: 48px; }
 .model-group-header { display: flex; align-items: center; gap: 16px; margin-bottom: 12px; }
 .model-badge { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.18em; padding: 4px 12px; border: 1px solid; flex-shrink: 0; }
-.badge-aircraft  { color: #60a5fa; border-color: rgba(96,165,250,0.3); }
-.badge-vehicle   { color: var(--amber); border-color: var(--amber-border); }
-.badge-personnel { color: #4ade80; border-color: rgba(74,222,128,0.3); }
-.badge-general   { color: var(--fg-1); border-color: var(--fg-3); }
+.badge-aircraft  { color: var(--cat-color-aircraft);   border-color: color-mix(in oklch, var(--cat-color-aircraft)  40%, transparent); }
+.badge-vehicle   { color: var(--cat-color-vehicles);   border-color: color-mix(in oklch, var(--cat-color-vehicles)  40%, transparent); }
+.badge-personnel { color: var(--cat-color-personnel);  border-color: color-mix(in oklch, var(--cat-color-personnel) 40%, transparent); }
+.badge-general   { color: var(--cat-color-generalist); border-color: color-mix(in oklch, var(--cat-color-generalist) 40%, transparent); }
 .model-group-desc { font-size: 12px; color: var(--fg-3); letter-spacing: 0.04em; }
 
 .versions-table { width: 100%; border-collapse: collapse; }
