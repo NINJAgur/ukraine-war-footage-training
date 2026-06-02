@@ -47,20 +47,18 @@
             :x2="190*i + 170" y2="20"
             stroke="#df6900" stroke-width="1.5" stroke-opacity="0.55"
           />
-          <!-- label -->
-          <text :x="190*i + 85" y="55"
+          <!-- label — center in body rect: first node body 15→170 (cx=92), others 0→170 (cx=85), but shift right +10 for notch visual balance -->
+          <text :x="i===0 ? 190*i+92 : 190*i+96" y="55"
             text-anchor="middle"
             font-family="'IBM Plex Mono',monospace"
             font-size="10" fill="#df6900"
             letter-spacing="2.5" font-weight="600">{{ node.label }}</text>
-          <!-- stat -->
-          <text :x="190*i + 85" y="100"
+          <text :x="i===0 ? 190*i+92 : 190*i+96" y="100"
             text-anchor="middle"
             font-family="'IBM Plex Mono',monospace"
             font-size="28" fill="#eef0f2"
             font-weight="700">{{ node.stat }}</text>
-          <!-- sub -->
-          <text :x="190*i + 85" y="133"
+          <text :x="i===0 ? 190*i+92 : 190*i+96" y="133"
             text-anchor="middle"
             font-family="'IBM Plex Mono',monospace"
             font-size="9" fill="#3d4650"
