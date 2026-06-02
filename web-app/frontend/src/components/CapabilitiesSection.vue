@@ -22,22 +22,22 @@
           <animate attributeName="stroke-dashoffset" :from="12 * i" to="0" :dur="`${0.9 + i*0.05}s`" repeatCount="indefinite" />
         </line>
 
-        <!-- amber traveling dot on each connector -->
-        <circle v-for="i in 5" :key="`d${i}`" r="4" cy="85" fill="#df6900">
-          <filter :id="`glow${i}`" x="-100%" y="-100%" width="300%" height="300%">
-            <feGaussianBlur stdDeviation="3" result="blur"/>
-            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-          </filter>
-          <animateMotion :dur="`${1.6 + i*0.1}s`" repeatCount="indefinite" :begin="`${(i-1)*0.28}s`">
-            <mpath :href="`#path${i}`" />
-          </animateMotion>
+        <!-- traveling dot per connector via cx animation -->
+        <circle v-for="i in 5" :key="`d${i}`" r="4" cy="85" fill="#df6900"
+          style="filter: drop-shadow(0 0 4px #df6900)">
+          <animate attributeName="cx"
+            :from="`${100 + (i-1)*200 + 84}`"
+            :to="`${100 + i*200 - 84}`"
+            :dur="`${1.4 + i*0.08}s`"
+            :begin="`${(i-1)*0.3}s`"
+            repeatCount="indefinite" />
+          <animate attributeName="opacity"
+            values="0;1;1;0"
+            keyTimes="0;0.1;0.9;1"
+            :dur="`${1.4 + i*0.08}s`"
+            :begin="`${(i-1)*0.3}s`"
+            repeatCount="indefinite" />
         </circle>
-
-        <!-- hidden paths for dot motion -->
-        <path v-for="i in 5" :key="`p${i}`" :id="`path${i}`"
-          :d="`M ${100 + (i-1)*200 + 84} 85 L ${100 + i*200 - 84} 85`"
-          fill="none" stroke="none"
-        />
 
         <!-- nodes -->
         <g v-for="(node, i) in pipeline" :key="node.id">
