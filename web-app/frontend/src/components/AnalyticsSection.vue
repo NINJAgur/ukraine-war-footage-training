@@ -39,10 +39,16 @@
         <canvas ref="breakdownChart"></canvas>
       </div>
 
-      <!-- Model evolution — always full history -->
+      <!-- Clips by source -->
+      <div class="chart-card">
+        <div class="chart-label mono">Clips by source</div>
+        <canvas ref="sourceChart"></canvas>
+      </div>
+
+      <!-- Model evolution -->
       <div class="chart-card chart-wide">
-        <div class="chart-label mono">Model mAP50 — self-improving flywheel</div>
-        <canvas ref="mapChart" height="90"></canvas>
+        <div class="chart-label mono">Model mAP50 — self-improving flywheel · last {{ days }} days</div>
+        <canvas ref="mapChart"></canvas>
       </div>
     </div>
   </section>
@@ -59,9 +65,10 @@ const days  = ref(30)
 const loading = ref(true)
 const data  = ref(null)
 
-const clipsChart    = ref(null)
+const clipsChart     = ref(null)
 const breakdownChart = ref(null)
-const mapChart      = ref(null)
+const mapChart       = ref(null)
+const sourceChart    = ref(null)
 let charts = {}
 
 // Colour palette matching site
@@ -136,13 +143,16 @@ function buildCharts() {
   }
 
   if (mapChart.value && d.map50_timeline.length) {
-    const models = [...new Set(d.map50_timeline.map(r => r.model))]
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - days.value)
+    const filtered = d.map50_timeline.filter(r => new Date(r.date) >= cutoff)
+    const timeline = filtered.length ? filtered : d.map50_timeline
+    const models = [...new Set(timeline.map(r => r.model))]
     charts.map = new Chart(mapChart.value, {
       type: 'line',
       data: {
         datasets: models.map(m => ({
           label: m,
-          data: d.map50_timeline.filter(r => r.model === m).map(r => ({ x: r.date.slice(0,10), y: r.map50 })),
+          data: timeline.filter(r => r.model === m).map(r => ({ x: r.date.slice(0,10), y: r.map50 })),
           borderColor: MODEL_COLORS[m] || C.amber,
           backgroundColor: 'transparent',
           pointRadius: 5, pointHoverRadius: 7, pointBackgroundColor: MODEL_COLORS[m] || C.amber,
@@ -159,6 +169,17 @@ function buildCharts() {
           legend: { display: true, position: 'top', labels: { color: C.tick, font: { family: 'IBM Plex Mono', size: 10 }, boxWidth: 12, padding: 16 } },
         },
       },
+    })
+  }
+
+  if (sourceChart.value && d.by_source.length) {
+    charts.source = new Chart(sourceChart.value, {
+      type: 'bar',
+      data: {
+        labels: d.by_source.map(r => r.source.toUpperCase()),
+        datasets: [{ data: d.by_source.map(r => r.count), backgroundColor: [C.amber, 'oklch(0.62 0.16 220deg)'], borderWidth: 0 }],
+      },
+      options: { ...BASE, aspectRatio: 1.8, indexAxis: 'y' },
     })
   }
 }
