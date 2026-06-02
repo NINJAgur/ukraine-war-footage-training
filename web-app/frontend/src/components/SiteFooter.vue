@@ -23,7 +23,7 @@
         <ul>
           <li v-for="row in rows" :key="row.label" class="footer-stat-row">
             <span class="footer-stat-label">{{ row.label }}</span>
-            <component :is="row.href ? 'a' : 'span'" class="footer-stat-val" v-bind="row.href ? { href: row.href, target: '_blank', rel: 'noopener' } : {}">{{ row.val }}</component>
+            <component :is="row.href ? 'a' : 'span'" style="font-size:13px;color:var(--fg-2);font-weight:400" v-bind="row.href ? { href: row.href, target: '_blank', rel: 'noopener' } : {}">{{ row.val }}</component>
           </li>
         </ul>
       </div>
