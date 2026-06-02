@@ -308,18 +308,18 @@ async def get_stats_charts(
     )).all()
     clips_per_day = [{"date": str(r.day), "count": r.count} for r in clips_per_day_rows]
 
-    # Detection breakdown by det_class
+    # Detection breakdown by det_class (time-filtered)
     breakdown_rows = (await db.execute(
         select(Clip.det_class, func.count(Clip.id).label("count"))
-        .where(Clip.status == ClipStatus.ANNOTATED, Clip.det_class.isnot(None))
+        .where(Clip.status == ClipStatus.ANNOTATED, Clip.det_class.isnot(None), Clip.created_at >= cutoff)
         .group_by(Clip.det_class)
     )).all()
     detection_breakdown = [{"class": r.det_class, "count": r.count} for r in breakdown_rows]
 
-    # Clips by source
+    # Clips by source (time-filtered)
     source_rows = (await db.execute(
         select(Clip.source, func.count(Clip.id).label("count"))
-        .where(Clip.status == ClipStatus.ANNOTATED)
+        .where(Clip.status == ClipStatus.ANNOTATED, Clip.created_at >= cutoff)
         .group_by(Clip.source)
     )).all()
     by_source = [{"source": r.source.value if r.source else "unknown", "count": r.count} for r in source_rows]

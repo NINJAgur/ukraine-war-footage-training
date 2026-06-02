@@ -1,8 +1,11 @@
 <template>
   <section class="analytics" id="analytics">
-    <div class="section-header">
+    <div class="radar-bg">
+      <RadarCanvas :opacity="0.2" color="194, 120, 40" />
+    </div>
+    <div class="section-header" style="position:relative;z-index:1">
       <div>
-        <div class="section-tag">Data</div>
+        <div class="section-tag">Detection Index</div>
         <h2 class="section-title">Pipeline analytics</h2>
       </div>
       <div class="analytics-toggle mono">
@@ -12,164 +15,160 @@
       </div>
     </div>
 
-    <div v-if="loading" class="analytics-loading mono">Loading...</div>
+    <!-- Detection frequency index -->
+    <div class="det-index" style="position:relative;z-index:1">
+      <div v-for="item in detectionIndex" :key="item.label" class="det-index-item">
+        <div class="det-index-num" :style="{ color: item.color }">{{ item.count }}</div>
+        <div class="det-index-label mono">{{ item.label }}</div>
+      </div>
+      <div class="det-index-note mono">detections in open-source footage · YOLOv8m conf≥0.25 · last {{ days }} days</div>
+    </div>
 
-    <div v-else class="analytics-grid">
+    <div v-if="loading" class="analytics-loading mono" style="position:relative;z-index:1">Loading...</div>
 
+    <div v-else class="analytics-grid" style="position:relative;z-index:1">
       <!-- Clips over time -->
       <div class="chart-card chart-wide">
-        <div class="chart-title mono">Clips annotated per day</div>
-        <canvas ref="clipsChart"></canvas>
+        <div class="chart-label mono">Clips annotated · last {{ days }} days</div>
+        <canvas ref="clipsChart" height="90"></canvas>
       </div>
 
-      <!-- Detection breakdown -->
+      <!-- Class breakdown -->
       <div class="chart-card">
-        <div class="chart-title mono">Detection breakdown</div>
-        <canvas ref="breakdownChart"></canvas>
+        <div class="chart-label mono">By detection class</div>
+        <canvas ref="breakdownChart" height="180"></canvas>
       </div>
 
-      <!-- mAP50 timeline -->
+      <!-- Model evolution — always full history -->
       <div class="chart-card chart-wide">
-        <div class="chart-title mono">Model performance timeline (mAP50)</div>
-        <canvas ref="mapChart"></canvas>
+        <div class="chart-label mono">Model mAP50 — self-improving flywheel</div>
+        <canvas ref="mapChart" height="90"></canvas>
       </div>
-
-      <!-- By source -->
-      <div class="chart-card">
-        <div class="chart-title mono">Clips by source</div>
-        <canvas ref="sourceChart"></canvas>
-      </div>
-
     </div>
   </section>
 </template>
 
 <script setup>
-import { ref, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { Chart, registerables } from 'chart.js'
+import RadarCanvas from './RadarCanvas.vue'
 
 Chart.register(...registerables)
 
-const days = ref(30)
+const days  = ref(30)
 const loading = ref(true)
-const data = ref(null)
+const data  = ref(null)
 
 const clipsChart    = ref(null)
 const breakdownChart = ref(null)
 const mapChart      = ref(null)
-const sourceChart   = ref(null)
-
 let charts = {}
 
-const AMBER     = 'rgba(223, 105, 0, 0.85)'
-const AMBER_BG  = 'rgba(223, 105, 0, 0.15)'
-const AIRCRAFT  = 'rgba(110, 165, 255, 0.85)'
-const VEHICLE   = 'rgba(223, 105, 0, 0.85)'
-const PERSONNEL = 'rgba(74, 222, 128, 0.85)'
-const GENERAL   = 'rgba(160, 160, 160, 0.85)'
-const GRID      = 'rgba(255,255,255,0.06)'
-const TICK      = 'rgba(255,255,255,0.35)'
+// Colour palette matching site
+const C = {
+  amber:      '#df6900',
+  amberFaint: 'rgba(223,105,0,0.15)',
+  aircraft:   'oklch(0.62 0.16 220deg)',
+  vehicle:    'oklch(0.60 0.20 25deg)',
+  personnel:  'oklch(0.60 0.18 145deg)',
+  general:    'oklch(0.65 0.18 55deg)',
+  grid:       'rgba(255,255,255,0.06)',
+  tick:       'rgba(255,255,255,0.35)',
+  bg:         '#111416',
+}
 
-const BASE_OPTS = {
+const MODEL_COLORS = { AIRCRAFT: C.aircraft, VEHICLE: C.vehicle, PERSONNEL: C.personnel, GENERAL: C.general }
+const CLASS_COLORS = { AIRCRAFT: C.aircraft, VEHICLE: C.vehicle, PERSONNEL: C.personnel, GENERAL: C.general }
+
+const detectionIndex = computed(() => {
+  if (!data.value) return [
+    { label: 'AIRCRAFT', count: '—', color: C.aircraft },
+    { label: 'VEHICLE',  count: '—', color: C.vehicle  },
+    { label: 'PERSONNEL', count: '—', color: C.personnel },
+  ]
+  const bd = data.value.detection_breakdown
+  const get = cls => (bd.find(r => r.class === cls)?.count ?? 0).toLocaleString()
+  return [
+    { label: 'AIRCRAFT',  count: get('AIRCRAFT'),  color: C.aircraft  },
+    { label: 'VEHICLE',   count: get('VEHICLE'),   color: C.vehicle   },
+    { label: 'PERSONNEL', count: get('PERSONNEL'), color: C.personnel },
+  ]
+})
+
+const BASE = {
   responsive: true,
-  maintainAspectRatio: true,
+  maintainAspectRatio: false,
   plugins: { legend: { display: false } },
   scales: {
-    x: { grid: { color: GRID }, ticks: { color: TICK, font: { family: 'IBM Plex Mono', size: 10 } } },
-    y: { grid: { color: GRID }, ticks: { color: TICK, font: { family: 'IBM Plex Mono', size: 10 } }, beginAtZero: true },
+    x: { grid: { color: C.grid }, ticks: { color: C.tick, font: { family: 'IBM Plex Mono', size: 10 }, maxRotation: 0 } },
+    y: { grid: { color: C.grid }, ticks: { color: C.tick, font: { family: 'IBM Plex Mono', size: 10 } }, beginAtZero: true },
   },
 }
 
-function destroyAll() {
-  Object.values(charts).forEach(c => c?.destroy())
-  charts = {}
-}
+function destroyAll() { Object.values(charts).forEach(c => c?.destroy()); charts = {} }
 
 function buildCharts() {
   destroyAll()
   const d = data.value
   if (!d) return
 
-  // Clips per day
   if (clipsChart.value) {
     charts.clips = new Chart(clipsChart.value, {
       type: 'bar',
       data: {
         labels: d.clips_per_day.map(r => r.date.slice(5)),
-        datasets: [{ data: d.clips_per_day.map(r => r.count), backgroundColor: AMBER_BG, borderColor: AMBER, borderWidth: 1 }],
+        datasets: [{ data: d.clips_per_day.map(r => r.count), backgroundColor: C.amberFaint, borderColor: C.amber, borderWidth: 1.5 }],
       },
-      options: { ...BASE_OPTS, aspectRatio: 3 },
+      options: { ...BASE },
     })
   }
 
-  // Detection breakdown (doughnut)
-  const CLASS_COLORS = { AIRCRAFT: AIRCRAFT, VEHICLE: VEHICLE, PERSONNEL: PERSONNEL, GENERAL: GENERAL }
   if (breakdownChart.value && d.detection_breakdown.length) {
     charts.breakdown = new Chart(breakdownChart.value, {
-      type: 'doughnut',
+      type: 'bar',
       data: {
         labels: d.detection_breakdown.map(r => r.class),
-        datasets: [{
-          data: d.detection_breakdown.map(r => r.count),
-          backgroundColor: d.detection_breakdown.map(r => CLASS_COLORS[r.class] || GENERAL),
-          borderWidth: 0,
-        }],
+        datasets: [{ data: d.detection_breakdown.map(r => r.count), backgroundColor: d.detection_breakdown.map(r => CLASS_COLORS[r.class] || C.amber), borderWidth: 0 }],
       },
       options: {
-        responsive: true, maintainAspectRatio: true,
-        plugins: {
-          legend: { display: true, position: 'bottom', labels: { color: TICK, font: { family: 'IBM Plex Mono', size: 10 }, padding: 12 } },
+        ...BASE,
+        scales: {
+          x: { ...BASE.scales.x },
+          y: { ...BASE.scales.y },
         },
-        cutout: '60%',
       },
     })
   }
 
-  // mAP50 timeline (multi-line per model)
   if (mapChart.value && d.map50_timeline.length) {
     const models = [...new Set(d.map50_timeline.map(r => r.model))]
-    const modelColors = { AIRCRAFT: AIRCRAFT, VEHICLE: VEHICLE, PERSONNEL: PERSONNEL, GENERAL: GENERAL }
     charts.map = new Chart(mapChart.value, {
       type: 'line',
       data: {
         datasets: models.map(m => ({
           label: m,
           data: d.map50_timeline.filter(r => r.model === m).map(r => ({ x: r.date.slice(0,10), y: r.map50 })),
-          borderColor: modelColors[m] || AMBER,
+          borderColor: MODEL_COLORS[m] || C.amber,
           backgroundColor: 'transparent',
-          pointRadius: 5, pointHoverRadius: 7,
+          pointRadius: 5, pointHoverRadius: 7, pointBackgroundColor: MODEL_COLORS[m] || C.amber,
           borderWidth: 2, tension: 0.2,
         })),
       },
       options: {
-        ...BASE_OPTS,
-        aspectRatio: 3,
+        ...BASE,
         scales: {
-          ...BASE_OPTS.scales,
-          x: { ...BASE_OPTS.scales.x, type: 'category' },
-          y: { ...BASE_OPTS.scales.y, min: 0.3, max: 1.0 },
+          x: { ...BASE.scales.x, type: 'category' },
+          y: { ...BASE.scales.y, min: 0.3, max: 1.0 },
         },
         plugins: {
-          legend: { display: true, position: 'top', labels: { color: TICK, font: { family: 'IBM Plex Mono', size: 10 }, padding: 16 } },
+          legend: { display: true, position: 'top', labels: { color: C.tick, font: { family: 'IBM Plex Mono', size: 10 }, boxWidth: 12, padding: 16 } },
         },
       },
-    })
-  }
-
-  // By source (bar)
-  if (sourceChart.value && d.by_source.length) {
-    charts.source = new Chart(sourceChart.value, {
-      type: 'bar',
-      data: {
-        labels: d.by_source.map(r => r.source.toUpperCase()),
-        datasets: [{ data: d.by_source.map(r => r.count), backgroundColor: AMBER_BG, borderColor: AMBER, borderWidth: 1 }],
-      },
-      options: { ...BASE_OPTS, indexAxis: 'y', aspectRatio: 2 },
     })
   }
 }
 
-async function fetchAndRender() {
+async function fetch_() {
   loading.value = true
   try {
     const res = await fetch(`/api/stats/charts?days=${days.value}`)
@@ -181,32 +180,48 @@ async function fetchAndRender() {
 }
 
 function setDays(d) { days.value = d }
-watch(days, fetchAndRender)
-onMounted(fetchAndRender)
+watch(days, fetch_)
+onMounted(fetch_)
 </script>
 
 <style scoped>
-.analytics { background: var(--bg-0); border-top: 1px solid var(--fg-3); position: relative; }
+.analytics { background: var(--bg-1); border-top: 1px solid var(--fg-3); position: relative; overflow: hidden; }
 .section-header { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
-.analytics-toggle { display: flex; gap: 2px; }
+.analytics-toggle { display: flex; gap: 0; }
 .analytics-toggle button {
   font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em;
-  padding: 6px 14px; border: 1px solid var(--fg-3); background: none;
-  color: var(--fg-2); cursor: pointer; transition: all 0.15s;
+  padding: 6px 16px; border: 1px solid var(--fg-3); background: none;
+  color: var(--fg-3); cursor: pointer; transition: all 0.15s; margin-left: -1px;
 }
-.analytics-toggle button.active { border-color: var(--amber-border); color: var(--amber); }
-.analytics-toggle button:hover:not(.active) { border-color: var(--fg-1); color: var(--fg-0); }
-.analytics-loading { color: var(--fg-3); font-size: 13px; padding: 40px 0; }
+.analytics-toggle button.active { border-color: var(--amber); color: var(--amber); z-index: 1; position: relative; }
+.analytics-toggle button:hover:not(.active) { color: var(--fg-0); border-color: var(--fg-1); }
+
+/* Detection index */
+.det-index {
+  display: flex; align-items: flex-end; gap: 40px; flex-wrap: wrap;
+  padding: 32px clamp(20px, 5vw, 80px);
+  border-bottom: 1px solid var(--fg-3);
+}
+.det-index-item { display: flex; flex-direction: column; gap: 4px; }
+.det-index-num { font-family: var(--font-mono); font-size: clamp(32px, 5vw, 56px); font-weight: 700; line-height: 1; }
+.det-index-label { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.2em; color: var(--fg-3); }
+.det-index-note { font-family: var(--font-mono); font-size: 10px; color: var(--fg-3); letter-spacing: 0.06em; line-height: 1.6; margin-left: auto; align-self: flex-end; max-width: 260px; text-align: right; }
+
+.analytics-loading { color: var(--fg-3); font-size: 13px; padding: 40px clamp(20px,5vw,80px); }
+
 .analytics-grid {
   display: grid;
   grid-template-columns: 2fr 1fr;
   gap: 2px;
-  margin-top: 2px;
+  padding: 2px;
 }
-.chart-card { background: var(--bg-1); border: 1px solid var(--fg-3); padding: 24px; }
-.chart-wide { grid-column: span 1; }
-.chart-title { font-size: 10px; color: var(--fg-3); letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 20px; }
+.chart-card { background: var(--bg-2); padding: 24px; position: relative; }
+.chart-wide { grid-column: 1; }
+.chart-label { font-size: 10px; color: var(--fg-3); letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 16px; }
+
 @media (max-width: 768px) {
   .analytics-grid { grid-template-columns: 1fr; }
+  .det-index { gap: 24px; }
+  .det-index-note { margin-left: 0; text-align: left; }
 }
 </style>
