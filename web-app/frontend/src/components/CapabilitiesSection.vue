@@ -9,18 +9,62 @@
         <h2 class="section-title">Automated pipeline</h2>
       </div>
     </div>
-    <!-- Pipeline diagram -->
-    <div class="pipeline-diagram">
-      <div v-for="(node, i) in pipeline" :key="node.id" class="pipeline-row">
-        <div class="pipeline-node" :style="{ animationDelay: `${i * 0.4}s` }">
-          <div class="pipeline-node-label">{{ node.label }}</div>
-          <div class="pipeline-node-stat">{{ node.stat }}</div>
-          <div class="pipeline-node-sub">{{ node.sub }}</div>
-        </div>
-        <div v-if="i < pipeline.length - 1" class="pipeline-connector">
-          <div class="connector-dot" :style="{ animationDelay: `${i * 0.4}s` }"></div>
-        </div>
-      </div>
+    <!-- Pipeline SVG diagram -->
+    <div class="pipeline-wrap">
+      <svg class="pipeline-svg" viewBox="0 0 1200 170" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+        <!-- connector lines -->
+        <line v-for="i in 5" :key="`l${i}`"
+          :x1="100 + (i-1)*200 + 84" y1="85"
+          :x2="100 + i*200 - 84"     y2="85"
+          stroke="rgba(255,255,255,0.12)" stroke-width="1.5"
+          stroke-dasharray="5 7"
+        >
+          <animate attributeName="stroke-dashoffset" :from="12 * i" to="0" :dur="`${0.9 + i*0.05}s`" repeatCount="indefinite" />
+        </line>
+
+        <!-- amber traveling dot on each connector -->
+        <circle v-for="i in 5" :key="`d${i}`" r="4" cy="85" fill="#df6900">
+          <filter :id="`glow${i}`" x="-100%" y="-100%" width="300%" height="300%">
+            <feGaussianBlur stdDeviation="3" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <animateMotion :dur="`${1.6 + i*0.1}s`" repeatCount="indefinite" :begin="`${(i-1)*0.28}s`">
+            <mpath :href="`#path${i}`" />
+          </animateMotion>
+        </circle>
+
+        <!-- hidden paths for dot motion -->
+        <path v-for="i in 5" :key="`p${i}`" :id="`path${i}`"
+          :d="`M ${100 + (i-1)*200 + 84} 85 L ${100 + i*200 - 84} 85`"
+          fill="none" stroke="none"
+        />
+
+        <!-- nodes -->
+        <g v-for="(node, i) in pipeline" :key="node.id">
+          <!-- border rect with animated opacity -->
+          <rect :x="100 + i*200 - 84" y="20" width="168" height="130" rx="1"
+            fill="#111416" stroke="#df6900"
+            :stroke-opacity="0.25"
+          >
+            <animate attributeName="stroke-opacity" values="0.2;0.5;0.2" :dur="`${2.8 + i*0.3}s`" repeatCount="indefinite" :begin="`${i*0.4}s`" />
+          </rect>
+          <!-- amber top line accent -->
+          <line :x1="100 + i*200 - 84" y1="20" :x2="100 + i*200 + 84" y2="20"
+            stroke="#df6900" stroke-width="1.5" :stroke-opacity="0.6" />
+          <!-- label -->
+          <text :x="100 + i*200" y="48" text-anchor="middle"
+            font-family="'IBM Plex Mono', monospace" font-size="10" fill="#df6900"
+            letter-spacing="2.5" font-weight="500">{{ node.label }}</text>
+          <!-- stat -->
+          <text :x="100 + i*200" y="95" text-anchor="middle"
+            font-family="'IBM Plex Mono', monospace" font-size="26" fill="#f0f0f0"
+            font-weight="600" letter-spacing="1">{{ node.stat }}</text>
+          <!-- sub label -->
+          <text :x="100 + i*200" y="130" text-anchor="middle"
+            font-family="'IBM Plex Mono', monospace" font-size="9" fill="#4a5260"
+            letter-spacing="2" text-transform="uppercase">{{ node.sub }}</text>
+        </g>
+      </svg>
     </div>
 
     <div class="cap-grid">

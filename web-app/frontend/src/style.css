@@ -914,90 +914,16 @@ section { padding: clamp(60px, 8vw, 100px) clamp(20px, 5vw, 80px); }
 .about-list li { padding: 14px 0; border-bottom: 1px solid var(--fg-3); font-size: 13px; color: var(--fg-1); display: flex; gap: 16px; font-family: var(--font-mono); }
 .about-list li .list-marker { color: var(--amber); font-size: 10px; }
 
-/* ─── PIPELINE DIAGRAM ─── */
-.pipeline-diagram {
-  display: flex;
-  align-items: center;
-  gap: 0;
-  padding: clamp(40px, 5vw, 60px) clamp(20px, 5vw, 80px);
-  padding-bottom: 0;
+/* ─── PIPELINE SVG ─── */
+.pipeline-wrap {
+  padding: 0 clamp(20px, 5vw, 80px) clamp(20px, 3vw, 32px);
   overflow-x: auto;
-  flex-wrap: nowrap;
 }
-.pipeline-row {
-  display: flex;
-  align-items: center;
-  gap: 0;
-  flex-shrink: 0;
-}
-.pipeline-node {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  border: 1px solid var(--fg-3);
-  padding: 14px 20px;
-  background: var(--bg-2);
-  min-width: 110px;
-  text-align: center;
-}
-.pipeline-node-label {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.2em;
-  color: var(--amber);
-  text-transform: uppercase;
-}
-.pipeline-node-stat {
-  font-family: var(--font-mono);
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--fg-0);
-  letter-spacing: 0.04em;
-}
-.pipeline-node-sub {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  color: var(--fg-3);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-.pipeline-connector {
-  position: relative;
-  width: 40px;
-  height: 2px;
-  background: rgba(255,255,255,0.08);
-  flex-shrink: 0;
-  align-self: center;
-  overflow: visible;
-}
-.connector-dot {
-  position: absolute;
-  width: 8px;
-  height: 8px;
-  background: var(--amber);
-  border-radius: 50%;
-  top: -3px;
-  box-shadow: 0 0 6px var(--amber);
-  animation: pipe-travel 2.4s ease-in-out infinite;
-}
-@keyframes pipe-travel {
-  0%   { left: -8px; opacity: 0; }
-  15%  { opacity: 1; }
-  85%  { opacity: 1; }
-  100% { left: 40px; opacity: 0; }
-}
-.pipeline-node {
-  animation: node-breathe 3s ease-in-out infinite;
-}
-@keyframes node-breathe {
-  0%, 100% { border-color: var(--fg-3); }
-  50%       { border-color: rgba(223, 105, 0, 0.4); }
-}
-@media (max-width: 768px) {
-  .pipeline-diagram { padding: 32px 20px 0; gap: 0; }
-  .pipeline-node { min-width: 80px; padding: 10px 12px; }
-  .pipeline-node-stat { font-size: 14px; }
+.pipeline-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-width: 700px;
 }
 
 /* ─── FOOTER ─── */
