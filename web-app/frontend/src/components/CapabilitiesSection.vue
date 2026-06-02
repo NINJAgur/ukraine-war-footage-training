@@ -11,59 +11,77 @@
     </div>
     <!-- Pipeline SVG diagram -->
     <div class="pipeline-wrap">
-      <svg class="pipeline-svg" viewBox="0 0 1200 170" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
-        <!-- connector lines -->
-        <line v-for="i in 5" :key="`l${i}`"
-          :x1="100 + (i-1)*200 + 84" y1="85"
-          :x2="100 + i*200 - 84"     y2="85"
-          stroke="rgba(255,255,255,0.12)" stroke-width="1.5"
-          stroke-dasharray="5 7"
-        >
-          <animate attributeName="stroke-dashoffset" :from="12 * i" to="0" :dur="`${0.9 + i*0.05}s`" repeatCount="indefinite" />
-        </line>
+      <svg class="pipeline-svg" viewBox="0 0 1140 170" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <filter id="amber-glow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="3" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
 
-        <!-- traveling dot per connector via cx animation -->
-        <circle v-for="i in 5" :key="`d${i}`" r="4" cy="85" fill="#df6900"
-          style="filter: drop-shadow(0 0 4px #df6900)">
+        <!-- chevron nodes: each is a pentagon arrow shape, overlapping slightly -->
+        <g v-for="(node, i) in pipeline" :key="node.id">
+          <!--
+            Chevron shape:
+            - First node: flat left  → pointed right
+            - Middle:     notched left → pointed right
+            - Last:       notched left → flat right
+            spacing=190, body half-width=85, notch/point depth=22
+          -->
+          <polygon
+            :points="chevronPoints(i)"
+            fill="#0d1012"
+            stroke="#df6900"
+            stroke-width="1"
+            :stroke-opacity="0.3"
+          >
+            <animate attributeName="stroke-opacity"
+              values="0.2;0.55;0.2"
+              :dur="`${3 + i * 0.25}s`"
+              :begin="`${i * 0.35}s`"
+              repeatCount="indefinite" />
+          </polygon>
+          <!-- amber left-edge accent line (visible on first node only as top bar, others as notch highlight) -->
+          <line
+            :x1="190*i + (i===0 ? 15 : 0)" y1="20"
+            :x2="190*i + 170" y2="20"
+            stroke="#df6900" stroke-width="1.5" stroke-opacity="0.55"
+          />
+          <!-- label -->
+          <text :x="190*i + 85" y="55"
+            text-anchor="middle"
+            font-family="'IBM Plex Mono',monospace"
+            font-size="10" fill="#df6900"
+            letter-spacing="2.5" font-weight="600">{{ node.label }}</text>
+          <!-- stat -->
+          <text :x="190*i + 85" y="100"
+            text-anchor="middle"
+            font-family="'IBM Plex Mono',monospace"
+            font-size="28" fill="#eef0f2"
+            font-weight="700">{{ node.stat }}</text>
+          <!-- sub -->
+          <text :x="190*i + 85" y="133"
+            text-anchor="middle"
+            font-family="'IBM Plex Mono',monospace"
+            font-size="9" fill="#3d4650"
+            letter-spacing="1.8">{{ node.sub }}</text>
+        </g>
+
+        <!-- animated dots traveling over the chevron tips -->
+        <circle v-for="i in 5" :key="`d${i}`" r="4" cy="85"
+          fill="#df6900" filter="url(#amber-glow)">
           <animate attributeName="cx"
-            :from="`${100 + (i-1)*200 + 84}`"
-            :to="`${100 + i*200 - 84}`"
-            :dur="`${1.4 + i*0.08}s`"
-            :begin="`${(i-1)*0.3}s`"
+            :from="`${190*i - 22}`"
+            :to="`${190*i + 22}`"
+            :dur="`${1.2}s`"
+            :begin="`${i * 0.22}s`"
             repeatCount="indefinite" />
           <animate attributeName="opacity"
-            values="0;1;1;0"
-            keyTimes="0;0.1;0.9;1"
-            :dur="`${1.4 + i*0.08}s`"
-            :begin="`${(i-1)*0.3}s`"
+            values="0;1;1;0" keyTimes="0;0.15;0.85;1"
+            :dur="`${1.2}s`"
+            :begin="`${i * 0.22}s`"
             repeatCount="indefinite" />
         </circle>
-
-        <!-- nodes -->
-        <g v-for="(node, i) in pipeline" :key="node.id">
-          <!-- border rect with animated opacity -->
-          <rect :x="100 + i*200 - 84" y="20" width="168" height="130" rx="1"
-            fill="#111416" stroke="#df6900"
-            :stroke-opacity="0.25"
-          >
-            <animate attributeName="stroke-opacity" values="0.2;0.5;0.2" :dur="`${2.8 + i*0.3}s`" repeatCount="indefinite" :begin="`${i*0.4}s`" />
-          </rect>
-          <!-- amber top line accent -->
-          <line :x1="100 + i*200 - 84" y1="20" :x2="100 + i*200 + 84" y2="20"
-            stroke="#df6900" stroke-width="1.5" :stroke-opacity="0.6" />
-          <!-- label -->
-          <text :x="100 + i*200" y="48" text-anchor="middle"
-            font-family="'IBM Plex Mono', monospace" font-size="10" fill="#df6900"
-            letter-spacing="2.5" font-weight="500">{{ node.label }}</text>
-          <!-- stat -->
-          <text :x="100 + i*200" y="95" text-anchor="middle"
-            font-family="'IBM Plex Mono', monospace" font-size="26" fill="#f0f0f0"
-            font-weight="600" letter-spacing="1">{{ node.stat }}</text>
-          <!-- sub label -->
-          <text :x="100 + i*200" y="130" text-anchor="middle"
-            font-family="'IBM Plex Mono', monospace" font-size="9" fill="#4a5260"
-            letter-spacing="2" text-transform="uppercase">{{ node.sub }}</text>
-        </g>
       </svg>
     </div>
 
@@ -108,6 +126,27 @@ function fmt(n) {
   if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M'
   if (n >= 1e3) return Math.round(n / 1e3) + 'K'
   return String(n)
+}
+
+// Chevron shape: spacing=190, body left=0, right=170, point tip at 192, notch at -22
+// First node: flat left (x=15). Last node: no right point (x=170 flat).
+function chevronPoints(i) {
+  const x = i * 190      // left edge of this chevron body
+  const W = 170          // body width
+  const P = 22           // point / notch depth
+  const top = 20, bot = 150, mid = 85
+  const isFirst = i === 0
+  const isLast  = i === 5
+  if (isFirst) {
+    // flat left, pointed right
+    return `${x+15},${top} ${x+W},${top} ${x+W+P},${mid} ${x+W},${bot} ${x+15},${bot}`
+  } else if (isLast) {
+    // notched left, flat right
+    return `${x},${top} ${x+W},${top} ${x+W},${bot} ${x},${bot} ${x+P},${mid}`
+  } else {
+    // notched left, pointed right
+    return `${x},${top} ${x+W},${top} ${x+W+P},${mid} ${x+W},${bot} ${x},${bot} ${x+P},${mid}`
+  }
 }
 
 const pipeline = computed(() => {
