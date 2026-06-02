@@ -2,20 +2,19 @@
   <section class="analytics" id="analytics">
     <div class="radar-bg"><RadarCanvas :opacity="0.2" color="194, 120, 40" /></div>
 
-    <!-- Header + toggle -->
     <div class="section-header" style="position:relative;z-index:1">
       <div>
         <div class="section-tag">Detection Index</div>
         <h2 class="section-title">Pipeline analytics</h2>
       </div>
       <div class="analytics-toggle mono">
-        <button :class="{ active: days === 7 }"  @click="setDays(7)">7D</button>
-        <button :class="{ active: days === 30 }" @click="setDays(30)">30D</button>
-        <button :class="{ active: days === 90 }" @click="setDays(90)">90D</button>
+        <button :class="{ active: days===7  }" @click="setDays(7)">7D</button>
+        <button :class="{ active: days===30 }" @click="setDays(30)">30D</button>
+        <button :class="{ active: days===90 }" @click="setDays(90)">90D</button>
       </div>
     </div>
 
-    <!-- Detection frequency index -->
+    <!-- Detection index headline -->
     <div class="det-index" style="position:relative;z-index:1">
       <div v-for="item in detectionIndex" :key="item.label" class="det-index-item">
         <div class="det-index-num" :style="{ color: item.color }">{{ item.count }}</div>
@@ -26,52 +25,73 @@
 
     <div v-if="loading" class="analytics-loading mono" style="position:relative;z-index:1">Loading...</div>
 
-    <!-- 2×2 general charts -->
+    <!-- 4 general charts in one row -->
     <div v-else class="analytics-grid" style="position:relative;z-index:1">
+      <div class="chart-card">
+        <div class="chart-label mono">Annotated clips / day</div>
+        <canvas ref="clipsChart"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="chart-label mono">Detection class split</div>
+        <canvas ref="breakdownChart"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="chart-label mono">mAP50 per training run</div>
+        <canvas ref="mapChart"></canvas>
+      </div>
       <div class="chart-card">
         <div class="chart-label mono">Model performance radar</div>
         <canvas ref="radarChart"></canvas>
       </div>
-      <div class="chart-card">
-        <div class="chart-label mono">Training efficiency — images vs mAP50</div>
-        <canvas ref="scatterChart"></canvas>
-      </div>
-      <div class="chart-card">
-        <div class="chart-label mono">Inference throughput — clips / day</div>
-        <canvas ref="clipsChart"></canvas>
-      </div>
-      <div class="chart-card">
-        <div class="chart-label mono">Bounding box volume / day · stacked by class</div>
-        <canvas ref="bboxChart"></canvas>
-      </div>
     </div>
 
-    <!-- Model drill-down selector -->
-    <div class="model-drill-header" style="position:relative;z-index:1">
-      <div class="model-drill-label mono">Model drill-down</div>
-      <div class="model-drill-tabs">
+    <!-- Per-run drill-down -->
+    <div class="drill-header" style="position:relative;z-index:1">
+      <span class="drill-label mono">Run drill-down</span>
+      <div class="drill-tabs">
         <button
-          v-for="m in availableModels" :key="m"
-          :class="['model-drill-tab mono', `tab-${m.toLowerCase()}`, { active: selectedModel === m }]"
-          @click="selectModel(m)"
-        >{{ m }}</button>
+          v-for="r in availableRuns" :key="r.run_id"
+          :class="['drill-tab mono', `tab-${r.model.toLowerCase()}`, { active: selectedRunId === r.run_id }]"
+          @click="selectRun(r.run_id)"
+        >#{{ r.run_id }} {{ r.model }} <span class="tab-stage">{{ r.stage.toLowerCase() }}</span></button>
       </div>
     </div>
 
-    <!-- Expanded per-model charts -->
     <transition name="drill-expand">
-      <div v-if="selectedModel" class="model-drill-grid" style="position:relative;z-index:1">
+      <div v-if="selectedRun" class="drill-grid" style="position:relative;z-index:1">
+        <!-- Row 1 -->
         <div class="chart-card">
-          <div class="chart-label mono">mAP50 per epoch — {{ selectedModel }}</div>
-          <canvas :ref="el => drillCanvases.map50 = el"></canvas>
+          <div class="chart-label mono">mAP50 per epoch</div>
+          <canvas :ref="el => dc.map50 = el"></canvas>
         </div>
         <div class="chart-card">
-          <div class="chart-label mono">Precision / Recall per epoch — {{ selectedModel }}</div>
-          <canvas :ref="el => drillCanvases.pr = el"></canvas>
+          <div class="chart-label mono">Precision &amp; Recall per epoch</div>
+          <canvas :ref="el => dc.pr = el"></canvas>
         </div>
-        <div class="chart-card chart-wide-drill">
-          <div class="chart-label mono">Validation loss curves — {{ selectedModel }} · box · cls · dfl</div>
-          <canvas :ref="el => drillCanvases.loss = el"></canvas>
+        <div class="chart-card">
+          <div class="chart-label mono">Train loss per epoch</div>
+          <canvas :ref="el => dc.trainLoss = el"></canvas>
+        </div>
+        <div class="chart-card">
+          <div class="chart-label mono">Val loss per epoch</div>
+          <canvas :ref="el => dc.valLoss = el"></canvas>
+        </div>
+        <!-- Row 2 -->
+        <div class="chart-card">
+          <div class="chart-label mono">Confusion matrix (val set)</div>
+          <canvas :ref="el => dc.cm = el"></canvas>
+        </div>
+        <div class="chart-card">
+          <div class="chart-label mono">BoxPR curve (P vs R)</div>
+          <canvas :ref="el => dc.boxPR = el"></canvas>
+        </div>
+        <div class="chart-card">
+          <div class="chart-label mono">Precision vs confidence</div>
+          <canvas :ref="el => dc.boxP = el"></canvas>
+        </div>
+        <div class="chart-card">
+          <div class="chart-label mono">Recall vs confidence</div>
+          <canvas :ref="el => dc.boxR = el"></canvas>
         </div>
       </div>
     </transition>
@@ -85,232 +105,219 @@ import RadarCanvas from './RadarCanvas.vue'
 
 Chart.register(...registerables)
 
-const days         = ref(30)
-const loading      = ref(true)
-const data         = ref(null)
-const epochData    = ref([])
-const selectedModel = ref(null)
+const days = ref(30)
+const loading = ref(true)
+const data = ref(null)
+const epochData = ref([])
+const selectedRunId = ref(null)
 
-const radarChart   = ref(null)
-const scatterChart = ref(null)
-const clipsChart   = ref(null)
-const bboxChart    = ref(null)
-const drillCanvases = ref({ map50: null, pr: null, loss: null })
+const clipsChart    = ref(null)
+const breakdownChart = ref(null)
+const mapChart      = ref(null)
+const radarChart    = ref(null)
+const dc = ref({ map50:null, pr:null, trainLoss:null, valLoss:null, cm:null, boxPR:null, boxP:null, boxR:null })
 
 let charts = {}
 let drillCharts = {}
 
 const C = {
-  amber:      '#df6900',
-  amberFaint: 'rgba(223,105,0,0.15)',
-  aircraft:   'oklch(0.62 0.16 220deg)',
-  vehicle:    'oklch(0.60 0.20 25deg)',
-  personnel:  'oklch(0.60 0.18 145deg)',
-  general:    'oklch(0.65 0.18 55deg)',
-  grid:       'rgba(255,255,255,0.06)',
-  tick:       'rgba(255,255,255,0.35)',
-  radarGrid:  'rgba(255,255,255,0.1)',
+  amber: '#df6900', amberFaint: 'rgba(223,105,0,0.15)',
+  aircraft: 'oklch(0.62 0.16 220deg)', vehicle: 'oklch(0.60 0.20 25deg)',
+  personnel: 'oklch(0.60 0.18 145deg)', general: 'oklch(0.65 0.18 55deg)',
+  grid: 'rgba(255,255,255,0.06)', tick: 'rgba(255,255,255,0.35)',
 }
-const MODEL_COLORS = { AIRCRAFT: C.aircraft, VEHICLE: C.vehicle, PERSONNEL: C.personnel, GENERAL: C.general }
-
-const availableModels = computed(() => [...new Set(epochData.value.map(r => r.model))].filter(Boolean).sort())
+const MC = { AIRCRAFT: C.aircraft, VEHICLE: C.vehicle, PERSONNEL: C.personnel, GENERAL: C.general }
+const BS = { grid: { color: C.grid }, ticks: { color: C.tick, font: { family: 'IBM Plex Mono', size: 10 } } }
 
 const detectionIndex = computed(() => {
   if (!data.value) return [
-    { label: 'AIRCRAFT',  count: '—', color: C.aircraft  },
-    { label: 'VEHICLE',   count: '—', color: C.vehicle   },
+    { label: 'AIRCRAFT', count: '—', color: C.aircraft },
+    { label: 'VEHICLE', count: '—', color: C.vehicle },
     { label: 'PERSONNEL', count: '—', color: C.personnel },
   ]
   const bd = data.value.detection_breakdown
   const get = cls => (bd.find(r => r.class === cls)?.count ?? 0).toLocaleString()
   return [
-    { label: 'AIRCRAFT',  count: get('AIRCRAFT'),  color: C.aircraft  },
-    { label: 'VEHICLE',   count: get('VEHICLE'),   color: C.vehicle   },
+    { label: 'AIRCRAFT', count: get('AIRCRAFT'), color: C.aircraft },
+    { label: 'VEHICLE', count: get('VEHICLE'), color: C.vehicle },
     { label: 'PERSONNEL', count: get('PERSONNEL'), color: C.personnel },
   ]
 })
 
-const BASE_SCALE = {
-  grid: { color: C.grid },
-  ticks: { color: C.tick, font: { family: 'IBM Plex Mono', size: 10 } },
-}
+const availableRuns = computed(() =>
+  epochData.value.filter(r => r.epochs?.length).sort((a,b) => a.run_id - b.run_id)
+)
+const selectedRun = computed(() => epochData.value.find(r => r.run_id === selectedRunId.value))
 
 function destroyAll() { Object.values(charts).forEach(c => c?.destroy()); charts = {} }
 function destroyDrill() { Object.values(drillCharts).forEach(c => c?.destroy()); drillCharts = {} }
 
-function buildGeneralCharts() {
+function buildGeneral() {
   destroyAll()
   const d = data.value
   if (!d) return
 
-  // RADAR
-  if (radarChart.value) {
-    const models = ['AIRCRAFT', 'VEHICLE', 'PERSONNEL', 'GENERAL']
-    const best = {}; const fc = {}
-    const MAX_IMAGES = 144466
+  // Clips/day
+  if (clipsChart.value) {
+    charts.clips = new Chart(clipsChart.value, {
+      type: 'bar',
+      data: { labels: d.clips_per_day.map(r => r.date.slice(5)), datasets: [{ data: d.clips_per_day.map(r => r.count), backgroundColor: C.amberFaint, borderColor: C.amber, borderWidth: 1.5 }] },
+      options: { responsive:true, maintainAspectRatio:true, aspectRatio:1.4, plugins:{legend:{display:false}}, scales:{x:BS,y:{...BS,beginAtZero:true}} },
+    })
+  }
+
+  // Class breakdown (doughnut)
+  if (breakdownChart.value && d.detection_breakdown.length) {
+    charts.breakdown = new Chart(breakdownChart.value, {
+      type: 'doughnut',
+      data: { labels: d.detection_breakdown.map(r => r.class), datasets: [{ data: d.detection_breakdown.map(r => r.count), backgroundColor: d.detection_breakdown.map(r => MC[r.class]||C.amber), borderWidth:0 }] },
+      options: { responsive:true, maintainAspectRatio:true, aspectRatio:1.4, cutout:'55%', plugins:{legend:{display:true,position:'bottom',labels:{color:C.tick,font:{family:'IBM Plex Mono',size:9},boxWidth:8,padding:8}}} },
+    })
+  }
+
+  // mAP50 timeline
+  if (mapChart.value && d.map50_timeline.length) {
+    const models = [...new Set(d.map50_timeline.map(r => r.model))]
+    charts.map = new Chart(mapChart.value, {
+      type: 'line',
+      data: {
+        datasets: models.map(m => ({
+          label: m,
+          data: d.map50_timeline.filter(r => r.model === m).map(r => ({ x: r.date.slice(0,10), y: r.map50 })),
+          borderColor: MC[m]||C.amber, backgroundColor:'transparent',
+          pointRadius:4, borderWidth:2, tension:0.2,
+        })),
+      },
+      options: { responsive:true, maintainAspectRatio:true, aspectRatio:1.4, scales:{x:{...BS,type:'category'},y:{...BS,min:0.3,max:1.0}}, plugins:{legend:{display:true,position:'bottom',labels:{color:C.tick,font:{family:'IBM Plex Mono',size:9},boxWidth:8,padding:8}}} },
+    })
+  }
+
+  // Radar
+  if (radarChart.value && d.training_scatter.length) {
+    const best = {}; const fc = {}; const MAX = 144466
     for (const r of d.training_scatter) {
       if (!best[r.model] || r.map50 > best[r.model].map50) best[r.model] = r
-      if (r.stage === 'FINETUNE') fc[r.model] = (fc[r.model] || 0) + 1
+      if (r.stage === 'FINETUNE') fc[r.model] = (fc[r.model]||0) + 1
     }
     charts.radar = new Chart(radarChart.value, {
       type: 'radar',
       data: {
         labels: ['mAP50', 'Data size', 'Finetunes', 'Precision', 'Recall'],
-        datasets: models.filter(m => best[m]).map(m => {
-          const b = best[m]
-          return {
-            label: m,
-            data: [
-              Math.round(b.map50 * 100),
-              Math.round((b.images / MAX_IMAGES) * 100),
-              Math.round((fc[m] || 0) / 3 * 100),
-              b.precision != null ? Math.round(b.precision * 100) : 0,
-              b.recall != null ? Math.round(b.recall * 100) : 0,
-            ],
-            borderColor: MODEL_COLORS[m], borderWidth: 2, pointRadius: 3,
-            backgroundColor: `color-mix(in srgb, ${MODEL_COLORS[m]} 15%, transparent)`,
-          }
-        }),
-      },
-      options: {
-        responsive: true, maintainAspectRatio: true, aspectRatio: 1.1,
-        scales: { r: { min: 0, max: 100, grid: { color: C.radarGrid }, pointLabels: { color: C.tick, font: { family: 'IBM Plex Mono', size: 9 } }, ticks: { color: 'transparent', backdropColor: 'transparent', stepSize: 25 } } },
-        plugins: { legend: { display: true, position: 'bottom', labels: { color: C.tick, font: { family: 'IBM Plex Mono', size: 9 }, boxWidth: 8, padding: 10 } } },
-      },
-    })
-  }
-
-  // SCATTER
-  if (scatterChart.value && d.training_scatter.length) {
-    charts.scatter = new Chart(scatterChart.value, {
-      type: 'scatter',
-      data: {
-        datasets: ['AIRCRAFT','VEHICLE','PERSONNEL','GENERAL'].map(m => ({
+        datasets: Object.entries(best).map(([m,b]) => ({
           label: m,
-          data: d.training_scatter.filter(r => r.model === m && r.images > 0).map(r => ({ x: r.images, y: r.map50 })),
-          backgroundColor: MODEL_COLORS[m], pointRadius: 6,
+          data: [Math.round(b.map50*100), Math.round((b.images/MAX)*100), Math.round((fc[m]||0)/3*100), b.precision?Math.round(b.precision*100):0, b.recall?Math.round(b.recall*100):0],
+          borderColor: MC[m], borderWidth:2, pointRadius:3,
+          backgroundColor: `color-mix(in srgb, ${MC[m]} 15%, transparent)`,
         })),
       },
-      options: {
-        responsive: true, maintainAspectRatio: true, aspectRatio: 1.1,
-        scales: {
-          x: { ...BASE_SCALE, title: { display: true, text: 'images', color: C.tick, font: { family: 'IBM Plex Mono', size: 9 } } },
-          y: { ...BASE_SCALE, min: 0.3, max: 1.0, title: { display: true, text: 'mAP50', color: C.tick, font: { family: 'IBM Plex Mono', size: 9 } } },
-        },
-        plugins: { legend: { display: true, position: 'bottom', labels: { color: C.tick, font: { family: 'IBM Plex Mono', size: 9 }, boxWidth: 8, padding: 10 } } },
-      },
-    })
-  }
-
-  // CLIPS/DAY
-  if (clipsChart.value) {
-    charts.clips = new Chart(clipsChart.value, {
-      type: 'bar',
-      data: { labels: d.clips_per_day.map(r => r.date.slice(5)), datasets: [{ data: d.clips_per_day.map(r => r.count), backgroundColor: C.amberFaint, borderColor: C.amber, borderWidth: 1.5 }] },
-      options: { responsive: true, maintainAspectRatio: true, aspectRatio: 1.5, plugins: { legend: { display: false } }, scales: { x: BASE_SCALE, y: { ...BASE_SCALE, beginAtZero: true } } },
-    })
-  }
-
-  // BBOX VOLUME
-  if (bboxChart.value) {
-    const boxes = d.detection_boxes_per_day || []
-    charts.bbox = new Chart(bboxChart.value, {
-      type: 'bar',
-      data: {
-        labels: boxes.map(r => r.date.slice(5)),
-        datasets: [
-          { label: 'AIRCRAFT',  data: boxes.map(r => r.aircraft),  backgroundColor: C.aircraft,  borderWidth: 0 },
-          { label: 'VEHICLE',   data: boxes.map(r => r.vehicle),   backgroundColor: C.vehicle,   borderWidth: 0 },
-          { label: 'PERSONNEL', data: boxes.map(r => r.personnel), backgroundColor: C.personnel, borderWidth: 0 },
-        ],
-      },
-      options: {
-        responsive: true, maintainAspectRatio: true, aspectRatio: 1.5,
-        scales: { x: { ...BASE_SCALE, stacked: true }, y: { ...BASE_SCALE, stacked: true, beginAtZero: true } },
-        plugins: { legend: { display: true, position: 'bottom', labels: { color: C.tick, font: { family: 'IBM Plex Mono', size: 9 }, boxWidth: 8, padding: 8 } } },
-      },
+      options: { responsive:true, maintainAspectRatio:true, aspectRatio:1.4, scales:{r:{min:0,max:100,grid:{color:'rgba(255,255,255,0.1)'},pointLabels:{color:C.tick,font:{family:'IBM Plex Mono',size:9}},ticks:{color:'transparent',backdropColor:'transparent',stepSize:25}}}, plugins:{legend:{display:true,position:'bottom',labels:{color:C.tick,font:{family:'IBM Plex Mono',size:9},boxWidth:8,padding:8}}} },
     })
   }
 }
 
-async function buildDrillCharts(model) {
+async function buildDrill(runId) {
   destroyDrill()
-  if (!model) return
   await nextTick()
+  const run = epochData.value.find(r => r.run_id === runId)
+  if (!run?.epochs?.length) return
+  const epochs = run.epochs
+  const xs = epochs.map((_,i) => i+1)
+  const color = MC[run.model] || C.amber
 
-  const runs = epochData.value.filter(r => r.model === model).sort((a, b) => a.run_id - b.run_id)
-  if (!runs.length) return
-
-  const styleFor = r => ({
-    borderColor: MODEL_COLORS[model] || C.amber,
-    borderDash: r.stage === 'BASELINE' ? [4,3] : [],
-    borderWidth: 1.5, pointRadius: 2, tension: 0.3, backgroundColor: 'transparent',
+  const lineOpts = (yLabel, min, max) => ({
+    responsive:true, maintainAspectRatio:true, aspectRatio:1.3,
+    scales:{ x:{...BS,title:{display:true,text:'epoch',color:C.tick,font:{family:'IBM Plex Mono',size:9}}}, y:{...BS,...(min!=null?{min,max}:{}),title:{display:true,text:yLabel,color:C.tick,font:{family:'IBM Plex Mono',size:9}}} },
+    plugins:{legend:{display:true,position:'top',labels:{color:C.tick,font:{family:'IBM Plex Mono',size:9},boxWidth:8,padding:8}}},
   })
 
-  // mAP50 per epoch
-  if (drillCanvases.value.map50) {
-    drillCharts.map50 = new Chart(drillCanvases.value.map50, {
-      type: 'line',
-      data: {
-        datasets: runs.map(r => ({
-          label: `run #${r.run_id} ${r.stage?.toLowerCase()}`,
-          data: r.epochs.map((e, i) => ({ x: i + 1, y: e['metrics/mAP50(B)'] })),
-          ...styleFor(r),
-        })),
-      },
-      options: {
-        responsive: true, maintainAspectRatio: true, aspectRatio: 2.2,
-        scales: { x: { ...BASE_SCALE }, y: { ...BASE_SCALE, min: 0, max: 1 } },
-        plugins: { legend: { display: true, position: 'top', labels: { color: C.tick, font: { family: 'IBM Plex Mono', size: 9 }, boxWidth: 8, padding: 10 } } },
-      },
-    })
-  }
+  // mAP50/epoch
+  if (dc.value.map50) drillCharts.map50 = new Chart(dc.value.map50, {
+    type:'line', data:{ labels:xs, datasets:[{ label:'mAP50', data:epochs.map(e=>e['metrics/mAP50(B)']), borderColor:color, backgroundColor:'transparent', pointRadius:3, borderWidth:2, tension:0.3 }] },
+    options: lineOpts('mAP50',0,1),
+  })
 
-  // P/R per epoch
-  if (drillCanvases.value.pr) {
-    const ds = runs.flatMap(r => [
-      { label: `P #${r.run_id}`, data: r.epochs.map((e,i) => ({ x: i+1, y: e['metrics/precision(B)'] })), borderColor: MODEL_COLORS[model], borderDash: [], borderWidth: 1.5, pointRadius: 2, tension: 0.3, backgroundColor: 'transparent' },
-      { label: `R #${r.run_id}`, data: r.epochs.map((e,i) => ({ x: i+1, y: e['metrics/recall(B)'] })),    borderColor: MODEL_COLORS[model], borderDash: [4,3],  borderWidth: 1.5, pointRadius: 2, tension: 0.3, backgroundColor: 'transparent' },
-    ])
-    drillCharts.pr = new Chart(drillCanvases.value.pr, {
-      type: 'line',
-      data: { datasets: ds },
-      options: {
-        responsive: true, maintainAspectRatio: true, aspectRatio: 2.2,
-        scales: { x: { ...BASE_SCALE }, y: { ...BASE_SCALE, min: 0, max: 1 } },
-        plugins: { legend: { display: true, position: 'top', labels: { color: C.tick, font: { family: 'IBM Plex Mono', size: 9 }, boxWidth: 8, padding: 8 } } },
-      },
-    })
-  }
+  // Precision + Recall
+  if (dc.value.pr) drillCharts.pr = new Chart(dc.value.pr, {
+    type:'line', data:{ labels:xs, datasets:[
+      { label:'Precision', data:epochs.map(e=>e['metrics/precision(B)']), borderColor:color, backgroundColor:'transparent', pointRadius:2, borderWidth:2, tension:0.3 },
+      { label:'Recall',    data:epochs.map(e=>e['metrics/recall(B)']),    borderColor:color, backgroundColor:'transparent', borderDash:[4,3], pointRadius:2, borderWidth:1.5, tension:0.3 },
+    ]},
+    options: lineOpts('P / R',0,1),
+  })
 
-  // Val loss curves
-  if (drillCanvases.value.loss) {
-    const lossKeys = [['val/box_loss','box'], ['val/cls_loss','cls'], ['val/dfl_loss','dfl']]
-    const lossColors = ['#df6900','oklch(0.62 0.16 220deg)','oklch(0.60 0.18 145deg)']
-    const bestRun = runs.at(-1)
-    if (bestRun) {
-      drillCharts.loss = new Chart(drillCanvases.value.loss, {
-        type: 'line',
-        data: {
-          datasets: lossKeys.map(([key, name], i) => ({
-            label: name + '_loss',
-            data: bestRun.epochs.map((e,j) => ({ x: j+1, y: e[key] })),
-            borderColor: lossColors[i], borderWidth: 2, pointRadius: 2, tension: 0.3, backgroundColor: 'transparent',
-          })),
-        },
-        options: {
-          responsive: true, maintainAspectRatio: true, aspectRatio: 3.5,
-          scales: { x: { ...BASE_SCALE, title: { display: true, text: 'epoch', color: C.tick, font: { family: 'IBM Plex Mono', size: 9 } } }, y: { ...BASE_SCALE } },
-          plugins: { legend: { display: true, position: 'top', labels: { color: C.tick, font: { family: 'IBM Plex Mono', size: 9 }, boxWidth: 8, padding: 10 } } },
-        },
-      })
+  // Train losses
+  if (dc.value.trainLoss) drillCharts.trainLoss = new Chart(dc.value.trainLoss, {
+    type:'line', data:{ labels:xs, datasets:[
+      { label:'box', data:epochs.map(e=>e['train/box_loss']), borderColor:color, backgroundColor:'transparent', pointRadius:2, borderWidth:1.5, tension:0.3 },
+      { label:'cls', data:epochs.map(e=>e['train/cls_loss']), borderColor:'oklch(0.62 0.16 220deg)', backgroundColor:'transparent', pointRadius:2, borderWidth:1.5, tension:0.3 },
+      { label:'dfl', data:epochs.map(e=>e['train/dfl_loss']), borderColor:'oklch(0.60 0.18 145deg)', backgroundColor:'transparent', pointRadius:2, borderWidth:1.5, tension:0.3 },
+    ]},
+    options: lineOpts('loss',null,null),
+  })
+
+  // Val losses
+  if (dc.value.valLoss) drillCharts.valLoss = new Chart(dc.value.valLoss, {
+    type:'line', data:{ labels:xs, datasets:[
+      { label:'box', data:epochs.map(e=>e['val/box_loss']), borderColor:color, backgroundColor:'transparent', pointRadius:2, borderWidth:1.5, tension:0.3 },
+      { label:'cls', data:epochs.map(e=>e['val/cls_loss']), borderColor:'oklch(0.62 0.16 220deg)', backgroundColor:'transparent', pointRadius:2, borderWidth:1.5, tension:0.3 },
+      { label:'dfl', data:epochs.map(e=>e['val/dfl_loss']), borderColor:'oklch(0.60 0.18 145deg)', backgroundColor:'transparent', pointRadius:2, borderWidth:1.5, tension:0.3 },
+    ]},
+    options: lineOpts('val loss',null,null),
+  })
+
+  // Confusion matrix heatmap
+  const cm = run.confusion_matrix
+  if (dc.value.cm && cm) {
+    const nc = cm.length
+    const classNames = nc === 2 ? ['aircraft','bg'] : nc === 3 ? ['aircraft','vehicle','personnel'] : Array.from({length:nc},(_,i)=>`c${i}`)
+    const labels = []
+    const cmData = []
+    for (let r=0; r<nc; r++) for (let c=0; c<nc; c++) {
+      labels.push(`${classNames[r]}→${classNames[c]}`)
+      cmData.push({ x:c, y:r, v: cm[r][c] })
     }
+    const maxVal = Math.max(...cm.flat())
+    drillCharts.cm = new Chart(dc.value.cm, {
+      type:'scatter',
+      data:{ datasets:[{ data:cmData, backgroundColor: ctx => { const alpha = ctx.raw?.v/maxVal; return `rgba(223,105,0,${alpha})`}, pointRadius: ctx => { const sz = 30*(ctx.raw?.v/maxVal||0)+8; return sz }, pointStyle:'rect' }] },
+      options:{ responsive:true, maintainAspectRatio:true, aspectRatio:1.3, scales:{ x:{...BS,min:-0.5,max:nc-0.5,ticks:{callback:v=>classNames[v]||v,stepSize:1}}, y:{...BS,min:-0.5,max:nc-0.5,ticks:{callback:v=>classNames[v]||v,stepSize:1},reverse:true} }, plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`${classNames[ctx.raw.y]}→${classNames[ctx.raw.x]}: ${ctx.raw.v}`}}} },
+    })
+  }
+
+  // BoxPR (P vs R scatter from curve data)
+  const curveKeys = Object.keys(run).filter(k => k.startsWith('curve_'))
+  const prKey = curveKeys.find(k => k.includes('pr') || k.includes('PR'))
+  const pKey  = curveKeys.find(k => k.toLowerCase().endsWith('p_curve') || k.toLowerCase().endsWith('prec'))
+  const rKey  = curveKeys.find(k => k.toLowerCase().endsWith('r_curve') || k.toLowerCase().endsWith('rec'))
+
+  if (dc.value.boxPR && prKey && run[prKey]?.length) {
+    const vals = run[prKey]
+    drillCharts.boxPR = new Chart(dc.value.boxPR, {
+      type:'line', data:{ labels:vals.map((_,i)=>+(i/vals.length).toFixed(2)), datasets:[{ label:'BoxPR', data:vals, borderColor:color, backgroundColor:'transparent', pointRadius:0, borderWidth:2 }] },
+      options:{ responsive:true, maintainAspectRatio:true, aspectRatio:1.3, plugins:{legend:{display:false}}, scales:{x:{...BS,title:{display:true,text:'recall',color:C.tick,font:{family:'IBM Plex Mono',size:9}}},y:{...BS,min:0,max:1,title:{display:true,text:'precision',color:C.tick,font:{family:'IBM Plex Mono',size:9}}}} },
+    })
+  }
+
+  if (dc.value.boxP && pKey && run[pKey]?.length) {
+    const vals = run[pKey]
+    drillCharts.boxP = new Chart(dc.value.boxP, {
+      type:'line', data:{ labels:vals.map((_,i)=>+(i/vals.length).toFixed(2)), datasets:[{ label:'Precision', data:vals, borderColor:color, backgroundColor:'transparent', pointRadius:0, borderWidth:2 }] },
+      options:{ responsive:true, maintainAspectRatio:true, aspectRatio:1.3, plugins:{legend:{display:false}}, scales:{x:{...BS,title:{display:true,text:'conf',color:C.tick,font:{family:'IBM Plex Mono',size:9}}},y:{...BS,min:0,max:1}} },
+    })
+  }
+
+  if (dc.value.boxR && rKey && run[rKey]?.length) {
+    const vals = run[rKey]
+    drillCharts.boxR = new Chart(dc.value.boxR, {
+      type:'line', data:{ labels:vals.map((_,i)=>+(i/vals.length).toFixed(2)), datasets:[{ label:'Recall', data:vals, borderColor:color, backgroundColor:'transparent', pointRadius:0, borderWidth:2 }] },
+      options:{ responsive:true, maintainAspectRatio:true, aspectRatio:1.3, plugins:{legend:{display:false}}, scales:{x:{...BS,title:{display:true,text:'conf',color:C.tick,font:{family:'IBM Plex Mono',size:9}}},y:{...BS,min:0,max:1}} },
+    })
   }
 }
 
-async function selectModel(m) {
-  selectedModel.value = selectedModel.value === m ? null : m
-  if (selectedModel.value) await buildDrillCharts(selectedModel.value)
+async function selectRun(id) {
+  selectedRunId.value = selectedRunId.value === id ? null : id
+  if (selectedRunId.value) await buildDrill(selectedRunId.value)
   else destroyDrill()
 }
 
@@ -328,7 +335,7 @@ async function fetch_() {
   } catch {}
   loading.value = false
   await nextTick()
-  buildGeneralCharts()
+  buildGeneral()
 }
 
 watch(days, fetch_)
@@ -343,45 +350,42 @@ onMounted(fetch_)
 .analytics-toggle button.active { border-color: var(--amber); color: var(--amber); z-index:1; position:relative; }
 .analytics-toggle button:hover:not(.active) { color: var(--fg-0); border-color: var(--fg-1); }
 
-.det-index { display: flex; align-items: flex-end; gap: 40px; flex-wrap: wrap; padding: 32px clamp(20px, 5vw, 80px); border-bottom: 1px solid var(--fg-3); }
+.det-index { display: flex; align-items: flex-end; gap: 40px; flex-wrap: wrap; padding: 32px clamp(20px,5vw,80px); border-bottom: 1px solid var(--fg-3); }
 .det-index-item { display: flex; flex-direction: column; gap: 4px; }
-.det-index-num { font-family: var(--font-mono); font-size: clamp(32px, 5vw, 56px); font-weight: 700; line-height: 1; }
+.det-index-num { font-family: var(--font-mono); font-size: clamp(32px,5vw,56px); font-weight: 700; line-height: 1; }
 .det-index-label { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.2em; color: var(--fg-3); }
 .det-index-note { font-family: var(--font-mono); font-size: 10px; color: var(--fg-3); letter-spacing: 0.06em; line-height: 1.6; margin-left: auto; align-self: flex-end; max-width: 280px; text-align: right; }
 
 .analytics-loading { color: var(--fg-3); font-size: 13px; padding: 40px clamp(20px,5vw,80px); }
 
-.analytics-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; padding: 2px; }
+.analytics-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 2px; padding: 2px; }
 .chart-card { background: var(--bg-2); padding: 20px; }
 .chart-label { font-size: 10px; color: var(--fg-3); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* Model drill-down */
-.model-drill-header { display: flex; align-items: center; gap: 20px; padding: 20px clamp(20px,5vw,80px); border-top: 1px solid var(--fg-3); flex-wrap: wrap; }
-.model-drill-label { font-size: 10px; color: var(--fg-3); letter-spacing: 0.18em; flex-shrink: 0; }
-.model-drill-tabs { display: flex; gap: 2px; flex-wrap: wrap; }
-.model-drill-tab { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.15em; padding: 5px 16px; border: 1px solid var(--fg-3); background: none; color: var(--fg-3); cursor: pointer; transition: all 0.15s; }
-.model-drill-tab:hover { color: var(--fg-0); border-color: var(--fg-1); }
+/* Drill-down */
+.drill-header { display: flex; align-items: center; gap: 20px; padding: 20px clamp(20px,5vw,80px); border-top: 1px solid var(--fg-3); flex-wrap: wrap; }
+.drill-label { font-size: 10px; color: var(--fg-3); letter-spacing: 0.18em; flex-shrink: 0; }
+.drill-tabs { display: flex; gap: 2px; flex-wrap: wrap; }
+.drill-tab { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; padding: 5px 12px; border: 1px solid var(--fg-3); background: none; color: var(--fg-3); cursor: pointer; transition: all 0.15s; }
+.drill-tab .tab-stage { opacity: 0.6; font-size: 9px; }
+.drill-tab:hover { color: var(--fg-0); border-color: var(--fg-1); }
 .tab-aircraft.active  { color: var(--cat-color-aircraft);   border-color: var(--cat-color-aircraft); }
 .tab-vehicle.active   { color: var(--cat-color-vehicles);   border-color: var(--cat-color-vehicles); }
 .tab-personnel.active { color: var(--cat-color-personnel);  border-color: var(--cat-color-personnel); }
 .tab-general.active   { color: var(--cat-color-generalist); border-color: var(--cat-color-generalist); }
 
-.model-drill-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; padding: 2px; }
-.chart-wide-drill { grid-column: span 2; }
+.drill-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 2px; padding: 2px; }
 
-/* Expand animation */
 .drill-expand-enter-active, .drill-expand-leave-active { transition: max-height 0.4s ease, opacity 0.3s ease; overflow: hidden; }
 .drill-expand-enter-from, .drill-expand-leave-to { max-height: 0; opacity: 0; }
-.drill-expand-enter-to, .drill-expand-leave-from { max-height: 1200px; opacity: 1; }
+.drill-expand-enter-to, .drill-expand-leave-from { max-height: 2000px; opacity: 1; }
 
 @media (max-width: 900px) {
-  .analytics-grid { grid-template-columns: 1fr 1fr; }
-  .model-drill-grid { grid-template-columns: 1fr; }
-  .chart-wide-drill { grid-column: span 1; }
+  .analytics-grid, .drill-grid { grid-template-columns: repeat(2,1fr); }
 }
 @media (max-width: 480px) {
-  .analytics-grid { grid-template-columns: 1fr; }
+  .analytics-grid, .drill-grid { grid-template-columns: 1fr; }
   .det-index { gap: 24px; }
-  .det-index-note { margin-left: 0; text-align: left; }
+  .det-index-note { margin-left:0; text-align:left; }
 }
 </style>
