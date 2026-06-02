@@ -212,6 +212,78 @@ async def get_stats(db: AsyncSession = Depends(get_db)) -> dict:
     }
 
 
+_GCS_BUCKET = "ukraine-footage-media"
+_CLASS_DEFS = {
+    "AIRCRAFT":  {"id": 0, "covers": "Drones, helicopters, fixed-wing aircraft, missiles, glide bombs"},
+    "VEHICLE":   {"id": 1, "covers": "Tanks, APCs, artillery, radar, all ground military vehicles"},
+    "PERSONNEL": {"id": 2, "covers": "Soldiers, fighters, RPG/ATGM operators"},
+    "GENERAL":   {"id": None, "covers": "All three classes combined — AIRCRAFT + VEHICLE + PERSONNEL"},
+}
+
+
+def _run_to_dict(r: TrainingRun, model_name: str, is_best: bool) -> dict:
+    metrics = r.metrics or {}
+    map50_key = next((k for k in metrics if "map50" in k.lower() and "map50-95" not in k.lower()), None)
+    map50 = round(float(metrics[map50_key]), 3) if map50_key else None
+    images = metrics.get("total_train_images") or 0
+    download_url = None
+    if r.weights_path:
+        wp = r.weights_path.replace("\\", "/")
+        for marker in ("runs/finetune/", "runs/baseline/"):
+            if marker in wp:
+                gcs_key = wp[wp.index(marker):]
+                download_url = f"https://storage.googleapis.com/{_GCS_BUCKET}/{gcs_key}"
+                break
+    return {
+        "model":        model_name,
+        "run_id":       r.id,
+        "stage":        r.stage.value if r.stage else "FINETUNE",
+        "map50":        map50,
+        "images":       images,
+        "download_url": download_url,
+        "classes":      _CLASS_DEFS.get(model_name, {}),
+        "completed_at": r.completed_at.isoformat() if r.completed_at else None,
+        "is_best":      is_best,
+    }
+
+
+@router.get("/models")
+async def get_models(db: AsyncSession = Depends(get_db)) -> list[dict]:
+    """Return all completed training runs with is_best flag per model type."""
+    all_done = (await db.execute(
+        select(TrainingRun)
+        .where(TrainingRun.status == TrainingStatus.DONE)
+        .order_by(TrainingRun.completed_at.desc())
+    )).scalars().all()
+
+    result = []
+    for model_name in _MODELS:
+        try:
+            mtype = ModelType[model_name]
+        except KeyError:
+            continue
+        done_runs = sorted(
+            [r for r in all_done if r.model_type == mtype],
+            key=lambda r: r.completed_at or r.created_at,
+            reverse=True,
+        )
+        if not done_runs:
+            continue
+        best_id = max(done_runs, key=lambda r: _run_map50(r) or 0).id
+        for r in done_runs:
+            result.append(_run_to_dict(r, model_name, r.id == best_id))
+    return result
+
+
+def _run_map50(r: TrainingRun) -> float:
+    m = r.metrics or {}
+    k = next((k for k in m if "map50" in k.lower() and "map50-95" not in k.lower()), None)
+    try:
+        return float(m[k]) if k else 0.0
+    except (ValueError, TypeError):
+        return 0.0
+
+
 @router.get("/feed")
 async def get_feed(
     page: int = Query(1, ge=1),

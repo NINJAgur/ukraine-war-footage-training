@@ -4,6 +4,8 @@ const routes = [
   { path: '/',            component: () => import('../views/PublicFeed.vue') },
   { path: '/archive',     component: () => import('../views/Archive.vue') },
   { path: '/submit',      component: () => import('../views/Submit.vue') },
+  { path: '/models',      component: () => import('../views/Models.vue') },
+  { path: '/api-docs',    component: () => import('../views/ApiDocs.vue') },
   { path: '/admin/login', component: () => import('../views/admin/AdminLogin.vue') },
   { path: '/admin',       component: () => import('../views/admin/AdminPanel.vue'), meta: { requiresAuth: true } },
 ]

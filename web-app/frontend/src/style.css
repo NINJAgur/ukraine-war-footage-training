@@ -914,6 +914,26 @@ section { padding: clamp(60px, 8vw, 100px) clamp(20px, 5vw, 80px); }
 .about-list li { padding: 14px 0; border-bottom: 1px solid var(--fg-3); font-size: 13px; color: var(--fg-1); display: flex; gap: 16px; font-family: var(--font-mono); }
 .about-list li .list-marker { color: var(--amber); font-size: 10px; }
 
+/* ─── MODEL DOWNLOADS (capabilities section) ─── */
+.model-downloads { padding: clamp(40px, 5vw, 60px) clamp(20px, 5vw, 80px); border-top: 1px solid var(--fg-3); }
+.model-downloads-header { margin-bottom: 24px; }
+.model-downloads-title { font-size: 20px; font-weight: 600; margin: 8px 0 0; }
+.model-dl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 2px; margin-bottom: 20px; }
+.model-dl-card { background: var(--bg-2); padding: 20px; display: flex; flex-direction: column; gap: 12px; border: 1px solid var(--fg-3); }
+.model-dl-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.model-badge { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.18em; padding: 3px 10px; border: 1px solid; flex-shrink: 0; }
+.badge-aircraft  { color: #60a5fa; border-color: rgba(96,165,250,0.3); }
+.badge-vehicle   { color: var(--amber); border-color: var(--amber-border); }
+.badge-personnel { color: #4ade80; border-color: rgba(74,222,128,0.3); }
+.badge-general   { color: var(--fg-1); border-color: var(--fg-3); }
+.model-dl-map { font-size: 11px; color: var(--fg-2); }
+.model-dl-desc { font-size: 11px; color: var(--fg-3); line-height: 1.5; letter-spacing: 0.02em; }
+.model-dl-btn { display: block; text-align: center; padding: 9px 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; color: var(--amber); border: 1px solid var(--amber-border); text-decoration: none; transition: background 0.15s; margin-top: auto; }
+.model-dl-btn:hover { background: var(--amber-glow); }
+.model-dl-pending { color: var(--fg-3); border-color: var(--fg-3); }
+.model-all-link { font-size: 12px; color: var(--fg-3); text-decoration: none; letter-spacing: 0.08em; transition: color 0.15s; }
+.model-all-link:hover { color: var(--amber); }
+
 /* ─── PIPELINE MOBILE ─── */
 .pipeline-mobile { display: none; }
 @media (max-width: 640px) {

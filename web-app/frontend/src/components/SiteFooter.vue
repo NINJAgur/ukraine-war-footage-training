@@ -31,10 +31,9 @@
       <div class="footer-col">
         <h4>Models</h4>
         <ul>
-          <li><a href="#">AIRCRAFT — 0.968 mAP50</a></li>
-          <li><a href="#">VEHICLE — 0.904 mAP50</a></li>
-          <li><a href="#">PERSONNEL — 0.873 mAP50</a></li>
-          <li><a href="#">GENERAL — 0.784 mAP50</a></li>
+          <li><router-link to="/models">All Model Versions</router-link></li>
+          <li><router-link to="/api-docs">API Documentation</router-link></li>
+          <li><router-link to="/models">Download Weights</router-link></li>
         </ul>
       </div>
     </div>

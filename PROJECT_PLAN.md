@@ -752,13 +752,17 @@ Hero → TickerBar → DataStrip → MLDetectionSection → AnalyticsSection →
 - `AnalyticsSection` is a new component (5.4) between ArchiveSection and CapabilitiesSection
 - `DataStrip` moved up: after TickerBar, before MLDetectionSection
 
-#### 5.1 — Footer & About Restructure
-- [x] **5.1a** Rewrite `SiteFooter.vue` — left: project name + tagline + submit/contribute button; right: about content from current `AboutSection` (tech stack, links, repo); drop all empty link columns
+#### 5.1 — Footer & About Restructure ✅
+- [x] **5.1a** Rewrite `SiteFooter.vue` — 3 cols: Site links, About project stats, Models placeholder; same footer grid design
 - [x] **5.1b** Remove `AboutSection` and `MissionSection` from `PublicFeed.vue`
-- [x] **5.1c** Update `PublicFeed.vue` section order: Hero → TickerBar → DataStrip → MLDetection → Archive → Capabilities → Footer (Analytics slot reserved for 5.4)
+- [x] **5.1c** Update `PublicFeed.vue` section order: Hero → TickerBar → DataStrip → MLDetection → Archive → Capabilities → Footer
+- [x] **5.1d** Nav links: removed `about`, order = `detection → archive → capabilities`
+- [x] **5.1e** Hero reframed: tag = "Open Military Asset Detection Models", CTA = "Explore Models", stats = per-model mAP50
+- [x] **5.1f** FootageModal shows real clip description; `/api/annotated-clips` returns `description` field
 
-#### 5.2 — Pipeline Explainer (in CapabilitiesSection)
-- [ ] **5.2a** Animated SVG/CSS pipeline diagram in `CapabilitiesSection.vue` — Scraper → GDINO → Dataset → Train → Annotate → Feed; live clip/dataset/run counts at each node; replaces or extends existing 4-card grid
+#### 5.2 — Pipeline Explainer (in CapabilitiesSection) ✅
+- [x] **5.2a** Animated SVG chevron pipeline diagram above cap-grid — chevron arrow shapes, animated grey dashes at junctions, traveling amber dot, live stats from `/api/stats`
+- [x] **5.2b** Mobile: vertical list layout ≤640px (SVG hidden)
 
 #### 5.3 — Model Hub (in CapabilitiesSection + API)
 - [ ] **5.3a** Make GCS weight objects public-read — AIRCRAFT run 68, VEHICLE run 76, PERSONNEL run 75, GENERAL run 30

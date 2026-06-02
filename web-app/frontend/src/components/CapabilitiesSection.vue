@@ -128,19 +128,47 @@
         </div>
       </div>
     </div>
+
+    <!-- Model download cards -->
+    <div class="model-downloads">
+      <div class="model-downloads-header">
+        <div class="section-tag">Models</div>
+        <h3 class="model-downloads-title">Download Best Weights</h3>
+      </div>
+      <div class="model-dl-grid">
+        <div v-for="m in bestModels" :key="m.model" class="model-dl-card">
+          <div class="model-dl-top">
+            <span class="model-badge" :class="`badge-${m.model.toLowerCase()}`">{{ m.model }}</span>
+            <span class="model-dl-map mono" v-if="m.map50 != null">{{ m.map50.toFixed(3) }} mAP50</span>
+          </div>
+          <div class="model-dl-desc mono">{{ m.classes?.covers }}</div>
+          <a v-if="m.download_url" :href="m.download_url" class="model-dl-btn" download>
+            best.pt &nbsp;~49MB
+          </a>
+          <span v-else class="model-dl-btn model-dl-pending mono">Training...</span>
+        </div>
+      </div>
+      <router-link to="/models" class="model-all-link mono">View all versions →</router-link>
+    </div>
   </section>
 </template>
 
 <script setup>
 import { h, ref, computed, onMounted } from 'vue'
+import { RouterLink } from 'vue-router'
 import RadarCanvas from './RadarCanvas.vue'
 
 const stats = ref(null)
+const bestModels = ref([])
 
 onMounted(async () => {
   try {
-    const res = await fetch('/api/stats')
-    if (res.ok) stats.value = await res.json()
+    const [statsRes, modelsRes] = await Promise.all([fetch('/api/stats'), fetch('/api/models')])
+    if (statsRes.ok) stats.value = await statsRes.json()
+    if (modelsRes.ok) {
+      const all = await modelsRes.json()
+      bestModels.value = all.filter(m => m.is_best)
+    }
   } catch {}
 })
 

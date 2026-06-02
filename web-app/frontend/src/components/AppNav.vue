@@ -12,6 +12,8 @@
           {{ id.charAt(0).toUpperCase() + id.slice(1) }}
         </a>
       </li>
+      <li><router-link to="/models" class="nav-route-link">Models</router-link></li>
+      <li><router-link to="/api-docs" class="nav-route-link">API</router-link></li>
     </ul>
 
     <div class="nav-right">
@@ -44,6 +46,8 @@
               {{ id.charAt(0).toUpperCase() + id.slice(1) }}
             </a>
           </li>
+          <li><router-link to="/models" @click="menuOpen = false">Models</router-link></li>
+          <li><router-link to="/api-docs" @click="menuOpen = false">API</router-link></li>
         </ul>
         <router-link to="/admin/login" class="nav-mobile-admin" @click="menuOpen = false">
           Admin Login
@@ -160,6 +164,8 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll))
   transition: background 0.2s;
 }
 .nav-mobile-admin:hover { background: var(--amber-glow); }
+.nav-route-link { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--fg-1); text-decoration: none; transition: color 0.15s; }
+.nav-route-link:hover, .nav-route-link.router-link-active { color: var(--amber); }
 
 @media (max-width: 768px) {
   .nav-hamburger { display: flex; }
