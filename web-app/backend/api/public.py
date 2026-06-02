@@ -394,9 +394,11 @@ async def get_stats_charts(
         k5095  = next((k for k in m if "map50-95" in k.lower()), None)
         kprec  = next((k for k in m if "precision" in k.lower()), None)
         krec   = next((k for k in m if "recall" in k.lower()), None)
-        def _f(key):
-            try: return round(float(m[key]), 3) if key and m.get(key) else None
-            except: return None
+        def _f(key, _m=m):
+            try:
+                return round(float(_m[key]), 3) if key and _m.get(key) else None
+            except (ValueError, TypeError):
+                return None
         map50  = _f(k50)
         images = m.get("total_train_images") or 0
         if map50 is not None:
