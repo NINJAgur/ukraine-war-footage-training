@@ -341,7 +341,7 @@ output "inference_engine_ip" {
 }
 
 # ── training-engine VM (n1-standard-4 + T4, Instance Schedule 04:30 UTC start) ─
-# Standard (non-preemptible) VM. Self-shuts after training or immediately if no QUEUED/RUNNING runs.
+# Spot VM. Self-shuts after training or immediately if no QUEUED/RUNNING runs.
 
 resource "google_compute_instance" "training_engine" {
   name                      = "ukraine-footage-training"
@@ -351,9 +351,11 @@ resource "google_compute_instance" "training_engine" {
   allow_stopping_for_update = true
 
   scheduling {
-    automatic_restart   = true
-    on_host_maintenance = "TERMINATE"
-    preemptible         = false
+    provisioning_model          = "SPOT"
+    instance_termination_action = "STOP"
+    preemptible                 = true
+    automatic_restart           = false
+    on_host_maintenance         = "TERMINATE"
   }
 
   resource_policies = [google_compute_resource_policy.training_schedule.id]
