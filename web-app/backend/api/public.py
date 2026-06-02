@@ -434,8 +434,10 @@ async def get_stats_charts(
         if not already:
             m2 = r.metrics or {}
             k2 = next((k for k in m2 if "map50" in k.lower() and "map50-95" not in k.lower()), None)
-            try: v2 = round(float(m2[k2]), 3) if k2 else None
-            except: v2 = None
+            try:
+                v2 = round(float(m2[k2]), 3) if k2 else None
+            except (ValueError, TypeError):
+                v2 = None
             if v2:
                 training_scatter.append({"run_id": r.id, "model": model_name2, "stage": r.stage.value if r.stage else None, "map50": v2, "map50_95": None, "precision": None, "recall": None, "images": m2.get("total_train_images") or 0, "date": r.completed_at.isoformat() if r.completed_at else None, "is_best": False})
 
