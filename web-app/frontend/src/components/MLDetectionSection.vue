@@ -4,11 +4,11 @@
       <RadarCanvas :opacity="0.35" color="194, 120, 40" />
     </div>
     <div class="ml-section-header">
-      <div class="section-tag">ML Detection Layers</div>
-      <h2 class="section-title">Object detection models</h2>
+      <div class="section-tag">Detection Models</div>
+      <h2 class="section-title">Domain-trained. Free to use.</h2>
       <p style="margin-top:16px;font-size:14px;color:var(--fg-2);max-width:520px;line-height:1.7;font-family:var(--font-mono);letter-spacing:0.02em">
-        All archived footage is processed through specialized neural networks.<br>
-        Scroll to expand each detection category.
+        Four YOLOv8 models trained exclusively on conflict footage — and continuously
+        improving as new clips are scraped and labeled. Download weights or query via API.
       </p>
     </div>
     <div class="ml-cards-track">

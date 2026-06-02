@@ -23,7 +23,7 @@
     </div>
 
     <div class="hero-content">
-      <div class="hero-tag fade-up fade-up-1">Ukraine Combat Footage Archive</div>
+      <div class="hero-tag fade-up fade-up-1">Open Military Asset Detection Models</div>
       <h1 class="hero-headline fade-up fade-up-2">
         <span class="hl-line">
           <span class="hl-dark" aria-hidden="true">Every strike.</span>
@@ -39,12 +39,12 @@
         </span>
       </h1>
       <p class="hero-sub fade-up fade-up-3">
-        Automated scraping, YOLO detection, and annotated archiving of combat footage
-        from open-source channels. Aircraft · Vehicle · Personnel.
+        Four YOLOv8 models trained on real conflict footage — aircraft, vehicles, personnel.
+        Continuously self-improving. Free to download and use.
       </p>
       <div class="hero-actions">
-        <router-link to="/archive" class="btn-primary">Browse Archive</router-link>
-        <router-link to="/admin/login" class="btn-secondary">Admin Panel</router-link>
+        <a href="#detection" class="btn-primary">Explore Models</a>
+        <router-link to="/archive" class="btn-secondary">Browse Archive</router-link>
       </div>
     </div>
 
@@ -67,9 +67,9 @@ import { ref, computed, onMounted } from 'vue'
 const heroVideoSrc = ref(null)
 const heroCat = computed(() => heroVideoSrc.value ? { ...GENERALIST_CAT, videoSrc: heroVideoSrc.value } : GENERALIST_CAT)
 const stats = ref([
-  { num: '—', label: 'Clips archived' },
-  { num: '—', label: 'Training images' },
-  { num: '—', label: 'Best mAP50' },
+  { num: '—', label: 'AIRCRAFT mAP50' },
+  { num: '—', label: 'VEHICLE mAP50' },
+  { num: '—', label: 'PERSONNEL mAP50' },
 ])
 
 onMounted(async () => {
@@ -80,11 +80,10 @@ onMounted(async () => {
     ])
     if (statsRes.ok) {
       const d = await statsRes.json()
-      const k = d.images_labeled >= 1000 ? Math.round(d.images_labeled / 1000) + 'K+' : String(d.images_labeled)
-      stats.value[0] = { num: String(d.clips_total), label: 'Clips archived' }
-      stats.value[1] = { num: k, label: 'Training images' }
-      const maps = Object.values(d.models ?? {}).filter(m => m.map50 != null).map(m => m.map50)
-      if (maps.length) stats.value[2] = { num: Math.max(...maps).toFixed(3), label: 'Best mAP50' }
+      const m = d.models ?? {}
+      stats.value[0] = { num: m.AIRCRAFT?.map50?.toFixed(3) ?? '—', label: 'AIRCRAFT mAP50' }
+      stats.value[1] = { num: m.VEHICLE?.map50?.toFixed(3)  ?? '—', label: 'VEHICLE mAP50'  }
+      stats.value[2] = { num: m.PERSONNEL?.map50?.toFixed(3) ?? '—', label: 'PERSONNEL mAP50' }
     }
     if (clipsRes.ok) {
       const clips = await clipsRes.json()

@@ -734,9 +734,56 @@ docker compose exec ml-worker celery -A celery_app call tasks.annotate_clips.ann
 
 ---
 
+### Phase 5 — ML Showcase (models as the product)
+
+> **North star:** The trained models are the primary deliverable. The archive is proof they work.
+> Every Phase 5 feature either surfaces the models directly or proves their value.
+
+**Page layout (final section order):**
+```
+Hero → TickerBar → DataStrip → MLDetectionSection → AnalyticsSection → ArchiveSection → CapabilitiesSection → Footer
+```
+
+**Section restructuring:**
+- `AboutSection` removed — right-area content (links, tech stack, project info) moves into Footer
+- `MissionSection` removed
+- `Footer` rewritten: project name + tagline + submit button (left); about right-area content (right); empty link columns dropped
+- `CapabilitiesSection` upgraded in-place: gains pipeline diagram (5.2) + model download cards (5.3)
+- `AnalyticsSection` is a new component (5.4) between ArchiveSection and CapabilitiesSection
+- `DataStrip` moved up: after TickerBar, before MLDetectionSection
+
+#### 5.1 — Footer & About Restructure
+- [x] **5.1a** Rewrite `SiteFooter.vue` — left: project name + tagline + submit/contribute button; right: about content from current `AboutSection` (tech stack, links, repo); drop all empty link columns
+- [x] **5.1b** Remove `AboutSection` and `MissionSection` from `PublicFeed.vue`
+- [x] **5.1c** Update `PublicFeed.vue` section order: Hero → TickerBar → DataStrip → MLDetection → Archive → Capabilities → Footer (Analytics slot reserved for 5.4)
+
+#### 5.2 — Pipeline Explainer (in CapabilitiesSection)
+- [ ] **5.2a** Animated SVG/CSS pipeline diagram in `CapabilitiesSection.vue` — Scraper → GDINO → Dataset → Train → Annotate → Feed; live clip/dataset/run counts at each node; replaces or extends existing 4-card grid
+
+#### 5.3 — Model Hub (in CapabilitiesSection + API)
+- [ ] **5.3a** Make GCS weight objects public-read — AIRCRAFT run 68, VEHICLE run 76, PERSONNEL run 75, GENERAL run 30
+- [ ] **5.3b** `GET /api/models` — 4 models: latest DONE run, mAP50, training images, GCS download URL
+- [ ] **5.3c** Model download cards in `CapabilitiesSection.vue` — 4 cards with mAP50 badge + training images + download `.pt` button; wired to `/api/models`
+- [ ] **5.3d** API docs page (`/api-docs`) — endpoint reference, example curl, model spec, disclaimer
+
+#### 5.4 — Analytics & Detection Index (new AnalyticsSection)
+- [ ] **5.4a** Add `detection_counts` JSON column to `clips` table in `shared/db/models.py` — `{aircraft: N, vehicle: N, personnel: N, total: N}`; alembic migration
+- [ ] **5.4b** Populate `detection_counts` in `annotate_clips.py` after inference — extract per-class box counts from `infer_video_multi_model` results
+- [ ] **5.4c** `GET /api/stats/charts` — clips annotated per day (7d + 30d), detection breakdown by class, clips by source, mAP50 timeline across training runs
+- [ ] **5.4d** New `AnalyticsSection.vue` — Chart.js bar/line/pie charts wired to `/api/stats/charts`; amber/slate palette
+- [ ] **5.4e** Weekly detection index in AnalyticsSection — "Week of Jun 2–8: 47 aircraft, 183 vehicle — conf≥0.25" with methodology note
+
+#### 5.5 — Live Inference Demo (placement TBD)
+- [ ] **5.5a** `POST /api/infer` — multipart image upload, CPU YOLO inference, returns `{detections, counts, model, inference_ms}`; rate-limited per IP via Redis
+- [ ] **5.5b** File validation: max 10MB, JPG/PNG/WEBP; 429 on rate limit exceeded
+- [ ] **5.5c** Frontend demo page (`/demo`) — drag-and-drop upload, annotated result overlay, detection list
+
+
+---
+
 ## 6. Next Steps
 
-Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 ✅, Phase 4 ✅
+Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 ✅, Phase 4 ✅, Phase 5 🔄
 
 **Training status (2026-06-02):**
 - AIRCRAFT: 0.929 (baseline run 13) → 0.968 (Kaggle finetune run 68) → 0.964 (scraped finetune run 77) ✅ — run 68 still best weights
