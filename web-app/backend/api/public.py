@@ -331,34 +331,48 @@ async def get_stats_charts(
     )).all()
     detection_boxes_per_day = [{"date": str(r.day), "aircraft": int(r.aircraft), "vehicle": int(r.vehicle), "personnel": int(r.personnel)} for r in det_rows]
 
-    # mAP50 timeline across training runs
+    # All completed training runs with full metrics (for radar + scatter)
     runs = (await db.execute(
         select(TrainingRun)
         .where(TrainingRun.status == TrainingStatus.DONE, TrainingRun.completed_at.isnot(None))
         .order_by(TrainingRun.completed_at)
     )).scalars().all()
+
     map50_timeline = []
+    training_scatter = []  # all runs: {model, stage, map50, images, run_id}
+
     for r in runs:
         m = r.metrics or {}
-        k = next((k for k in m if "map50" in k.lower() and "map50-95" not in k.lower()), None)
-        try:
-            val = round(float(m[k]), 3) if k else None
-        except (ValueError, TypeError):
-            val = None
-        if val is not None:
-            map50_timeline.append({
+        k50    = next((k for k in m if "map50" in k.lower() and "map50-95" not in k.lower()), None)
+        k5095  = next((k for k in m if "map50-95" in k.lower()), None)
+        kprec  = next((k for k in m if "precision" in k.lower()), None)
+        krec   = next((k for k in m if "recall" in k.lower()), None)
+        def _f(key):
+            try: return round(float(m[key]), 3) if key and m.get(key) else None
+            except: return None
+        map50  = _f(k50)
+        images = m.get("total_train_images") or 0
+        if map50 is not None:
+            run_dict = {
                 "run_id": r.id,
                 "model": r.model_type.value if r.model_type else None,
                 "stage": r.stage.value if r.stage else None,
-                "map50": val,
+                "map50": map50,
+                "map50_95": _f(k5095),
+                "precision": _f(kprec),
+                "recall": _f(krec),
+                "images": images,
                 "date": r.completed_at.isoformat(),
-            })
+            }
+            map50_timeline.append(run_dict)
+            training_scatter.append(run_dict)
 
     return {
         "clips_per_day": clips_per_day,
         "detection_breakdown": detection_breakdown,
         "detection_boxes_per_day": detection_boxes_per_day,
         "map50_timeline": map50_timeline,
+        "training_scatter": training_scatter,
         "days": days,
     }
 
