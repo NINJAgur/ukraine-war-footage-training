@@ -5,7 +5,7 @@ from typing import Optional
 
 import cv2
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import Integer as sqlalchemy_Integer, func, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models import Clip, ClipSource, ClipStatus, ModelType, TrainingRun, TrainingStatus
