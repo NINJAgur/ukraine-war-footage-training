@@ -56,9 +56,9 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 
-const sections = ['archive', 'detection', 'capabilities', 'about']
+const sections = ['detection', 'archive', 'capabilities']
 const scrolled = ref(false)
-const activeSection = ref('archive')
+const activeSection = ref('detection')
 const menuOpen = ref(false)
 
 function onScroll() {
