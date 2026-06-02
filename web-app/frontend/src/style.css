@@ -918,6 +918,11 @@ section { padding: clamp(60px, 8vw, 100px) clamp(20px, 5vw, 80px); }
 .model-downloads { padding: clamp(40px, 5vw, 60px) clamp(20px, 5vw, 80px); border-top: 1px solid var(--fg-3); }
 .model-downloads-header { margin-bottom: 24px; }
 .model-downloads-title { font-size: 20px; font-weight: 600; margin: 8px 0 0; }
+.model-badge { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.18em; padding: 3px 10px; border: 1px solid; flex-shrink: 0; }
+.badge-aircraft  { color: var(--cat-color-aircraft);   border-color: color-mix(in oklch, var(--cat-color-aircraft)  40%, transparent); }
+.badge-vehicle   { color: var(--cat-color-vehicles);   border-color: color-mix(in oklch, var(--cat-color-vehicles)  40%, transparent); }
+.badge-personnel { color: var(--cat-color-personnel);  border-color: color-mix(in oklch, var(--cat-color-personnel) 40%, transparent); }
+.badge-general   { color: var(--cat-color-generalist); border-color: color-mix(in oklch, var(--cat-color-generalist) 40%, transparent); }
 .model-dl-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; margin-bottom: 20px; }
 .model-dl-card { background: var(--bg-2); border: 1px solid var(--fg-3); padding: 24px; display: flex; flex-direction: column; gap: 14px; }
 .model-dl-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
