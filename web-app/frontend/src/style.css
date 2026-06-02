@@ -914,6 +914,67 @@ section { padding: clamp(60px, 8vw, 100px) clamp(20px, 5vw, 80px); }
 .about-list li { padding: 14px 0; border-bottom: 1px solid var(--fg-3); font-size: 13px; color: var(--fg-1); display: flex; gap: 16px; font-family: var(--font-mono); }
 .about-list li .list-marker { color: var(--amber); font-size: 10px; }
 
+/* ─── PIPELINE DIAGRAM ─── */
+.pipeline-diagram {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: clamp(40px, 5vw, 60px) clamp(20px, 5vw, 80px);
+  padding-bottom: 0;
+  overflow-x: auto;
+  flex-wrap: nowrap;
+}
+.pipeline-row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex-shrink: 0;
+}
+.pipeline-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--fg-3);
+  padding: 14px 20px;
+  background: var(--bg-2);
+  min-width: 110px;
+  text-align: center;
+}
+.pipeline-node-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  color: var(--amber);
+  text-transform: uppercase;
+}
+.pipeline-node-stat {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--fg-0);
+  letter-spacing: 0.04em;
+}
+.pipeline-node-sub {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--fg-3);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.pipeline-arrow {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  color: var(--fg-3);
+  padding: 0 8px;
+  flex-shrink: 0;
+}
+@media (max-width: 768px) {
+  .pipeline-diagram { padding: 32px 20px 0; gap: 0; }
+  .pipeline-node { min-width: 80px; padding: 10px 12px; }
+  .pipeline-node-stat { font-size: 14px; }
+}
+
 /* ─── FOOTER ─── */
 footer { background: var(--bg-1); border-top: 1px solid var(--fg-3); padding: clamp(40px, 5vw, 60px) clamp(20px, 5vw, 80px) 40px; }
 .footer-top { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 40px; margin-bottom: 60px; }

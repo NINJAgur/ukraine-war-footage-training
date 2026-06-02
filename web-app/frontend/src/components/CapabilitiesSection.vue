@@ -9,6 +9,18 @@
         <h2 class="section-title">Automated pipeline</h2>
       </div>
     </div>
+    <!-- Pipeline diagram -->
+    <div class="pipeline-diagram">
+      <div v-for="(node, i) in pipeline" :key="node.id" class="pipeline-row">
+        <div class="pipeline-node">
+          <div class="pipeline-node-label">{{ node.label }}</div>
+          <div class="pipeline-node-stat">{{ node.stat }}</div>
+          <div class="pipeline-node-sub">{{ node.sub }}</div>
+        </div>
+        <div v-if="i < pipeline.length - 1" class="pipeline-arrow">→</div>
+      </div>
+    </div>
+
     <div class="cap-grid">
       <div v-for="cap in capabilities" :key="cap.num" class="cap-card">
         <div class="cap-num">{{ cap.num }}</div>
@@ -51,6 +63,20 @@ function fmt(n) {
   if (n >= 1e3) return Math.round(n / 1e3) + 'K'
   return String(n)
 }
+
+const pipeline = computed(() => {
+  const s = stats.value
+  const models = s?.models ?? {}
+  const bestMap = Object.values(models).reduce((best, m) => m.map50 != null && m.map50 > best ? m.map50 : best, 0)
+  return [
+    { id: 'scrape',   label: 'SCRAPE',   stat: s ? fmt(s.clips_total)      : '—', sub: 'clips ingested'    },
+    { id: 'gdino',    label: 'GDINO',    stat: 'Zero-shot',                        sub: 'auto-labeling'     },
+    { id: 'dataset',  label: 'DATASET',  stat: s ? fmt(s.images_labeled)    : '—', sub: 'training images'  },
+    { id: 'train',    label: 'TRAIN',    stat: bestMap ? bestMap.toFixed(3)  : '—', sub: 'best mAP50'       },
+    { id: 'annotate', label: 'ANNOTATE', stat: s ? String(s.clips_annotated) : '—', sub: 'annotated clips'  },
+    { id: 'feed',     label: 'FEED',     stat: 'Live',                              sub: 'public archive'   },
+  ]
+})
 
 const capabilities = computed(() => [
   {
