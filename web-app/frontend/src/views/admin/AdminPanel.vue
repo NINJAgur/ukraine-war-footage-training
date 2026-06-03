@@ -20,6 +20,37 @@
 
     <main class="panel-main">
 
+      <!-- ── SCRAPER STATS ── -->
+      <section class="panel-section">
+        <div class="panel-section-title mono">SCRAPER PIPELINE</div>
+        <div v-if="scraperStats" class="scraper-stats">
+          <div class="scraper-stat-grid">
+            <div class="scraper-stat-card" v-for="(count, status) in scraperStats.by_status" :key="status">
+              <div class="scraper-stat-num">{{ count }}</div>
+              <div class="scraper-stat-label mono">{{ status }}</div>
+            </div>
+          </div>
+          <div class="scraper-source-row mono">
+            <span v-for="(count, src) in scraperStats.by_source" :key="src" class="scraper-source-badge">
+              {{ src.toUpperCase() }}: {{ count }}
+            </span>
+            <span class="scraper-source-badge" style="color:var(--fg-3)">TOTAL: {{ scraperStats.total }}</span>
+          </div>
+          <div class="scraper-recent">
+            <div class="panel-section-title mono" style="font-size:9px;margin-bottom:6px">RECENT INGESTION</div>
+            <table class="runs-table" style="font-size:11px">
+              <tr v-for="c in scraperStats.recent" :key="c.created_at">
+                <td class="mono" style="color:var(--fg-3);white-space:nowrap">{{ c.created_at?.slice(0,16).replace('T',' ') }}</td>
+                <td style="padding:0 12px">{{ c.title }}</td>
+                <td class="mono" :style="{ color: c.status === 'ANNOTATED' ? 'var(--amber)' : 'var(--fg-3)' }">{{ c.status }}</td>
+                <td class="mono" style="color:var(--fg-3)">{{ c.source }}</td>
+              </tr>
+            </table>
+          </div>
+        </div>
+        <div v-else class="mono dim" style="font-size:12px">Loading...</div>
+      </section>
+
       <!-- ── TRAINING ── -->
       <section class="panel-section">
         <div class="panel-section-title mono">TRAINING CONTROL</div>
@@ -200,6 +231,15 @@ const MODEL_COLORS = {
   GENERAL:   'oklch(0.65 0.18 55deg)',
 }
 
+const scraperStats = ref(null)
+
+async function loadScraperStats() {
+  try {
+    const res = await apiFetch('/api/admin/scraper-stats')
+    if (res.ok) scraperStats.value = await res.json()
+  } catch {}
+}
+
 const runs        = ref([])
 const runsLoading = ref(false)
 const runsPage    = ref(1)
@@ -352,7 +392,7 @@ function fmtDur(s) {
   return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`
 }
 
-onMounted(() => { loadRuns(); loadClips() })
+onMounted(() => { loadRuns(); loadClips(); loadScraperStats() })
 </script>
 
 <style scoped>
@@ -395,6 +435,14 @@ onMounted(() => { loadRuns(); loadClips() })
   color: var(--amber);
   margin-bottom: 8px;
 }
+
+.scraper-stat-grid { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.scraper-stat-card { background: var(--bg-2); border: 1px solid var(--fg-3); padding: 12px 20px; min-width: 80px; text-align: center; }
+.scraper-stat-num { font-family: var(--font-mono); font-size: 22px; font-weight: 700; color: var(--fg-0); }
+.scraper-stat-label { font-size: 9px; letter-spacing: 0.15em; color: var(--fg-3); text-transform: uppercase; margin-top: 2px; }
+.scraper-source-row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; font-size: 11px; color: var(--fg-2); }
+.scraper-source-badge { background: var(--bg-2); border: 1px solid var(--fg-3); padding: 3px 10px; }
+.scraper-recent { border-top: 1px solid var(--fg-3); padding-top: 12px; }
 
 .model-grid {
   display: grid;

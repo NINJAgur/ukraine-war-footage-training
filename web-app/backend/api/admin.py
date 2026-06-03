@@ -138,3 +138,40 @@ async def start_training(
     return {"task_id": task.id, "training_run_id": run.id, "status": "QUEUED"}
 
 
+@router.get("/scraper-stats")
+async def get_scraper_stats(
+    db: AsyncSession = Depends(get_db),
+    _: dict = Depends(get_current_admin),
+) -> dict:
+    """Scraper pipeline counts by status and source."""
+    from sqlalchemy import func, select
+    from db.models import Clip, ClipSource, ClipStatus
+
+    # Counts by status
+    status_rows = (await db.execute(
+        select(Clip.status, func.count(Clip.id).label("count"))
+        .group_by(Clip.status)
+    )).all()
+    by_status = {r.status.value if r.status else "unknown": r.count for r in status_rows}
+
+    # Counts by source
+    source_rows = (await db.execute(
+        select(Clip.source, func.count(Clip.id).label("count"))
+        .group_by(Clip.source)
+    )).all()
+    by_source = {r.source.value if r.source else "unknown": r.count for r in source_rows}
+
+    # Recent clips (last 5 ingested)
+    recent = (await db.execute(
+        select(Clip).order_by(Clip.created_at.desc()).limit(5)
+    )).scalars().all()
+    recent_list = [{"title": (c.title or c.url_hash[:12])[:50], "status": c.status.value if c.status else None, "source": c.source.value if c.source else None, "created_at": c.created_at.isoformat() if c.created_at else None} for c in recent]
+
+    return {
+        "total": sum(by_status.values()),
+        "by_status": by_status,
+        "by_source": by_source,
+        "recent": recent_list,
+    }
+
+
