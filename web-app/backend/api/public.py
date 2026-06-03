@@ -319,14 +319,16 @@ async def get_epoch_data(db: AsyncSession = Depends(get_db)) -> list[dict]:
                     except Exception:
                         pass
 
-        if epochs_data:
+        # Include run if it has epochs OR confusion matrix
+        if epochs_data or confusion_matrix:
             result.append({
                 "run_id": r.id,
                 "model": model,
                 "stage": stage,
-                "completed_at": r.completed_at.isoformat() if r.completed_at else None,
-                "epochs": epochs_data,
+                "completed_at": (r.completed_at or r.created_at).isoformat() if (r.completed_at or r.created_at) else None,
+                "epochs": epochs_data or [],
                 "confusion_matrix": confusion_matrix,
+                **{k: v for k, v in m.items() if k.startswith("curve_")},
             })
 
     return result
@@ -393,7 +395,7 @@ async def get_stats_charts(
         .where(TrainingRun.status == TrainingStatus.DONE, TrainingRun.completed_at.isnot(None))
         .order_by(TrainingRun.completed_at)
     )).scalars().all()
-    runs_filtered = [r for r in runs if r.completed_at and r.completed_at >= cutoff]
+    runs_filtered = [r for r in runs if (r.completed_at or r.created_at) and (r.completed_at or r.created_at) >= cutoff]
 
     map50_timeline = []
     training_scatter = []  # all runs: {model, stage, map50, images, run_id}
@@ -411,6 +413,18 @@ async def get_stats_charts(
                 return None
         map50  = _f(k50)
         images = m.get("total_train_images") or 0
+        # Fall back to epochs_data for precision/recall if not in final metrics
+        prec = _f(kprec)
+        rec = _f(krec)
+        if (prec is None or rec is None) and m.get("epochs_data"):
+            best_ep = max(m["epochs_data"], key=lambda e: e.get("metrics/mAP50(B)", 0), default=None)
+            if best_ep:
+                if prec is None:
+                    prec = round(best_ep.get("metrics/precision(B)", 0), 3) or None
+                if rec is None:
+                    rec = round(best_ep.get("metrics/recall(B)", 0), 3) or None
+
+        run_date = r.completed_at or r.created_at
         if map50 is not None:
             run_dict = {
                 "run_id": r.id,
@@ -418,10 +432,10 @@ async def get_stats_charts(
                 "stage": r.stage.value if r.stage else None,
                 "map50": map50,
                 "map50_95": _f(k5095),
-                "precision": _f(kprec),
-                "recall": _f(krec),
+                "precision": prec,
+                "recall": rec,
                 "images": images,
-                "date": r.completed_at.isoformat(),
+                "date": run_date.isoformat() if run_date else None,
             }
             map50_timeline.append(run_dict)
             training_scatter.append(run_dict)
