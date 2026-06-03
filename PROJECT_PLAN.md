@@ -666,7 +666,8 @@ yolo-training-template/                  ← monorepo root
 - [x] **4.13h-i** `train_baseline.py` hardened: removed `--weights` option entirely; baseline always cold-starts from `yolov8m.pt`; `train_finetune.py __main__` gets `--epochs` arg
 - [x] **4.13j** VEHICLE finetune cycle 2 — mAP50=0.904 (run 76, 10 epochs from run 73, 56,440 train) ✅
 - [x] **4.13k** PERSONNEL finetune cycle 2 — mAP50=0.873 (run 75, 10 epochs from run 74, 10,962 train) ✅
-- [ ] **4.13l** GENERAL finetune cycle 1 (scraped) — run 79 QUEUED for overnight 2026-06-02 🔄
+- [x] **4.13l** GENERAL finetune cycle 1 (scraped) — run 79 DONE mAP50=0.851 ✅
+- [x] **4.13m** VEHICLE finetune cycle 2 (scraped) — run 78 DONE mAP50=0.902 ✅
 - [x] **4.13m** Scraped pipeline end-to-end (2026-05-21): 10 clips auto-labeled → 5 datasets PACKAGED → 6 clips annotated (3 VEHICLE, 2 PERSONNEL, 1 GENERAL); 80 ANNOTATED total in DB ✅
 - [x] **4.13n** Pipeline cleanup fixes (2026-05-21): cv2 corrupt-frame skip in `auto_label.py`; clip dataset dirs deleted immediately after `_merge_datasets()` (not post-training); `merged_dir` cleanup moved to `finally` block; `_cleanup_zero_score_clips()` added to `annotate_clips` end-of-run sweep ✅
 
@@ -774,25 +775,25 @@ Hero → TickerBar → DataStrip → MLDetectionSection → AnalyticsSection →
 - [x] **5.3g** SiteFooter Models column links to `/models` and `/api-docs`
 - [x] **5.3h** `/api/annotated-clips` returns `description` field; FootageModal shows real clip description
 
-#### 5.4 — Analytics & Detection Index (new AnalyticsSection)
-- [ ] **5.4a** Add `detection_counts` JSON column to `clips` table in `shared/db/models.py` — `{aircraft: N, vehicle: N, personnel: N, total: N}`; alembic migration
-- [ ] **5.4b** Populate `detection_counts` in `annotate_clips.py` after inference — extract per-class box counts from `infer_video_multi_model` results
-- [ ] **5.4c** `GET /api/stats/charts` — clips annotated per day (7d + 30d), detection breakdown by class, clips by source, mAP50 timeline across training runs
-- [ ] **5.4d** New `AnalyticsSection.vue` — Chart.js bar/line/pie charts wired to `/api/stats/charts`; amber/slate palette
-- [ ] **5.4e** Weekly detection index in AnalyticsSection — "Week of Jun 2–8: 47 aircraft, 183 vehicle — conf≥0.25" with methodology note
+#### 5.4 — Analytics & Detection Index (new AnalyticsSection) ✅
+- [x] **5.4a** `GET /api/stats/charts` — clips/day, detection class split, mAP50 timeline, training scatter ✅
+- [x] **5.4b** `GET /api/training/epoch-data` — per-epoch metrics + CM + curves per run; dev CSV fallback ✅
+- [x] **5.4c** `AnalyticsSection.vue` — Chart.js: bar (clips/day), doughnut (class split), scatter+line (mAP50), radar (model performance); per-run drill-down with 4 epoch charts + CM heatmap + 3 curve charts ✅
+- [x] **5.4d** Admin panel pipeline stats redesign — 3-col layout: scraper stats, inference progress bars, packaged datasets list ✅
+- [x] **5.4e** DB backfill for all runs (13/25/29/30/68/73/74/75/76/77/78/79) — epochs + CM + curves ✅
 
 ---
 
 ## 6. Next Steps
 
-Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 ✅, Phase 4 ✅, Phase 5 🔄
+Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 ✅, Phase 4 ✅, Phase 5 ✅
 
-**Training status (2026-06-02):**
+**Training status (2026-06-04):**
 - AIRCRAFT: 0.929 (baseline run 13) → 0.968 (Kaggle finetune run 68) → 0.964 (scraped finetune run 77) ✅ — run 68 still best weights
-- VEHICLE: 0.871 (baseline run 25) → 0.904 (Kaggle finetune run 76) → scraped finetune run 78 QUEUED overnight 🔄
+- VEHICLE: 0.871 (baseline run 25) → 0.904 (Kaggle finetune run 76) → 0.902 (scraped finetune run 78) ✅
 - PERSONNEL: 0.780 (baseline run 29) → 0.873 (Kaggle finetune run 75, cycle 2) ✅
-- GENERAL: 0.784 (baseline run 30) → scraped finetune run 79 QUEUED overnight 🔄
-- 62+ ANNOTATED clips in DB; scraped merged datasets in GCS (merged/VEHICLE, merged/GENERAL)
+- GENERAL: 0.784 (baseline run 30) → 0.851 (scraped finetune run 79) ✅
+- 72 ANNOTATED clips in DB; all 12 training runs backfilled with epochs + CM + curves
 
 **Web app — complete ✅:**
 - Public feed, archive, submit, hero, ticker, ML cards — all wired to live DB/API
