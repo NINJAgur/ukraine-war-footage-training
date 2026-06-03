@@ -145,7 +145,7 @@ async def get_scraper_stats(
 ) -> dict:
     """Scraper pipeline counts by status and source."""
     from sqlalchemy import func, select
-    from db.models import Clip, ClipSource, ClipStatus
+    from db.models import Clip
 
     # Counts by status
     status_rows = (await db.execute(
