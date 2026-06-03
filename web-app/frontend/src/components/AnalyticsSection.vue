@@ -371,8 +371,8 @@ function _buildDrillRow2(run) {
       }]},
       options: { responsive:true, maintainAspectRatio:true, aspectRatio:1.3,
         scales: {
-          x: { ...BS, min:-0.5, max:nc-0.5, ticks:{callback:v=>labels[Math.round(v)]??'', stepSize:1, autoSkip:false, color:C.tick, font:{family:'IBM Plex Mono',size:10}}, title:{display:true,text:'Predicted',color:C.tick,font:{family:'IBM Plex Mono',size:10}}, grid:{color:C.grid} },
-          y: { ...BS, min:-0.5, max:nc-0.5, ticks:{callback:v=>labels[nc-1-Math.round(v)]??'', stepSize:1, autoSkip:false, color:C.tick, font:{family:'IBM Plex Mono',size:10}}, title:{display:true,text:'True',color:C.tick,font:{family:'IBM Plex Mono',size:10}}, grid:{color:C.grid} },
+          x: { ...BS, min:-0.5, max:nc-0.5, afterBuildTicks: ax => { ax.ticks = Array.from({length:nc},(_,i)=>({value:i})) }, ticks:{callback:v=>labels[Math.round(v)]??'', autoSkip:false, color:C.tick, font:{family:'IBM Plex Mono',size:10}}, title:{display:true,text:'Predicted',color:C.tick,font:{family:'IBM Plex Mono',size:10}}, grid:{color:C.grid} },
+          y: { ...BS, min:-0.5, max:nc-0.5, afterBuildTicks: ax => { ax.ticks = Array.from({length:nc},(_,i)=>({value:i})) }, ticks:{callback:v=>labels[nc-1-Math.round(v)]??'', autoSkip:false, color:C.tick, font:{family:'IBM Plex Mono',size:10}}, title:{display:true,text:'True',color:C.tick,font:{family:'IBM Plex Mono',size:10}}, grid:{color:C.grid} },
         },
         plugins: { legend:{display:false}, tooltip:{callbacks:{label:ctx=>`True:${labels[ctx.raw.row]} Pred:${labels[ctx.raw.col]}: ${ctx.raw.v?.toFixed(2)}`}} },
       },
