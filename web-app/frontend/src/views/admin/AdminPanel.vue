@@ -446,7 +446,8 @@ onMounted(() => { loadRuns(); loadClips(); loadScraperStats() })
 }
 
 .panel-section {
-  padding: clamp(30px, 4vw, 50px) 0;
+  padding: 20px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
 }
 
 .panel-section-title {
