@@ -87,18 +87,25 @@
           <canvas :ref="el => dc.cm = el" v-if="selectedRun?.confusion_matrix"></canvas>
           <div v-else class="chart-empty mono">No data yet</div>
         </div>
-        <div class="chart-card">
-          <div class="chart-label mono">BoxPR curve (P vs R)</div>
-          <canvas :ref="el => dc.boxPR = el"></canvas>
-        </div>
-        <div class="chart-card">
-          <div class="chart-label mono">Precision vs confidence</div>
-          <canvas :ref="el => dc.boxP = el"></canvas>
-        </div>
-        <div class="chart-card">
-          <div class="chart-label mono">Recall vs confidence</div>
-          <canvas :ref="el => dc.boxR = el"></canvas>
-        </div>
+        <template v-if="hasCurveData">
+          <div class="chart-card">
+            <div class="chart-label mono">BoxPR curve (P vs R)</div>
+            <canvas :ref="el => dc.boxPR = el"></canvas>
+          </div>
+          <div class="chart-card">
+            <div class="chart-label mono">Precision vs confidence</div>
+            <canvas :ref="el => dc.boxP = el"></canvas>
+          </div>
+          <div class="chart-card">
+            <div class="chart-label mono">Recall vs confidence</div>
+            <canvas :ref="el => dc.boxR = el"></canvas>
+          </div>
+        </template>
+        <template v-else>
+          <div class="chart-card" style="grid-column:span 3">
+            <div class="chart-empty mono">No curve data — specialist model trained on single class</div>
+          </div>
+        </template>
       </div>
     </transition>
   </section>
@@ -168,6 +175,14 @@ const cmLabels = computed(() => {
   if (nc === 2) return ['aircraft', 'bg']
   if (nc === 3) return ['aircraft', 'vehicle', 'personnel']
   return Array.from({length: nc}, (_, i) => `c${i}`)
+})
+
+const hasCurveData = computed(() => {
+  const r = selectedRun.value
+  if (!r) return false
+  return r.curve_precision_recall_y?.some(v => v > 0) ||
+         r.curve_precision_confidence_y?.some(v => v > 0) ||
+         r.curve_recall_confidence_y?.some(v => v > 0)
 })
 
 const availableRuns = computed(() => {
@@ -356,8 +371,8 @@ function _buildDrillRow2(run) {
       }]},
       options: { responsive:true, maintainAspectRatio:true, aspectRatio:1.3,
         scales: {
-          x: { ...BS, min:-0.5, max:nc-0.5, ticks:{callback:v=>Number.isInteger(v)?labels[v]??'':'', stepSize:1, color:C.tick, font:{family:'IBM Plex Mono',size:9}}, title:{display:true,text:'Predicted',color:C.tick,font:{family:'IBM Plex Mono',size:9}}, grid:{color:C.grid} },
-          y: { ...BS, min:-0.5, max:nc-0.5, ticks:{callback:v=>Number.isInteger(v)?labels[nc-1-v]??'':'', stepSize:1, color:C.tick, font:{family:'IBM Plex Mono',size:9}}, title:{display:true,text:'True',color:C.tick,font:{family:'IBM Plex Mono',size:9}}, grid:{color:C.grid} },
+          x: { ...BS, min:-0.5, max:nc-0.5, ticks:{callback:v=>labels[Math.round(v)]??'', stepSize:1, autoSkip:false, color:C.tick, font:{family:'IBM Plex Mono',size:10}}, title:{display:true,text:'Predicted',color:C.tick,font:{family:'IBM Plex Mono',size:10}}, grid:{color:C.grid} },
+          y: { ...BS, min:-0.5, max:nc-0.5, ticks:{callback:v=>labels[nc-1-Math.round(v)]??'', stepSize:1, autoSkip:false, color:C.tick, font:{family:'IBM Plex Mono',size:10}}, title:{display:true,text:'True',color:C.tick,font:{family:'IBM Plex Mono',size:10}}, grid:{color:C.grid} },
         },
         plugins: { legend:{display:false}, tooltip:{callbacks:{label:ctx=>`True:${labels[ctx.raw.row]} Pred:${labels[ctx.raw.col]}: ${ctx.raw.v?.toFixed(2)}`}} },
       },
