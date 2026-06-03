@@ -50,7 +50,7 @@
                 <div class="scraper-stat-label mono">{{ status }}</div>
               </div>
             </div>
-            <!-- Per-model PACKAGED counts with 5-threshold indicator -->
+            <!-- Per-model PACKAGED counts -->
             <div class="packaged-model-row" v-if="scraperStats.packaged_per_model">
               <div
                 v-for="(count, model) in scraperStats.packaged_per_model" :key="model"
@@ -59,6 +59,14 @@
               >
                 <span class="packaged-model-name">{{ model }}</span>
                 <span class="packaged-model-count">{{ count }}<span class="threshold-label">/5</span></span>
+              </div>
+            </div>
+            <!-- Dataset contribution breakdown -->
+            <div class="packaged-detail mono" v-if="scraperStats.packaged_detail?.length">
+              <div class="panel-section-title mono" style="font-size:9px;margin:10px 0 6px">PACKAGED DATASETS</div>
+              <div v-for="d in scraperStats.packaged_detail" :key="d.id" class="packaged-detail-row">
+                <span style="color:var(--fg-3)">DS#{{ d.id }}</span>
+                <span v-for="m in (d.models||[])" :key="m" class="packaged-model-tag" :data-model="m.toLowerCase()">{{ m }}</span>
               </div>
             </div>
           </div>
@@ -467,6 +475,13 @@ onMounted(() => { loadRuns(); loadClips(); loadScraperStats() })
 .packaged-model-count { font-size: 18px; font-weight: 700; color: var(--fg-0); line-height: 1; }
 .packaged-model-card.threshold-met .packaged-model-count { color: var(--amber); }
 .threshold-label { font-size: 9px; color: var(--fg-3); font-weight: 400; }
+.packaged-detail { margin-top: 4px; }
+.packaged-detail-row { display: flex; align-items: center; gap: 6px; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 10px; }
+.packaged-model-tag { font-size: 9px; letter-spacing: 0.1em; padding: 1px 6px; border: 1px solid; }
+.packaged-model-tag[data-model="aircraft"]  { color: var(--cat-color-aircraft);   border-color: color-mix(in srgb, var(--cat-color-aircraft)  30%, transparent); }
+.packaged-model-tag[data-model="vehicle"]   { color: var(--cat-color-vehicles);   border-color: color-mix(in srgb, var(--cat-color-vehicles)  30%, transparent); }
+.packaged-model-tag[data-model="personnel"] { color: var(--cat-color-personnel);  border-color: color-mix(in srgb, var(--cat-color-personnel) 30%, transparent); }
+.packaged-model-tag[data-model="general"]   { color: var(--cat-color-generalist); border-color: color-mix(in srgb, var(--cat-color-generalist) 30%, transparent); }
 
 .model-grid {
   display: grid;

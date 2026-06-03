@@ -159,10 +159,9 @@ async def get_scraper_stats(
     packaged_per_model = {}
     for model in ("AIRCRAFT", "VEHICLE", "PERSONNEL", "GENERAL"):
         if model == "GENERAL":
-            # GENERAL counts all PACKAGED
             count_row = (await db.execute(
                 select(func.count(Dataset.id))
-                .where(Dataset.status.in_(["PACKAGED"]))
+                .where(Dataset.status == "PACKAGED")
             )).scalar()
         else:
             count_row = (await db.execute(
@@ -199,6 +198,14 @@ async def get_scraper_stats(
         "by_source": by_source,
         "dataset_pipeline": dataset_counts,
         "packaged_per_model": packaged_per_model,
+        "packaged_detail": [
+            {"id": r.id, "models": r.detected_model_types}
+            for r in (await db.execute(
+                select(Dataset.id, Dataset.detected_model_types)
+                .where(Dataset.status == "PACKAGED")
+                .order_by(Dataset.id)
+            )).all()
+        ],
         "recent": recent_list,
     }
 
