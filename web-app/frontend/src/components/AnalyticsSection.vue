@@ -296,34 +296,24 @@ async function buildDrill(runId) {
   // Confusion matrix rendered as HTML (not Chart.js) — see template
 
   // BoxPR (P vs R scatter from curve data)
-  const curveKeys = Object.keys(run).filter(k => k.startsWith('curve_'))
-  const prKey = curveKeys.find(k => k.includes('pr') || k.includes('PR'))
-  const pKey  = curveKeys.find(k => k.toLowerCase().endsWith('p_curve') || k.toLowerCase().endsWith('prec'))
-  const rKey  = curveKeys.find(k => k.toLowerCase().endsWith('r_curve') || k.toLowerCase().endsWith('rec'))
-
-  if (dc.value.boxPR && prKey && run[prKey]?.length) {
-    const vals = run[prKey]
-    drillCharts.boxPR = new Chart(dc.value.boxPR, {
-      type:'line', data:{ labels:vals.map((_,i)=>+(i/vals.length).toFixed(2)), datasets:[{ label:'BoxPR', data:vals, borderColor:color, backgroundColor:'transparent', pointRadius:0, borderWidth:2 }] },
-      options:{ responsive:true, maintainAspectRatio:true, aspectRatio:1.3, plugins:{legend:{display:false}}, scales:{x:{...BS,title:{display:true,text:'recall',color:C.tick,font:{family:'IBM Plex Mono',size:9}}},y:{...BS,min:0,max:1,title:{display:true,text:'precision',color:C.tick,font:{family:'IBM Plex Mono',size:9}}}} },
+  // New curve format: curve_{name}_x and curve_{name}_y keys
+  function buildCurveChart(canvasRef, xKey, yKey, xLabel, yLabel, chartKey) {
+    const xVals = run[xKey]
+    const yVals = run[yKey]
+    if (!canvasRef || !xVals?.length || !yVals?.length) return
+    drillCharts[chartKey] = new Chart(canvasRef, {
+      type:'line',
+      data:{ labels: xVals, datasets:[{ data: yVals, borderColor:color, backgroundColor:'transparent', pointRadius:0, borderWidth:2 }] },
+      options:{ responsive:true, maintainAspectRatio:true, aspectRatio:1.3, plugins:{legend:{display:false}}, scales:{
+        x:{...BS, title:{display:true,text:xLabel,color:C.tick,font:{family:'IBM Plex Mono',size:9}}},
+        y:{...BS, min:0, max:1, title:{display:true,text:yLabel,color:C.tick,font:{family:'IBM Plex Mono',size:9}}},
+      }},
     })
   }
 
-  if (dc.value.boxP && pKey && run[pKey]?.length) {
-    const vals = run[pKey]
-    drillCharts.boxP = new Chart(dc.value.boxP, {
-      type:'line', data:{ labels:vals.map((_,i)=>+(i/vals.length).toFixed(2)), datasets:[{ label:'Precision', data:vals, borderColor:color, backgroundColor:'transparent', pointRadius:0, borderWidth:2 }] },
-      options:{ responsive:true, maintainAspectRatio:true, aspectRatio:1.3, plugins:{legend:{display:false}}, scales:{x:{...BS,title:{display:true,text:'conf',color:C.tick,font:{family:'IBM Plex Mono',size:9}}},y:{...BS,min:0,max:1}} },
-    })
-  }
-
-  if (dc.value.boxR && rKey && run[rKey]?.length) {
-    const vals = run[rKey]
-    drillCharts.boxR = new Chart(dc.value.boxR, {
-      type:'line', data:{ labels:vals.map((_,i)=>+(i/vals.length).toFixed(2)), datasets:[{ label:'Recall', data:vals, borderColor:color, backgroundColor:'transparent', pointRadius:0, borderWidth:2 }] },
-      options:{ responsive:true, maintainAspectRatio:true, aspectRatio:1.3, plugins:{legend:{display:false}}, scales:{x:{...BS,title:{display:true,text:'conf',color:C.tick,font:{family:'IBM Plex Mono',size:9}}},y:{...BS,min:0,max:1}} },
-    })
-  }
+  buildCurveChart(dc.value.boxPR, 'curve_precision_recall_b_x', 'curve_precision_recall_b_y', 'Recall', 'Precision', 'boxPR')
+  buildCurveChart(dc.value.boxP,  'curve_precision_confidence_b_x', 'curve_precision_confidence_b_y', 'Confidence', 'Precision', 'boxP')
+  buildCurveChart(dc.value.boxR,  'curve_recall_confidence_b_x', 'curve_recall_confidence_b_y', 'Confidence', 'Recall', 'boxR')
 }
 
 async function selectRun(id) {
