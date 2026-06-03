@@ -334,8 +334,8 @@ async function selectRun(id) {
 
 function setDays(d) { days.value = d }
 
-async function fetch_() {
-  loading.value = true
+async function fetch_(initial = false) {
+  if (initial) loading.value = true
   try {
     const [chartRes, epochRes] = await Promise.all([
       fetch(`/api/stats/charts?days=${days.value}`),
@@ -344,13 +344,13 @@ async function fetch_() {
     if (chartRes.ok) data.value = await chartRes.json()
     if (epochRes.ok) epochData.value = await epochRes.json()
   } catch {}
-  loading.value = false
+  if (initial) loading.value = false
   await nextTick()
   buildGeneral()
 }
 
-watch(days, fetch_)
-onMounted(fetch_)
+watch(days, () => fetch_(false))
+onMounted(() => fetch_(true))
 </script>
 
 <style scoped>
