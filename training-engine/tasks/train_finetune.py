@@ -89,27 +89,34 @@ def _extract_metrics(results, run_dir: Path = None) -> dict:
             except Exception as e:
                 logger.warning(f"Could not parse results.csv: {e}")
 
-    # Confusion matrix raw data
+    # Confusion matrix — access via results.confusion_matrix (populated when plots=True during training)
     try:
+        import numpy as np
         cm = getattr(results, "confusion_matrix", None)
-        if cm is None and hasattr(results, "validator"):
-            cm = getattr(results.validator, "confusion_matrix", None)
         if cm is not None and hasattr(cm, "matrix"):
-            metrics["confusion_matrix"] = cm.matrix.tolist()
-            metrics["confusion_matrix_nc"] = int(cm.nc) if hasattr(cm, "nc") else None
+            mat = cm.matrix
+            if hasattr(mat, 'sum') and mat.sum() > 0:
+                metrics["confusion_matrix"] = mat.tolist()
+                metrics["confusion_matrix_nc"] = int(cm.nc) if hasattr(cm, "nc") else None
     except Exception as e:
         logger.warning(f"Could not extract confusion matrix: {e}")
 
-    # PR / P / R curve data from curves_results if available
+    # Curves via results.metrics.curves_results (ultralytics 8.4.33)
     try:
-        if hasattr(results, "curves_results"):
-            for name, val in results.curves_results.items():
-                try:
-                    metrics[f"curve_{name}"] = [float(v) for v in val] if hasattr(val, '__iter__') else float(val)
-                except Exception:
-                    pass
-    except Exception:
-        pass
+        import numpy as np
+        metrics_obj = getattr(results, "metrics", None)
+        cr = getattr(metrics_obj, "curves_results", None) if metrics_obj else None
+        curve_names = getattr(metrics_obj, "curves", []) if metrics_obj else []
+        if cr and curve_names:
+            for i, (x_vals, y_vals, _class_names, _title) in enumerate(cr):
+                name = curve_names[i].replace("(B)", "").replace("-", "_").replace(" ", "_").lower()
+                y = np.array(y_vals)
+                y_mean = y.mean(axis=0) if y.ndim == 2 else y
+                step = max(1, len(x_vals) // 100)
+                metrics[f"curve_{name}_x"] = [round(float(v), 4) for v in np.array(x_vals).flatten()[::step]]
+                metrics[f"curve_{name}_y"] = [round(float(v), 4) for v in y_mean.flatten()[::step]]
+    except Exception as e:
+        logger.warning(f"Could not extract curves: {e}")
 
     return metrics
 
