@@ -78,20 +78,7 @@
         <!-- Row 2 -->
         <div class="chart-card">
           <div class="chart-label mono">Confusion matrix (val set)</div>
-          <div class="cm-wrap" v-if="selectedRun?.confusion_matrix">
-            <div class="cm-grid" :style="{ gridTemplateColumns: `repeat(${selectedRun.confusion_matrix.length}, 1fr)` }">
-              <template v-for="(row, r) in selectedRun.confusion_matrix" :key="r">
-                <div v-for="(val, c) in row" :key="c" class="cm-cell"
-                  :style="{ background: `rgba(96,165,250,${Math.pow(val / (cmMax||1), 0.4)})` }"
-                  :title="`${cmLabels[r]}→${cmLabels[c]}: ${val.toFixed(0)}`">
-                  <span class="cm-val mono">{{ val > 0 ? val.toFixed(0) : '' }}</span>
-                </div>
-              </template>
-            </div>
-            <div class="cm-labels mono">
-              <span v-for="l in cmLabels" :key="l" class="cm-label">{{ l }}</span>
-            </div>
-          </div>
+          <canvas :ref="el => dc.cm = el" v-if="selectedRun?.confusion_matrix"></canvas>
           <div v-else class="chart-empty mono">No data yet</div>
         </div>
         <div class="chart-card">
@@ -135,8 +122,10 @@ let drillCharts = {}
 
 const C = {
   amber: '#df6900', amberFaint: 'rgba(223,105,0,0.15)',
-  aircraft: 'oklch(0.62 0.16 220deg)', vehicle: 'oklch(0.60 0.20 25deg)',
-  personnel: 'oklch(0.60 0.18 145deg)', general: 'oklch(0.65 0.18 55deg)',
+  aircraft:  '#5b9bd5',
+  vehicle:   '#e06030',
+  personnel: '#4caf6a',
+  general:   '#df6900',
   grid: 'rgba(255,255,255,0.06)', tick: 'rgba(255,255,255,0.35)',
 }
 const MC = { AIRCRAFT: C.aircraft, VEHICLE: C.vehicle, PERSONNEL: C.personnel, GENERAL: C.general }
@@ -170,10 +159,12 @@ const cmLabels = computed(() => {
 })
 
 const availableRuns = computed(() =>
-  epochData.value.filter(r => r.epochs?.length).map(r => ({
-    ...r,
-    map50: r.epochs ? Math.max(...r.epochs.map(e => e['metrics/mAP50(B)'] || 0)) : null,
-  })).sort((a,b) => a.run_id - b.run_id)
+  epochData.value
+    .filter(r => (r.epochs?.length > 0) || r.confusion_matrix)
+    .map(r => ({
+      ...r,
+      map50: r.epochs?.length ? Math.max(...r.epochs.map(e => e['metrics/mAP50(B)'] || 0)) : null,
+    })).sort((a,b) => a.run_id - b.run_id)
 )
 const selectedRun = computed(() => epochData.value.find(r => r.run_id === selectedRunId.value))
 
@@ -235,7 +226,7 @@ function buildGeneral() {
           label: m,
           data: [Math.round(b.map50*100), Math.round((b.images/MAX)*100), Math.round((fc[m]||0)/3*100), b.precision?Math.round(b.precision*100):0, b.recall?Math.round(b.recall*100):0],
           borderColor: MC[m], borderWidth:2, pointRadius:3,
-          backgroundColor: `color-mix(in srgb, ${MC[m]} 15%, transparent)`,
+          backgroundColor: MC[m] + '26',
         })),
       },
       options: { responsive:true, maintainAspectRatio:true, aspectRatio:1.4, scales:{r:{min:0,max:100,grid:{color:'rgba(255,255,255,0.1)'},pointLabels:{color:C.tick,font:{family:'IBM Plex Mono',size:9}},ticks:{color:'transparent',backdropColor:'transparent',stepSize:25}}}, plugins:{legend:{display:true,position:'bottom',labels:{color:C.tick,font:{family:'IBM Plex Mono',size:9},boxWidth:8,padding:8}}} },
@@ -293,7 +284,50 @@ async function buildDrill(runId) {
     options: lineOpts('val loss',null,null),
   })
 
-  // Confusion matrix rendered as HTML (not Chart.js) — see template
+  // Confusion matrix — proper heatmap using Chart.js scatter with square markers
+  if (dc.value.cm && run.confusion_matrix) {
+    const cm = run.confusion_matrix
+    const nc = cm.length
+    const labels = nc === 2 ? ['aircraft','bg'] : nc === 3 ? ['aircraft','vehicle','personnel'] : nc === 4 ? ['aircraft','vehicle','personnel','bg'] : Array.from({length:nc},(_,i)=>`c${i}`)
+    const maxVal = Math.max(...cm.flat(), 1)
+    const data = []
+    for (let r = 0; r < nc; r++) {
+      for (let c2 = 0; c2 < nc; c2++) {
+        data.push({ x: c2, y: nc - 1 - r, v: cm[r][c2], row: r, col: c2 })
+      }
+    }
+    drillCharts.cm = new Chart(dc.value.cm, {
+      type: 'scatter',
+      data: {
+        datasets: [{
+          data,
+          backgroundColor: ctx => {
+            const v = ctx.raw?.v ?? 0
+            const alpha = 0.05 + 0.95 * Math.pow(v / maxVal, 0.5)
+            return `rgba(96,165,250,${alpha.toFixed(2)})`
+          },
+          pointStyle: 'rect',
+          pointRadius: ctx => {
+            const chartW = ctx.chart?.width || 300
+            return Math.max(8, (chartW / (nc * 2.5)))
+          },
+          borderColor: 'rgba(96,165,250,0.3)',
+          borderWidth: 1,
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: true, aspectRatio: 1.3,
+        scales: {
+          x: { ...BS, min: -0.5, max: nc - 0.5, ticks: { callback: v => labels[v] ?? '', stepSize: 1, color: C.tick, font: { family: 'IBM Plex Mono', size: 9 } }, grid: { color: C.grid } },
+          y: { ...BS, min: -0.5, max: nc - 0.5, ticks: { callback: v => labels[nc - 1 - v] ?? '', stepSize: 1, color: C.tick, font: { family: 'IBM Plex Mono', size: 9 } }, grid: { color: C.grid }, reverse: false },
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => `${labels[ctx.raw.row]}→${labels[ctx.raw.col]}: ${ctx.raw.v?.toFixed(0)}` } },
+        },
+      },
+    })
+  }
 
   // BoxPR (P vs R scatter from curve data)
   // New curve format: curve_{name}_x and curve_{name}_y keys
@@ -311,9 +345,9 @@ async function buildDrill(runId) {
     })
   }
 
-  buildCurveChart(dc.value.boxPR, 'curve_precision_recall_b_x', 'curve_precision_recall_b_y', 'Recall', 'Precision', 'boxPR')
-  buildCurveChart(dc.value.boxP,  'curve_precision_confidence_b_x', 'curve_precision_confidence_b_y', 'Confidence', 'Precision', 'boxP')
-  buildCurveChart(dc.value.boxR,  'curve_recall_confidence_b_x', 'curve_recall_confidence_b_y', 'Confidence', 'Recall', 'boxR')
+  buildCurveChart(dc.value.boxPR, 'curve_precision_recall_x', 'curve_precision_recall_y', 'Recall', 'Precision', 'boxPR')
+  buildCurveChart(dc.value.boxP,  'curve_precision_confidence_x', 'curve_precision_confidence_y', 'Confidence', 'Precision', 'boxP')
+  buildCurveChart(dc.value.boxR,  'curve_recall_confidence_x', 'curve_recall_confidence_y', 'Confidence', 'Recall', 'boxR')
 }
 
 async function selectRun(id) {

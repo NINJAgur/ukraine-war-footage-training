@@ -21,53 +21,50 @@
     <main class="panel-main">
 
       <!-- ── PIPELINE STATS ── -->
-      <section class="panel-section">
-        <div class="pipeline-stats-grid">
-          <!-- Scraper -->
-          <div>
-            <div class="panel-section-title mono">SCRAPER PIPELINE</div>
-            <div v-if="scraperStats">
-              <div class="scraper-stat-grid">
-                <div class="scraper-stat-card" v-for="(count, status) in scraperStats.by_status" :key="status">
-                  <div class="scraper-stat-num">{{ count }}</div>
-                  <div class="scraper-stat-label mono">{{ status }}</div>
-                </div>
-              </div>
-              <div class="scraper-source-row mono" style="margin-top:10px">
-                <span v-for="(count, src) in scraperStats.by_source" :key="src" class="scraper-source-badge">{{ src.toUpperCase() }}: {{ count }}</span>
-                <span class="scraper-source-badge" style="color:var(--fg-3)">TOTAL: {{ scraperStats.total }}</span>
-              </div>
+      <section class="panel-section" v-if="scraperStats">
+        <div class="pipeline-overview">
+
+          <!-- Row 1: clip status counts -->
+          <div class="pipeline-row-header mono">SCRAPER PIPELINE
+            <span class="pipe-total">{{ scraperStats.total }} clips total</span>
+          </div>
+          <div class="pipe-counts-row">
+            <div v-for="(count, status) in scraperStats.by_status" :key="status" class="pipe-count-item">
+              <span class="pipe-count-num" :class="`pipe-${status.toLowerCase()}`">{{ count }}</span>
+              <span class="pipe-count-label mono">{{ status }}</span>
+            </div>
+            <div class="pipe-divider"></div>
+            <div v-for="(count, src) in scraperStats.by_source" :key="src" class="pipe-count-item">
+              <span class="pipe-count-num">{{ count }}</span>
+              <span class="pipe-count-label mono">{{ src }}</span>
             </div>
           </div>
-          <!-- Inference -->
-          <div>
-            <div class="panel-section-title mono">INFERENCE PIPELINE</div>
-            <div v-if="scraperStats">
-              <div class="scraper-stat-grid">
-                <div class="scraper-stat-card" v-for="(count, status) in scraperStats.dataset_pipeline" :key="status">
-                  <div class="scraper-stat-num">{{ count }}</div>
-                  <div class="scraper-stat-label mono">{{ status }}</div>
-                </div>
-              </div>
-              <div class="packaged-model-row" v-if="scraperStats.packaged_per_model" style="margin-top:10px">
-                <div v-for="(count, model) in scraperStats.packaged_per_model" :key="model"
-                  class="packaged-model-card mono" :class="{ 'threshold-met': count >= 5 }">
-                  <span class="packaged-model-name">{{ model }}</span>
-                  <span class="packaged-model-count">{{ count }}<span class="threshold-label">/5</span></span>
-                </div>
-              </div>
+
+          <!-- Row 2: dataset pipeline + per-model packaged -->
+          <div class="pipeline-row-header mono" style="margin-top:16px">INFERENCE PIPELINE
+            <span class="pipe-total">threshold: 5 packaged per model to trigger training</span>
+          </div>
+          <div class="pipe-counts-row">
+            <div v-for="(count, status) in scraperStats.dataset_pipeline" :key="status" class="pipe-count-item">
+              <span class="pipe-count-num">{{ count }}</span>
+              <span class="pipe-count-label mono">{{ status }}</span>
+            </div>
+            <div class="pipe-divider"></div>
+            <div v-for="(count, model) in scraperStats.packaged_per_model" :key="model"
+              class="pipe-count-item" :class="{ 'pipe-threshold-met': count >= 5 }">
+              <span class="pipe-count-num">{{ count }}<span style="font-size:9px;color:var(--fg-3)">/5</span></span>
+              <span class="pipe-count-label mono">{{ model }}</span>
             </div>
           </div>
-          <!-- Packaged dataset breakdown -->
-          <div v-if="scraperStats?.packaged_detail?.length">
-            <div class="panel-section-title mono">PACKAGED DATASETS</div>
-            <div class="packaged-detail mono">
-              <div v-for="d in scraperStats.packaged_detail" :key="d.id" class="packaged-detail-row">
-                <span style="color:var(--fg-3);min-width:40px">DS#{{ d.id }}</span>
-                <span v-for="m in (d.models||[])" :key="m" class="packaged-model-tag" :data-model="m.toLowerCase()">{{ m }}</span>
-              </div>
-            </div>
+
+          <!-- Row 3: packaged dataset details (compact) -->
+          <div v-if="scraperStats.packaged_detail?.length" class="pipe-ds-row mono">
+            <span v-for="d in scraperStats.packaged_detail" :key="d.id" class="pipe-ds-item">
+              DS#{{ d.id }}
+              <span v-for="m in (d.models||[])" :key="m" class="packaged-model-tag" :data-model="m.toLowerCase()">{{ m }}</span>
+            </span>
           </div>
+
         </div>
       </section>
 
@@ -457,28 +454,26 @@ onMounted(() => { loadRuns(); loadClips(); loadScraperStats() })
   margin-bottom: 8px;
 }
 
-.pipeline-stats-grid { display: grid; grid-template-columns: 1fr 1fr auto; gap: 32px; align-items: start; }
-@media (max-width: 900px) { .pipeline-stats-grid { grid-template-columns: 1fr 1fr; } }
-.scraper-stat-grid { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
-.scraper-stat-card { background: var(--bg-2); border: 1px solid var(--fg-3); padding: 12px 20px; min-width: 80px; text-align: center; }
-.scraper-stat-num { font-family: var(--font-mono); font-size: 22px; font-weight: 700; color: var(--fg-0); }
-.scraper-stat-label { font-size: 9px; letter-spacing: 0.15em; color: var(--fg-3); text-transform: uppercase; margin-top: 2px; }
-.scraper-source-row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; font-size: 11px; color: var(--fg-2); }
-.scraper-source-badge { background: var(--bg-2); border: 1px solid var(--fg-3); padding: 3px 10px; }
-.packaged-model-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
-.packaged-model-card { background: var(--bg-2); border: 1px solid var(--fg-3); padding: 8px 12px; display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 70px; transition: border-color 0.2s; }
-.packaged-model-card.threshold-met { border-color: var(--amber); }
-.packaged-model-name { font-size: 9px; letter-spacing: 0.15em; color: var(--fg-3); }
-.packaged-model-count { font-size: 18px; font-weight: 700; color: var(--fg-0); line-height: 1; }
-.packaged-model-card.threshold-met .packaged-model-count { color: var(--amber); }
-.threshold-label { font-size: 9px; color: var(--fg-3); font-weight: 400; }
-.packaged-detail { margin-top: 4px; }
-.packaged-detail-row { display: flex; align-items: center; gap: 6px; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 10px; }
+.pipeline-overview { display: flex; flex-direction: column; gap: 4px; }
+.pipeline-row-header { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.2em; color: var(--amber); margin-bottom: 8px; display: flex; align-items: center; gap: 12px; }
+.pipe-total { font-size: 9px; color: var(--fg-3); letter-spacing: 0.06em; }
+.pipe-counts-row { display: flex; align-items: center; flex-wrap: wrap; border: 1px solid var(--fg-3); }
+.pipe-count-item { display: flex; flex-direction: column; align-items: center; padding: 10px 20px; border-right: 1px solid var(--fg-3); min-width: 80px; }
+.pipe-count-item:last-child { border-right: none; }
+.pipe-count-item.pipe-threshold-met .pipe-count-num { color: var(--amber); }
+.pipe-count-num { font-family: var(--font-mono); font-size: 20px; font-weight: 700; color: var(--fg-0); line-height: 1.2; }
+.pipe-count-num.pipe-annotated { color: var(--amber); }
+.pipe-count-num.pipe-error { color: #ef4444; }
+.pipe-count-label { font-family: var(--font-mono); font-size: 9px; color: var(--fg-3); letter-spacing: 0.12em; text-transform: uppercase; margin-top: 3px; }
+.pipe-divider { width: 1px; height: 40px; background: var(--fg-3); flex-shrink: 0; }
+.pipe-ds-row { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.06); font-size: 11px; font-family: var(--font-mono); }
+.pipe-ds-item { display: flex; align-items: center; gap: 4px; color: var(--fg-3); }
 .packaged-model-tag { font-size: 9px; letter-spacing: 0.1em; padding: 1px 6px; border: 1px solid; }
-.packaged-model-tag[data-model="aircraft"]  { color: var(--cat-color-aircraft);   border-color: color-mix(in srgb, var(--cat-color-aircraft)  30%, transparent); }
-.packaged-model-tag[data-model="vehicle"]   { color: var(--cat-color-vehicles);   border-color: color-mix(in srgb, var(--cat-color-vehicles)  30%, transparent); }
-.packaged-model-tag[data-model="personnel"] { color: var(--cat-color-personnel);  border-color: color-mix(in srgb, var(--cat-color-personnel) 30%, transparent); }
-.packaged-model-tag[data-model="general"]   { color: var(--cat-color-generalist); border-color: color-mix(in srgb, var(--cat-color-generalist) 30%, transparent); }
+.packaged-model-tag[data-model="aircraft"]  { color: #5b9bd5; border-color: rgba(91,155,213,0.4); }
+.packaged-model-tag[data-model="vehicle"]   { color: #e06030; border-color: rgba(224,96,48,0.4); }
+.packaged-model-tag[data-model="personnel"] { color: #4caf6a; border-color: rgba(76,175,106,0.4); }
+.packaged-model-tag[data-model="general"]   { color: #df6900; border-color: rgba(223,105,0,0.4); }
+
 
 .model-grid {
   display: grid;
