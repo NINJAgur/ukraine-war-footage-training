@@ -20,57 +20,54 @@
 
     <main class="panel-main">
 
-      <!-- ── SCRAPER + INFERENCE PIPELINE ── -->
-      <section class="panel-section pipeline-row-section">
-        <div class="pipeline-col">
-          <div class="panel-section-title mono">SCRAPER PIPELINE</div>
-          <div v-if="scraperStats" class="scraper-stats">
-            <div class="scraper-stat-grid">
-              <div class="scraper-stat-card" v-for="(count, status) in scraperStats.by_status" :key="status">
-                <div class="scraper-stat-num">{{ count }}</div>
-                <div class="scraper-stat-label mono">{{ status }}</div>
+      <!-- ── PIPELINE STATS ── -->
+      <section class="panel-section">
+        <div class="pipeline-stats-grid">
+          <!-- Scraper -->
+          <div>
+            <div class="panel-section-title mono">SCRAPER PIPELINE</div>
+            <div v-if="scraperStats">
+              <div class="scraper-stat-grid">
+                <div class="scraper-stat-card" v-for="(count, status) in scraperStats.by_status" :key="status">
+                  <div class="scraper-stat-num">{{ count }}</div>
+                  <div class="scraper-stat-label mono">{{ status }}</div>
+                </div>
               </div>
-            </div>
-            <div class="scraper-source-row mono">
-              <span v-for="(count, src) in scraperStats.by_source" :key="src" class="scraper-source-badge">
-                {{ src.toUpperCase() }}: {{ count }}
-              </span>
-              <span class="scraper-source-badge" style="color:var(--fg-3)">TOTAL: {{ scraperStats.total }}</span>
+              <div class="scraper-source-row mono" style="margin-top:10px">
+                <span v-for="(count, src) in scraperStats.by_source" :key="src" class="scraper-source-badge">{{ src.toUpperCase() }}: {{ count }}</span>
+                <span class="scraper-source-badge" style="color:var(--fg-3)">TOTAL: {{ scraperStats.total }}</span>
+              </div>
             </div>
           </div>
-          <div v-else class="mono dim" style="font-size:12px">Loading...</div>
-        </div>
-        <div class="pipeline-divider"></div>
-        <div class="pipeline-col">
-          <div class="panel-section-title mono">INFERENCE PIPELINE</div>
-          <div v-if="scraperStats" class="scraper-stats">
-            <div class="scraper-stat-grid">
-              <div class="scraper-stat-card" v-for="(count, status) in scraperStats.dataset_pipeline" :key="status">
-                <div class="scraper-stat-num">{{ count }}</div>
-                <div class="scraper-stat-label mono">{{ status }}</div>
+          <!-- Inference -->
+          <div>
+            <div class="panel-section-title mono">INFERENCE PIPELINE</div>
+            <div v-if="scraperStats">
+              <div class="scraper-stat-grid">
+                <div class="scraper-stat-card" v-for="(count, status) in scraperStats.dataset_pipeline" :key="status">
+                  <div class="scraper-stat-num">{{ count }}</div>
+                  <div class="scraper-stat-label mono">{{ status }}</div>
+                </div>
+              </div>
+              <div class="packaged-model-row" v-if="scraperStats.packaged_per_model" style="margin-top:10px">
+                <div v-for="(count, model) in scraperStats.packaged_per_model" :key="model"
+                  class="packaged-model-card mono" :class="{ 'threshold-met': count >= 5 }">
+                  <span class="packaged-model-name">{{ model }}</span>
+                  <span class="packaged-model-count">{{ count }}<span class="threshold-label">/5</span></span>
+                </div>
               </div>
             </div>
-            <!-- Per-model PACKAGED counts -->
-            <div class="packaged-model-row" v-if="scraperStats.packaged_per_model">
-              <div
-                v-for="(count, model) in scraperStats.packaged_per_model" :key="model"
-                class="packaged-model-card mono"
-                :class="{ 'threshold-met': count >= 5 }"
-              >
-                <span class="packaged-model-name">{{ model }}</span>
-                <span class="packaged-model-count">{{ count }}<span class="threshold-label">/5</span></span>
-              </div>
-            </div>
-            <!-- Dataset contribution breakdown -->
-            <div class="packaged-detail mono" v-if="scraperStats.packaged_detail?.length">
-              <div class="panel-section-title mono" style="font-size:9px;margin:10px 0 6px">PACKAGED DATASETS</div>
+          </div>
+          <!-- Packaged dataset breakdown -->
+          <div v-if="scraperStats?.packaged_detail?.length">
+            <div class="panel-section-title mono">PACKAGED DATASETS</div>
+            <div class="packaged-detail mono">
               <div v-for="d in scraperStats.packaged_detail" :key="d.id" class="packaged-detail-row">
-                <span style="color:var(--fg-3)">DS#{{ d.id }}</span>
+                <span style="color:var(--fg-3);min-width:40px">DS#{{ d.id }}</span>
                 <span v-for="m in (d.models||[])" :key="m" class="packaged-model-tag" :data-model="m.toLowerCase()">{{ m }}</span>
               </div>
             </div>
           </div>
-          <div v-else class="mono dim" style="font-size:12px">Loading...</div>
         </div>
       </section>
 
@@ -459,9 +456,8 @@ onMounted(() => { loadRuns(); loadClips(); loadScraperStats() })
   margin-bottom: 8px;
 }
 
-.pipeline-row-section { display: flex; gap: 0; }
-.pipeline-col { flex: 1; }
-.pipeline-divider { width: 1px; background: var(--fg-3); margin: 0 24px; flex-shrink: 0; }
+.pipeline-stats-grid { display: grid; grid-template-columns: 1fr 1fr auto; gap: 32px; align-items: start; }
+@media (max-width: 900px) { .pipeline-stats-grid { grid-template-columns: 1fr 1fr; } }
 .scraper-stat-grid { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
 .scraper-stat-card { background: var(--bg-2); border: 1px solid var(--fg-3); padding: 12px 20px; min-width: 80px; text-align: center; }
 .scraper-stat-num { font-family: var(--font-mono); font-size: 22px; font-weight: 700; color: var(--fg-0); }
