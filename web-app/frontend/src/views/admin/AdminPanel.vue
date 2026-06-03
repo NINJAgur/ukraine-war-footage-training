@@ -491,8 +491,9 @@ onMounted(() => { loadRuns(); loadClips(); loadScraperStats() })
 .psr-annotated .pipe-stat-num { color: var(--amber); }
 .psr-error .pipe-stat-label { color: var(--red); }
 .psr-error .pipe-stat-num { color: var(--red); }
-/* pending row — neutral, not as prominent as annotated/error */
-.psr-pending .pipe-stat-num { font-size: 16px; color: var(--fg-2); }
+/* pending row — neutral status: lighter label than source rows, dimmer number */
+.psr-pending .pipe-stat-label { color: var(--fg-1); }
+.psr-pending .pipe-stat-num { font-size: 16px; color: var(--fg-1); }
 /* source rows — dimmer to visually separate from status rows */
 .psr-source .pipe-stat-label { color: var(--fg-2); letter-spacing: 0.1em; }
 .psr-source .pipe-stat-num { font-size: 16px; color: var(--fg-2); }
@@ -526,7 +527,7 @@ onMounted(() => { loadRuns(); loadClips(); loadScraperStats() })
 /* col 3 datasets */
 .pipe-ds-list { display: flex; flex-direction: column; gap: 0; margin-top: 12px; flex: 1; justify-content: space-between; }
 .pipe-ds-row-item { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--fg-3); }
-.pipe-ds-id { min-width: 42px; }
+.pipe-ds-id { min-width: 52px; font-size: 12px; }
 .packaged-model-tag { font-size: 11px; letter-spacing: 0.1em; padding: 4px 12px; border: 1px solid; }
 .packaged-model-tag[data-model="aircraft"]  { color: var(--cat-color-aircraft);   border-color: color-mix(in oklch, var(--cat-color-aircraft)   30%, transparent); }
 .packaged-model-tag[data-model="vehicle"]   { color: var(--cat-color-vehicles);   border-color: color-mix(in oklch, var(--cat-color-vehicles)   30%, transparent); }
