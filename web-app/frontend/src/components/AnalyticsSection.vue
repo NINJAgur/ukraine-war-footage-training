@@ -208,7 +208,7 @@ function buildGeneral() {
     charts.breakdown = new Chart(breakdownChart.value, {
       type: 'doughnut',
       data: { labels: d.detection_breakdown.map(r => r.class), datasets: [{ data: d.detection_breakdown.map(r => r.count), backgroundColor: d.detection_breakdown.map(r => MC[r.class]||C.amber), borderWidth:0 }] },
-      options: { responsive:true, maintainAspectRatio:true, aspectRatio:1.4, cutout:'55%', plugins:{legend:{display:true,position:'bottom',labels:{color:C.tick,font:{family:'IBM Plex Mono',size:9},boxWidth:8,padding:8}}} },
+      options: { responsive:true, maintainAspectRatio:true, aspectRatio:1.4, cutout:'55%', animation:{animateRotate:false,animateScale:false}, plugins:{legend:{display:true,position:'bottom',labels:{color:C.tick,font:{family:'IBM Plex Mono',size:9},boxWidth:8,padding:8}}} },
     })
   }
 
@@ -225,13 +225,15 @@ function buildGeneral() {
           label: m,
           data: sorted.map((r,i) => r.model === m ? { x: i, y: r.map50, run: r.run_id, date: r.date?.slice(0,10) } : null).filter(Boolean),
           backgroundColor: MC[m]||C.amber,
+          borderColor: MC[m]||C.amber,
           pointRadius: 6, pointHoverRadius: 8,
+          showLine: true, tension: 0, clip: false,
         })),
       },
       options: {
         responsive:true, maintainAspectRatio:true, aspectRatio:1.4,
         scales:{
-          x:{...BS, type:'linear', min:0, max:sorted.length-1, ticks:{ callback: v => labels[v] || '', color:C.tick, font:{family:'IBM Plex Mono',size:8}, maxRotation:45 }},
+          x:{...BS, type:'linear', min:-0.5, max:sorted.length-0.5, ticks:{ callback: v => labels[Math.round(v)] || '', color:C.tick, font:{family:'IBM Plex Mono',size:8}, maxRotation:45 }},
           y:{...BS, min:0.3, max:1.0},
         },
         plugins:{
@@ -257,7 +259,7 @@ function buildGeneral() {
           label: m,
           data: [Math.round(b.map50*100), Math.round((b.images/MAX)*100), Math.round((fc[m]||0)/3*100), b.precision?Math.round(b.precision*100):0, b.recall?Math.round(b.recall*100):0],
           borderColor: MC[m], borderWidth:2, pointRadius:3,
-          backgroundColor: MC[m] + '26',
+          backgroundColor: 'transparent',
         })),
       },
       options: { responsive:true, maintainAspectRatio:true, aspectRatio:1.4, scales:{r:{min:0,max:100,grid:{color:'rgba(255,255,255,0.1)'},pointLabels:{color:C.tick,font:{family:'IBM Plex Mono',size:9}},ticks:{color:'transparent',backdropColor:'transparent',stepSize:25}}}, plugins:{legend:{display:true,position:'bottom',labels:{color:C.tick,font:{family:'IBM Plex Mono',size:9},boxWidth:8,padding:8}}} },
@@ -332,8 +334,11 @@ function _buildDrillRow2(run) {
   if (dc.value.cm && run.confusion_matrix) {
     const cm = run.confusion_matrix
     const nc = cm.length
-    const labels = nc === 2 ? ['aircraft','bg'] : nc === 3 ? ['aircraft','vehicle','personnel'] : nc === 4 ? ['aircraft','vehicle','personnel','bg'] : Array.from({length:nc},(_,i)=>`c${i}`)
-    // Normalize each row by its sum
+    const _cls2 = { AIRCRAFT: 'aircraft', VEHICLE: 'vehicle', PERSONNEL: 'personnel', GENERAL: 'all' }
+    const labels = nc === 2 ? [_cls2[run.model] ?? 'class', 'background']
+                 : nc === 3 ? ['aircraft', 'vehicle', 'personnel']
+                 : nc === 4 ? ['aircraft', 'vehicle', 'personnel', 'background']
+                 : Array.from({length: nc}, (_, i) => `c${i}`)
     const cmNorm = cm.map(row => { const s = row.reduce((a,b)=>a+b,0)||1; return row.map(v=>v/s) })
     const pts = []
     for (let r = 0; r < nc; r++) for (let c2 = 0; c2 < nc; c2++) pts.push({ x: c2, y: nc - 1 - r, v: cmNorm[r][c2], row: r, col: c2 })
@@ -342,13 +347,17 @@ function _buildDrillRow2(run) {
       data: { datasets: [{ data: pts,
         backgroundColor: ctx => { const v = ctx.raw?.v ?? 0; const a = 0.05 + 0.95 * Math.pow(v, 0.5); return `rgba(96,165,250,${a.toFixed(2)})` },
         pointStyle: 'rect',
-        pointRadius: ctx => Math.max(8, ((ctx.chart?.width || 300) / (nc * 2.5))),
+        pointRadius: ctx => {
+          const ca = ctx.chart?.chartArea
+          if (!ca) return 8
+          return Math.floor(Math.min((ca.right - ca.left) / nc, (ca.bottom - ca.top) / nc) / 2) - 1
+        },
         borderColor: 'rgba(96,165,250,0.3)', borderWidth: 1,
       }]},
       options: { responsive:true, maintainAspectRatio:true, aspectRatio:1.3,
         scales: {
-          x: { ...BS, min:-0.5, max:nc-0.5, ticks:{callback:v=>labels[v]??'', stepSize:1, color:C.tick, font:{family:'IBM Plex Mono',size:9}}, title:{display:true,text:'Predicted',color:C.tick,font:{family:'IBM Plex Mono',size:9}}, grid:{color:C.grid} },
-          y: { ...BS, min:-0.5, max:nc-0.5, ticks:{callback:v=>labels[nc-1-v]??'', stepSize:1, color:C.tick, font:{family:'IBM Plex Mono',size:9}}, title:{display:true,text:'True',color:C.tick,font:{family:'IBM Plex Mono',size:9}}, grid:{color:C.grid} },
+          x: { ...BS, min:-0.5, max:nc-0.5, ticks:{callback:v=>Number.isInteger(v)?labels[v]??'':'', stepSize:1, color:C.tick, font:{family:'IBM Plex Mono',size:9}}, title:{display:true,text:'Predicted',color:C.tick,font:{family:'IBM Plex Mono',size:9}}, grid:{color:C.grid} },
+          y: { ...BS, min:-0.5, max:nc-0.5, ticks:{callback:v=>Number.isInteger(v)?labels[nc-1-v]??'':'', stepSize:1, color:C.tick, font:{family:'IBM Plex Mono',size:9}}, title:{display:true,text:'True',color:C.tick,font:{family:'IBM Plex Mono',size:9}}, grid:{color:C.grid} },
         },
         plugins: { legend:{display:false}, tooltip:{callbacks:{label:ctx=>`True:${labels[ctx.raw.row]} Pred:${labels[ctx.raw.col]}: ${ctx.raw.v?.toFixed(2)}`}} },
       },

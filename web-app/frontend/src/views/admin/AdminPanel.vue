@@ -68,33 +68,58 @@
       <!-- ── PIPELINE STATS ── -->
       <section class="panel-section" v-if="scraperStats">
         <div class="pipeline-stats-wrap">
-          <div class="pipe-col">
+
+          <!-- Col 1: Scraper -->
+          <div class="pipe-stat-card">
             <div class="panel-section-title mono">SCRAPER PIPELINE</div>
-            <div class="pipe-chips-row">
-              <span v-for="(count, status) in scraperStats.by_status" :key="status" class="pipe-chip" :class="`chip-${status.toLowerCase()}`">
-                <span class="pipe-chip-num">{{ count }}</span> {{ status }}
-              </span>
-              <span class="pipe-chip chip-muted" v-for="(count, src) in scraperStats.by_source" :key="src">
-                <span class="pipe-chip-num">{{ count }}</span> {{ src.toUpperCase() }}
-              </span>
-              <span class="pipe-chip chip-total"><span class="pipe-chip-num">{{ scraperStats.total }}</span> TOTAL</span>
+            <div class="pipe-stat-rows">
+              <div v-for="s in SCRAPER_STATUS_ORDER" :key="s"
+                   v-if="scraperStats.by_status?.[s] != null"
+                   class="pipe-stat-row" :class="`psr-${s.toLowerCase()}`">
+                <span class="pipe-stat-label mono">{{ s }}</span>
+                <span class="pipe-stat-num mono">{{ scraperStats.by_status[s] }}</span>
+              </div>
+              <div class="pipe-stat-divider"></div>
+              <div v-for="(count, src) in scraperStats.by_source" :key="src" class="pipe-stat-row psr-source">
+                <span class="pipe-stat-label mono">{{ src.toUpperCase() }}</span>
+                <span class="pipe-stat-num mono">{{ count }}</span>
+              </div>
+              <div class="pipe-stat-divider"></div>
+              <div class="pipe-stat-row psr-total">
+                <span class="pipe-stat-label mono">TOTAL</span>
+                <span class="pipe-stat-num mono">{{ scraperStats.total }}</span>
+              </div>
             </div>
           </div>
-          <div class="pipe-col">
-            <div class="panel-section-title mono">INFERENCE PIPELINE <span style="color:var(--fg-3);font-size:8px;font-weight:400;letter-spacing:0.06em">≥5 to trigger training</span></div>
-            <div class="pipe-chips-row">
-              <span v-for="(count, status) in scraperStats.dataset_pipeline" :key="status" class="pipe-chip">
-                <span class="pipe-chip-num">{{ count }}</span> {{ status }}
-              </span>
+
+          <!-- Col 2: Inference -->
+          <div class="pipe-stat-card">
+            <div class="panel-section-title mono">INFERENCE PIPELINE <span class="pipe-threshold-note">≥5 to trigger training</span></div>
+            <div class="pipe-summary-row">
+              <div class="pipe-summary-item">
+                <span class="pipe-summary-num mono">{{ scraperStats.dataset_pipeline?.TRAINED ?? 0 }}</span>
+                <span class="pipe-summary-label mono">TRAINED</span>
+              </div>
+              <div class="pipe-summary-item">
+                <span class="pipe-summary-num mono" :class="(scraperStats.dataset_pipeline?.PACKAGED??0)>0?'num-amber':''">{{ scraperStats.dataset_pipeline?.PACKAGED ?? 0 }}</span>
+                <span class="pipe-summary-label mono">PACKAGED</span>
+              </div>
             </div>
-            <div class="pipe-chips-row" style="margin-top:6px">
-              <span v-for="(count, model) in scraperStats.packaged_per_model" :key="model"
-                class="pipe-chip" :class="count>=5?'chip-met':''">
-                <span class="pipe-chip-num">{{ count }}/5</span> {{ model }}
-              </span>
+            <div class="pipe-stat-divider"></div>
+            <div class="pipe-model-rows">
+              <div v-for="(count, model) in scraperStats.packaged_per_model" :key="model"
+                   class="pipe-model-row" :class="count>=5?'model-met':''">
+                <span class="pipe-model-label mono" :data-model="model.toLowerCase()">{{ model }}</span>
+                <div class="pipe-model-bar">
+                  <div class="pipe-model-fill" :style="{width: Math.min(count/5*100,100)+'%'}"></div>
+                </div>
+                <span class="pipe-model-frac mono">{{ count }}/5</span>
+              </div>
             </div>
           </div>
-          <div class="pipe-col">
+
+          <!-- Col 3: Packaged datasets -->
+          <div class="pipe-stat-card">
             <div class="panel-section-title mono">PACKAGED DATASETS</div>
             <div v-if="scraperStats.packaged_detail?.length" class="pipe-ds-list">
               <div v-for="d in scraperStats.packaged_detail" :key="d.id" class="pipe-ds-row-item mono">
@@ -102,8 +127,9 @@
                 <span v-for="m in (d.models||[])" :key="m" class="packaged-model-tag" :data-model="m.toLowerCase()">{{ m }}</span>
               </div>
             </div>
-            <div v-else class="pipe-chip chip-muted">No packaged datasets</div>
+            <div v-else class="pipe-stat-empty mono">No packaged datasets</div>
           </div>
+
         </div>
       </section>
 
@@ -234,6 +260,7 @@ const router = useRouter()
 
 const MODELS       = ['AIRCRAFT', 'VEHICLE', 'PERSONNEL', 'GENERAL']
 const CLIP_STATUSES = ['', 'REVIEW', 'PENDING', 'DOWNLOADING', 'DOWNLOADED', 'ANNOTATED', 'ERROR']
+const SCRAPER_STATUS_ORDER = ['ANNOTATED', 'ERROR', 'PENDING', 'DOWNLOADING', 'DOWNLOADED', 'REVIEW']
 
 const MODEL_COLORS = {
   AIRCRAFT:  'oklch(0.62 0.16 220deg)',
@@ -448,19 +475,47 @@ onMounted(() => { loadRuns(); loadClips(); loadScraperStats() })
   margin-bottom: 8px;
 }
 
-.pipeline-stats-wrap { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
-.pipe-col { }
-.pipe-chips-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.pipe-chip { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; padding: 4px 10px; background: var(--bg-2); border: 1px solid var(--fg-3); color: var(--fg-2); white-space: nowrap; }
-.pipe-chip-num { font-weight: 700; color: var(--fg-0); margin-right: 4px; }
-.chip-annotated { border-color: color-mix(in oklch, var(--amber) 40%, transparent); }
-.chip-annotated .pipe-chip-num { color: var(--amber); }
-.chip-error .pipe-chip-num { color: #ef4444; }
-.chip-total { color: var(--fg-3); }
-.chip-muted { color: var(--fg-3); border-color: rgba(255,255,255,0.04); }
-.chip-met { border-color: var(--amber); }
-.chip-met .pipe-chip-num { color: var(--amber); }
-.pipe-ds-list { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.pipeline-stats-wrap { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--fg-3); border: 1px solid var(--fg-3); }
+.pipe-stat-card { background: var(--bg-1); padding: 14px 16px; display: flex; flex-direction: column; gap: 0; }
+.pipe-threshold-note { color: var(--fg-3); font-size: 8px; font-weight: 400; letter-spacing: 0.06em; }
+
+/* stat rows (col 1) */
+.pipe-stat-rows { display: flex; flex-direction: column; gap: 0; margin-top: 10px; }
+.pipe-stat-row { display: flex; justify-content: space-between; align-items: baseline; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.03); }
+.pipe-stat-label { font-size: 9px; letter-spacing: 0.18em; color: var(--fg-3); }
+.pipe-stat-num { font-size: 15px; font-weight: 300; color: var(--fg-0); }
+.psr-annotated .pipe-stat-label { color: var(--amber); }
+.psr-annotated .pipe-stat-num { color: var(--amber); }
+.psr-error .pipe-stat-label { color: var(--red); }
+.psr-error .pipe-stat-num { color: var(--red); }
+.psr-total .pipe-stat-label { color: var(--fg-3); }
+.psr-total .pipe-stat-num { font-size: 13px; color: var(--fg-3); }
+.pipe-stat-divider { height: 1px; background: rgba(255,255,255,0.06); margin: 6px 0; }
+.pipe-stat-empty { font-size: 10px; color: var(--fg-3); margin-top: 10px; }
+
+/* summary row (col 2 top) */
+.pipe-summary-row { display: flex; gap: 24px; margin-top: 10px; }
+.pipe-summary-item { display: flex; flex-direction: column; gap: 2px; }
+.pipe-summary-num { font-size: 22px; font-weight: 300; color: var(--fg-0); line-height: 1; }
+.pipe-summary-num.num-amber { color: var(--amber); }
+.pipe-summary-label { font-size: 9px; letter-spacing: 0.18em; color: var(--fg-3); }
+
+/* model progress rows (col 2 bottom) */
+.pipe-model-rows { display: flex; flex-direction: column; gap: 5px; margin-top: 4px; }
+.pipe-model-row { display: flex; align-items: center; gap: 8px; }
+.pipe-model-label { font-size: 9px; letter-spacing: 0.14em; color: var(--fg-3); min-width: 68px; }
+.pipe-model-label[data-model="aircraft"]  { color: var(--cat-color-aircraft); }
+.pipe-model-label[data-model="vehicle"]   { color: var(--cat-color-vehicles); }
+.pipe-model-label[data-model="personnel"] { color: var(--cat-color-personnel); }
+.pipe-model-label[data-model="general"]   { color: var(--cat-color-generalist); }
+.pipe-model-bar { flex: 1; height: 2px; background: var(--fg-3); }
+.pipe-model-fill { height: 100%; background: var(--fg-2); transition: width 0.3s; }
+.pipe-model-row.model-met .pipe-model-fill { background: var(--amber); }
+.pipe-model-frac { font-size: 9px; color: var(--fg-3); min-width: 24px; text-align: right; }
+.pipe-model-row.model-met .pipe-model-frac { color: var(--amber); }
+
+/* col 3 datasets */
+.pipe-ds-list { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; }
 .pipe-ds-row-item { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--fg-3); }
 .pipe-ds-id { min-width: 36px; }
 .packaged-model-tag { font-size: 9px; letter-spacing: 0.1em; padding: 1px 6px; border: 1px solid; }
