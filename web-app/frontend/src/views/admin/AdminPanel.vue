@@ -482,7 +482,7 @@ onMounted(() => { loadRuns(); loadClips(); loadScraperStats() })
 .pipe-threshold-note { color: var(--fg-3); font-size: 9px; font-weight: 400; letter-spacing: 0.06em; }
 
 /* stat rows (col 1) */
-.pipe-stat-rows { display: flex; flex-direction: column; gap: 0; margin-top: 12px; flex: 1; }
+.pipe-stat-rows { display: flex; flex-direction: column; gap: 0; margin-top: 12px; flex: 1; justify-content: space-between; }
 .pipe-stat-row { display: flex; justify-content: space-between; align-items: baseline; padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
 .pipe-stat-label { font-size: 10px; letter-spacing: 0.16em; color: var(--fg-3); }
 .pipe-stat-num { font-size: 20px; font-weight: 300; color: var(--fg-0); }
@@ -508,7 +508,7 @@ onMounted(() => { loadRuns(); loadClips(); loadScraperStats() })
 .pipe-summary-label { font-size: 10px; letter-spacing: 0.18em; color: var(--fg-3); }
 
 /* model progress rows (col 2 bottom) */
-.pipe-model-rows { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.pipe-model-rows { display: flex; flex-direction: column; gap: 0; margin-top: 8px; flex: 1; justify-content: space-between; }
 .pipe-model-row { display: flex; align-items: center; gap: 10px; }
 .pipe-model-label { font-size: 11px; letter-spacing: 0.12em; color: var(--fg-3); min-width: 80px; }
 .pipe-model-label[data-model="aircraft"]  { color: var(--cat-color-aircraft); }
@@ -522,7 +522,7 @@ onMounted(() => { loadRuns(); loadClips(); loadScraperStats() })
 .pipe-model-row.model-met .pipe-model-frac { color: var(--amber); }
 
 /* col 3 datasets */
-.pipe-ds-list { display: flex; flex-direction: column; gap: 7px; margin-top: 12px; }
+.pipe-ds-list { display: flex; flex-direction: column; gap: 0; margin-top: 12px; flex: 1; justify-content: space-between; }
 .pipe-ds-row-item { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--fg-3); }
 .pipe-ds-id { min-width: 42px; }
 .packaged-model-tag { font-size: 10px; letter-spacing: 0.1em; padding: 2px 8px; border: 1px solid; }
