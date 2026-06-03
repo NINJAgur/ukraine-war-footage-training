@@ -145,7 +145,7 @@ async def get_scraper_stats(
 ) -> dict:
     """Scraper pipeline counts by status and source."""
     from sqlalchemy import func, select
-    from db.models import Clip, Dataset, DatasetStatus
+    from db.models import Clip, Dataset
 
     # Dataset pipeline counts
     dataset_rows = (await db.execute(
