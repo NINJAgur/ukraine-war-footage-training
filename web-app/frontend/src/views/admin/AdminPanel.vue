@@ -483,21 +483,15 @@ onMounted(() => { loadRuns(); loadClips(); loadScraperStats() })
 
 /* stat rows (col 1) */
 .pipe-stat-rows { display: flex; flex-direction: column; gap: 0; margin-top: 12px; flex: 1; justify-content: space-between; }
-.pipe-stat-row { display: flex; justify-content: space-between; align-items: baseline; padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
-.pipe-stat-label { font-size: 10px; letter-spacing: 0.16em; color: var(--fg-3); }
-.pipe-stat-num { font-size: 20px; font-weight: 300; color: var(--fg-0); }
-/* status rows */
-.psr-annotated .pipe-stat-label { color: var(--amber); }
-.psr-annotated .pipe-stat-num { color: var(--amber); }
-.psr-error .pipe-stat-label { color: var(--red); }
-.psr-error .pipe-stat-num { color: var(--red); }
-/* source rows */
-.psr-source .pipe-stat-label { color: var(--fg-1); }
-.psr-source .pipe-stat-num { color: var(--fg-0); }
-/* total row */
-.psr-total .pipe-stat-label { color: var(--fg-1); }
-.psr-total .pipe-stat-num { color: var(--fg-0); font-size: 18px; }
-.pipe-stat-divider { height: 1px; background: rgba(255,255,255,0.06); margin: 8px 0; }
+.pipe-stat-row { display: flex; justify-content: space-between; align-items: baseline; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+.pipe-stat-label { font-size: 12px; letter-spacing: 0.14em; color: var(--fg-3); }
+.pipe-stat-num { font-size: 16px; font-weight: 400; color: var(--fg-0); }
+/* number color always matches label color */
+.psr-annotated .pipe-stat-label, .psr-annotated .pipe-stat-num { color: var(--amber); }
+.psr-error .pipe-stat-label, .psr-error .pipe-stat-num { color: var(--red); }
+.psr-source .pipe-stat-label, .psr-source .pipe-stat-num { color: var(--fg-1); }
+.psr-total .pipe-stat-label, .psr-total .pipe-stat-num { color: var(--fg-1); }
+.pipe-stat-divider { height: 1px; background: rgba(255,255,255,0.06); margin: 6px 0; }
 .pipe-stat-empty { font-size: 11px; color: var(--fg-3); margin-top: 12px; }
 
 /* summary row (col 2 top) */
@@ -522,9 +516,9 @@ onMounted(() => { loadRuns(); loadClips(); loadScraperStats() })
 .pipe-model-row.model-met .pipe-model-frac { color: var(--amber); }
 
 /* col 3 datasets */
-.pipe-ds-list { display: flex; flex-direction: column; gap: 0; margin-top: 12px; flex: 1; justify-content: space-between; }
-.pipe-ds-row-item { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--fg-3); }
-.pipe-ds-id { min-width: 52px; font-size: 11px; letter-spacing: 0.08em; color: var(--fg-1); }
+.pipe-ds-list { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; max-height: 200px; overflow-y: auto; }
+.pipe-ds-row-item { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--fg-3); flex-shrink: 0; }
+.pipe-ds-id { min-width: 48px; font-size: 11px; letter-spacing: 0.08em; color: var(--fg-1); }
 .packaged-model-tag { font-size: 11px; letter-spacing: 0.1em; padding: 4px 12px; border: 1px solid; }
 .packaged-model-tag[data-model="aircraft"]  { color: var(--cat-color-aircraft);   border-color: color-mix(in oklch, var(--cat-color-aircraft)   30%, transparent); }
 .packaged-model-tag[data-model="vehicle"]   { color: var(--cat-color-vehicles);   border-color: color-mix(in oklch, var(--cat-color-vehicles)   30%, transparent); }
