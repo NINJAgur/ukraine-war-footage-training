@@ -73,12 +73,13 @@
           <div class="pipe-stat-card">
             <div class="panel-section-title mono">SCRAPER PIPELINE</div>
             <div class="pipe-stat-rows">
-              <div v-for="s in SCRAPER_STATUS_ORDER" :key="s"
-                   v-if="scraperStats.by_status?.[s] != null"
-                   class="pipe-stat-row" :class="`psr-${s.toLowerCase()}`">
-                <span class="pipe-stat-label mono">{{ s }}</span>
-                <span class="pipe-stat-num mono">{{ scraperStats.by_status[s] }}</span>
-              </div>
+              <template v-for="s in SCRAPER_STATUS_ORDER" :key="s">
+                <div v-if="scraperStats.by_status?.[s] != null"
+                     class="pipe-stat-row" :class="`psr-${s.toLowerCase()}`">
+                  <span class="pipe-stat-label mono">{{ s }}</span>
+                  <span class="pipe-stat-num mono">{{ scraperStats.by_status[s] }}</span>
+                </div>
+              </template>
               <div class="pipe-stat-divider"></div>
               <div v-for="(count, src) in scraperStats.by_source" :key="src" class="pipe-stat-row psr-source">
                 <span class="pipe-stat-label mono">{{ src.toUpperCase() }}</span>
@@ -476,49 +477,49 @@ onMounted(() => { loadRuns(); loadClips(); loadScraperStats() })
 }
 
 .pipeline-stats-wrap { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--fg-3); border: 1px solid var(--fg-3); }
-.pipe-stat-card { background: var(--bg-1); padding: 14px 16px; display: flex; flex-direction: column; gap: 0; }
-.pipe-threshold-note { color: var(--fg-3); font-size: 8px; font-weight: 400; letter-spacing: 0.06em; }
+.pipe-stat-card { background: var(--bg-1); padding: 18px 22px; display: flex; flex-direction: column; gap: 0; }
+.pipe-threshold-note { color: var(--fg-3); font-size: 9px; font-weight: 400; letter-spacing: 0.06em; }
 
 /* stat rows (col 1) */
-.pipe-stat-rows { display: flex; flex-direction: column; gap: 0; margin-top: 10px; }
-.pipe-stat-row { display: flex; justify-content: space-between; align-items: baseline; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.03); }
-.pipe-stat-label { font-size: 9px; letter-spacing: 0.18em; color: var(--fg-3); }
-.pipe-stat-num { font-size: 15px; font-weight: 300; color: var(--fg-0); }
+.pipe-stat-rows { display: flex; flex-direction: column; gap: 0; margin-top: 12px; }
+.pipe-stat-row { display: flex; justify-content: space-between; align-items: baseline; padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+.pipe-stat-label { font-size: 10px; letter-spacing: 0.16em; color: var(--fg-3); }
+.pipe-stat-num { font-size: 20px; font-weight: 300; color: var(--fg-0); }
 .psr-annotated .pipe-stat-label { color: var(--amber); }
 .psr-annotated .pipe-stat-num { color: var(--amber); }
 .psr-error .pipe-stat-label { color: var(--red); }
 .psr-error .pipe-stat-num { color: var(--red); }
 .psr-total .pipe-stat-label { color: var(--fg-3); }
-.psr-total .pipe-stat-num { font-size: 13px; color: var(--fg-3); }
-.pipe-stat-divider { height: 1px; background: rgba(255,255,255,0.06); margin: 6px 0; }
-.pipe-stat-empty { font-size: 10px; color: var(--fg-3); margin-top: 10px; }
+.psr-total .pipe-stat-num { font-size: 15px; color: var(--fg-3); }
+.pipe-stat-divider { height: 1px; background: rgba(255,255,255,0.06); margin: 8px 0; }
+.pipe-stat-empty { font-size: 11px; color: var(--fg-3); margin-top: 12px; }
 
 /* summary row (col 2 top) */
-.pipe-summary-row { display: flex; gap: 24px; margin-top: 10px; }
-.pipe-summary-item { display: flex; flex-direction: column; gap: 2px; }
-.pipe-summary-num { font-size: 22px; font-weight: 300; color: var(--fg-0); line-height: 1; }
+.pipe-summary-row { display: flex; gap: 32px; margin-top: 12px; }
+.pipe-summary-item { display: flex; flex-direction: column; gap: 3px; }
+.pipe-summary-num { font-size: 32px; font-weight: 300; color: var(--fg-0); line-height: 1; }
 .pipe-summary-num.num-amber { color: var(--amber); }
-.pipe-summary-label { font-size: 9px; letter-spacing: 0.18em; color: var(--fg-3); }
+.pipe-summary-label { font-size: 10px; letter-spacing: 0.18em; color: var(--fg-3); }
 
 /* model progress rows (col 2 bottom) */
-.pipe-model-rows { display: flex; flex-direction: column; gap: 5px; margin-top: 4px; }
-.pipe-model-row { display: flex; align-items: center; gap: 8px; }
-.pipe-model-label { font-size: 9px; letter-spacing: 0.14em; color: var(--fg-3); min-width: 68px; }
+.pipe-model-rows { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.pipe-model-row { display: flex; align-items: center; gap: 10px; }
+.pipe-model-label { font-size: 11px; letter-spacing: 0.12em; color: var(--fg-3); min-width: 80px; }
 .pipe-model-label[data-model="aircraft"]  { color: var(--cat-color-aircraft); }
 .pipe-model-label[data-model="vehicle"]   { color: var(--cat-color-vehicles); }
 .pipe-model-label[data-model="personnel"] { color: var(--cat-color-personnel); }
 .pipe-model-label[data-model="general"]   { color: var(--cat-color-generalist); }
-.pipe-model-bar { flex: 1; height: 2px; background: var(--fg-3); }
+.pipe-model-bar { flex: 1; height: 3px; background: var(--fg-3); }
 .pipe-model-fill { height: 100%; background: var(--fg-2); transition: width 0.3s; }
 .pipe-model-row.model-met .pipe-model-fill { background: var(--amber); }
-.pipe-model-frac { font-size: 9px; color: var(--fg-3); min-width: 24px; text-align: right; }
+.pipe-model-frac { font-size: 11px; color: var(--fg-3); min-width: 28px; text-align: right; }
 .pipe-model-row.model-met .pipe-model-frac { color: var(--amber); }
 
 /* col 3 datasets */
-.pipe-ds-list { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; }
-.pipe-ds-row-item { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--fg-3); }
-.pipe-ds-id { min-width: 36px; }
-.packaged-model-tag { font-size: 9px; letter-spacing: 0.1em; padding: 1px 6px; border: 1px solid; }
+.pipe-ds-list { display: flex; flex-direction: column; gap: 7px; margin-top: 12px; }
+.pipe-ds-row-item { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--fg-3); }
+.pipe-ds-id { min-width: 42px; }
+.packaged-model-tag { font-size: 10px; letter-spacing: 0.1em; padding: 2px 8px; border: 1px solid; }
 .packaged-model-tag[data-model="aircraft"]  { color: var(--cat-color-aircraft);   border-color: color-mix(in oklch, var(--cat-color-aircraft)   30%, transparent); }
 .packaged-model-tag[data-model="vehicle"]   { color: var(--cat-color-vehicles);   border-color: color-mix(in oklch, var(--cat-color-vehicles)   30%, transparent); }
 .packaged-model-tag[data-model="personnel"] { color: var(--cat-color-personnel);  border-color: color-mix(in oklch, var(--cat-color-personnel)  30%, transparent); }
