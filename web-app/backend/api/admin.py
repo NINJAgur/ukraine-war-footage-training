@@ -147,12 +147,31 @@ async def get_scraper_stats(
     from sqlalchemy import func, select
     from db.models import Clip, Dataset
 
-    # Dataset pipeline counts
+    # Dataset pipeline counts by status
     dataset_rows = (await db.execute(
         select(Dataset.status, func.count(Dataset.id).label("count"))
         .group_by(Dataset.status)
     )).all()
     dataset_counts = {r.status.value if r.status else "unknown": r.count for r in dataset_rows}
+
+    # PACKAGED datasets per model type (threshold=5 to trigger training)
+    from sqlalchemy import text as sa_text
+    packaged_per_model = {}
+    for model in ("AIRCRAFT", "VEHICLE", "PERSONNEL", "GENERAL"):
+        if model == "GENERAL":
+            # GENERAL counts all PACKAGED
+            count_row = (await db.execute(
+                select(func.count(Dataset.id))
+                .where(Dataset.status.in_(["PACKAGED"]))
+            )).scalar()
+        else:
+            count_row = (await db.execute(
+                sa_text(
+                    f"SELECT COUNT(*) FROM datasets WHERE status='PACKAGED' "
+                    f"AND detected_model_types::text LIKE '%{model}%'"
+                )
+            )).scalar()
+        packaged_per_model[model] = count_row or 0
 
     # Counts by status
     status_rows = (await db.execute(
@@ -179,6 +198,7 @@ async def get_scraper_stats(
         "by_status": by_status,
         "by_source": by_source,
         "dataset_pipeline": dataset_counts,
+        "packaged_per_model": packaged_per_model,
         "recent": recent_list,
     }
 

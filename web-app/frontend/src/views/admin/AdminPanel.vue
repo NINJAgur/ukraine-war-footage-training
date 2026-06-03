@@ -50,10 +50,16 @@
                 <div class="scraper-stat-label mono">{{ status }}</div>
               </div>
             </div>
-            <div class="scraper-source-row mono" style="margin-top:8px">
-              <span class="scraper-source-badge" style="color:var(--fg-3)">
-                TOTAL DATASETS: {{ Object.values(scraperStats.dataset_pipeline||{}).reduce((a,b)=>a+b,0) }}
-              </span>
+            <!-- Per-model PACKAGED counts with 5-threshold indicator -->
+            <div class="packaged-model-row" v-if="scraperStats.packaged_per_model">
+              <div
+                v-for="(count, model) in scraperStats.packaged_per_model" :key="model"
+                class="packaged-model-card mono"
+                :class="{ 'threshold-met': count >= 5 }"
+              >
+                <span class="packaged-model-name">{{ model }}</span>
+                <span class="packaged-model-count">{{ count }}<span class="threshold-label">/5</span></span>
+              </div>
             </div>
           </div>
           <div v-else class="mono dim" style="font-size:12px">Loading...</div>
@@ -454,7 +460,13 @@ onMounted(() => { loadRuns(); loadClips(); loadScraperStats() })
 .scraper-stat-label { font-size: 9px; letter-spacing: 0.15em; color: var(--fg-3); text-transform: uppercase; margin-top: 2px; }
 .scraper-source-row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; font-size: 11px; color: var(--fg-2); }
 .scraper-source-badge { background: var(--bg-2); border: 1px solid var(--fg-3); padding: 3px 10px; }
-.scraper-recent { border-top: 1px solid var(--fg-3); padding-top: 12px; }
+.packaged-model-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.packaged-model-card { background: var(--bg-2); border: 1px solid var(--fg-3); padding: 8px 12px; display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 70px; transition: border-color 0.2s; }
+.packaged-model-card.threshold-met { border-color: var(--amber); }
+.packaged-model-name { font-size: 9px; letter-spacing: 0.15em; color: var(--fg-3); }
+.packaged-model-count { font-size: 18px; font-weight: 700; color: var(--fg-0); line-height: 1; }
+.packaged-model-card.threshold-met .packaged-model-count { color: var(--amber); }
+.threshold-label { font-size: 9px; color: var(--fg-3); font-weight: 400; }
 
 .model-grid {
   display: grid;
