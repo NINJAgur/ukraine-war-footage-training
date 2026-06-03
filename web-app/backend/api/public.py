@@ -456,6 +456,11 @@ async def get_stats_charts(
             if v2:
                 training_scatter.append({"run_id": r.id, "model": model_name2, "stage": r.stage.value if r.stage else None, "map50": v2, "map50_95": None, "precision": None, "recall": None, "images": m2.get("total_train_images") or 0, "date": r.completed_at.isoformat() if r.completed_at else None, "is_best": False})
 
+    # Sort training_scatter by model name for consistent legend order
+    _model_order = {"AIRCRAFT": 0, "GENERAL": 1, "PERSONNEL": 2, "VEHICLE": 3}
+    training_scatter.sort(key=lambda r: (_model_order.get(r.get("model", ""), 99), r.get("run_id", 0)))
+    map50_timeline.sort(key=lambda r: (r.get("date") or "", r.get("run_id", 0)))
+
     return {
         "clips_per_day": clips_per_day,
         "detection_breakdown": detection_breakdown,
