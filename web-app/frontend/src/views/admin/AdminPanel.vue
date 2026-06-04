@@ -108,13 +108,13 @@
             </div>
             <div class="pipe-stat-divider"></div>
             <div class="pipe-model-rows">
-              <div v-for="(count, model) in scraperStats.packaged_per_model" :key="model"
-                   class="pipe-model-row" :class="count>0?'model-met':''">
+              <div v-for="(data, model) in scraperStats.merged_images_per_model" :key="model"
+                   class="pipe-model-row" :class="data.images >= data.threshold ? 'model-met' : ''">
                 <span class="pipe-model-label mono" :data-model="model.toLowerCase()">{{ model }}</span>
                 <div class="pipe-model-bar">
-                  <div class="pipe-model-fill" :style="{width: count>0?'100%':'0%'}"></div>
+                  <div class="pipe-model-fill" :style="{width: Math.min(data.images / data.threshold * 100, 100) + '%'}"></div>
                 </div>
-                <span class="pipe-model-frac mono">{{ count }} ds</span>
+                <span class="pipe-model-frac mono">{{ data.images.toLocaleString() }}/{{ data.threshold.toLocaleString() }}</span>
               </div>
             </div>
           </div>

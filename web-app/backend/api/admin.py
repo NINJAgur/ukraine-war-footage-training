@@ -154,23 +154,22 @@ async def get_scraper_stats(
     )).all()
     dataset_counts = {r.status.value if r.status else "unknown": r.count for r in dataset_rows}
 
-    # PACKAGED datasets per model type (training triggers on image count threshold, not dataset count)
-    from sqlalchemy import text as sa_text
-    packaged_per_model = {}
-    for model in ("AIRCRAFT", "VEHICLE", "PERSONNEL", "GENERAL"):
-        if model == "GENERAL":
-            count_row = (await db.execute(
-                select(func.count(Dataset.id))
-                .where(Dataset.status == "PACKAGED")
-            )).scalar()
-        else:
-            count_row = (await db.execute(
-                sa_text(
-                    f"SELECT COUNT(*) FROM datasets WHERE status='PACKAGED' "
-                    f"AND detected_model_types::text LIKE '%{model}%'"
-                )
-            )).scalar()
-        packaged_per_model[model] = count_row or 0
+    # Scraped train image counts per model from GCS merged dirs
+    _IMAGE_THRESHOLDS = {"AIRCRAFT": 6500, "VEHICLE": 5500, "PERSONNEL": 1000, "GENERAL": 15000}
+    _GCS_BUCKET = "ukraine-footage-media"
+    merged_images_per_model = {}
+    try:
+        from google.cloud import storage as _gcs
+        _client = _gcs.Client()
+        for model in ("AIRCRAFT", "VEHICLE", "PERSONNEL", "GENERAL"):
+            prefix = f"merged/{model}/train/images/"
+            count = sum(
+                1 for b in _client.list_blobs(_GCS_BUCKET, prefix=prefix)
+                if not b.name.endswith("/") and b.name.lower().endswith((".jpg", ".png"))
+            )
+            merged_images_per_model[model] = {"images": count, "threshold": _IMAGE_THRESHOLDS[model]}
+    except Exception:
+        merged_images_per_model = {m: {"images": 0, "threshold": _IMAGE_THRESHOLDS[m]} for m in _IMAGE_THRESHOLDS}
 
     # Counts by status
     status_rows = (await db.execute(
@@ -197,7 +196,7 @@ async def get_scraper_stats(
         "by_status": by_status,
         "by_source": by_source,
         "dataset_pipeline": dataset_counts,
-        "packaged_per_model": packaged_per_model,
+        "merged_images_per_model": merged_images_per_model,
         "packaged_detail": [
             {"id": r.id, "models": r.detected_model_types}
             for r in (await db.execute(
