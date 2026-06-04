@@ -4,10 +4,10 @@
 ---
 
 ## Current Project State
-*Last updated: 2026-05-28*
+*Last updated: 2026-06-04*
 
 **Backend endpoints (all implemented):**
-- `GET /api/stats` — live model status + images_labeled (GENERAL count = 175,627)
+- `GET /api/stats` — live model status + images_labeled
 - `GET /api/feed` — paginated ANNOTATED clips
 - `GET /api/archive` — paginated all clips by status
 - `GET /api/annotated-clips` — GCS annotated MP4 URLs from DB (for hero video background)
@@ -19,6 +19,9 @@
 - `POST /api/admin/train` — queue BASELINE or FINETUNE Celery task
 - `POST /api/auth/login` — JWT login
 - `WebSocket /ws/training/{run_id}` — polls DB every 3s, sends `{status, metrics}`, closes on DONE/ERROR
+- `GET /api/stats/charts?days=30` — analytics: clips/day, detection breakdown, mAP50 timeline, training scatter
+- `GET /api/training/epoch-data` — per-run epoch metrics, confusion matrix, PR/confidence curves
+- `GET /api/admin/scraper-stats` — scraper pipeline counts + scraped image counts vs thresholds per model
 
 **ClipStatus enum:** `PENDING | DOWNLOADING | DOWNLOADED | QUEUED | LABELED | ANNOTATED | ERROR | REVIEW`
 

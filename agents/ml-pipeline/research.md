@@ -60,28 +60,28 @@ All models use the same 3-class canonical vocabulary, aligned with `_filter.py` 
 **ModelType enum:** AIRCRAFT, VEHICLE, PERSONNEL, GENERAL  
 **Training order:** specialists sequentially (AIRCRAFT ✅ → VEHICLE ✅ → PERSONNEL ⏳ → GENERAL ⏳ once all 3 pass mAP50 > 0.4)
 
-### All 8 Kaggle Datasets (on disk)
+#### Dataset Inventory (8 datasets, all on disk)
 
-| Dataset handle | nc | Images | Labels | Pipeline role |
-|----------------|-----|--------|--------|---------------|
-| `mihprofi/drone-detect` | 2 | 37,900 | 37,900 | YOLO remap: both → AIRCRAFT |
-| `shakedlevnat/military-aircraft-database` | 83 | 19,958 | 19,958 | YOLO remap: all → AIRCRAFT |
-| `nzigulic/military-equipment` | 11 | 16,809 | 16,809 | Visually mapped → nc=3 (all 11 classes identified) |
-| `piterfm/2022-ukraine-russia-war-equipment-losses-oryx` | 3 | 26,197 | 26,118 | GDINO category-aware auto-label |
-| `sudipchakrabarty/kiit-mita` | 7 | 1,700 | 1,700 | YOLO remap → nc=3 |
-| `rookieengg/military-aircraft-detection` | 43 | 11,788 | 11,788 | YOLO remap: all 43 → AIRCRAFT |
-| `rawsi18/military-assets-dataset-12-classes` | 12 | 26,315 | 26,315 | YOLO remap → nc=3 |
-| `rupankarmajumdar/amad-5` | 5 | 34,960 | 34,960 | YOLO remap → nc=3 |
-| **TOTAL** | | **175,627** | **175,548** | |
+| Kaggle handle | nc | Images | Notes |
+|---|---|---|---|
+| `mihprofi/drone-detect` | 2 | 36,013 | Both classes → AIRCRAFT; fresh download 2026-05-14 |
+| `shakedlevnat/military-aircraft-database` | 83 | 17,962 | All 83 → AIRCRAFT; fresh download 2026-05-14 |
+| `nzigulic/military-equipment` | 11 | 13,448 | Anonymous nc=11: 4-7→AIRCRAFT, 0-3/8-10→VEHICLE; reorganized to train/val layout |
+| `piterfm/2022-ukraine-russia-war-equipment-losses-oryx` | 3 | 26,197 | Canonical nc=3 pass-through; GDINO labels |
+| `sudipchakrabarty/kiit-mita` | 7 | 1,530 | 7-class remap → nc=3; fresh download 2026-05-14 |
+| `rookieengg/military-aircraft-detection` | 43 | 11,788 | All 43 → AIRCRAFT; reorganized to train/val layout |
+| `rawsi18/military-assets-dataset-12-classes` | 12 | 24,919 | 12-class remap → nc=3 (4 classes skipped); fresh download 2026-05-14 |
+| `rupankarmajumdar/amad-5` | 5 | 32,529 | 5-class remap → nc=3 (civilians skipped); fresh download 2026-05-14 |
+| **TOTAL** | | **164,386** | Source files never modified — remapping in build script only |
 
 ### Cold-Start Baseline Training (3-class canonical labels)
 
 | Model | Source Datasets | ~Images | Result |
 |-------|----------------|---------|--------|
 | AIRCRAFT | mihprofi, shakedlevnat, nzigulic, piterfm, rookieengg, rawsi18 | 65,557 | mAP50=0.929 ✅ run 13 → finetune 0.968 run 68 |
-| VEHICLE | kiit-mita, nzigulic, piterfm, rawsi18, amad-5 | 56,440 | mAP50=0.871 ✅ run 25 → finetune 0.901 run 73 |
-| PERSONNEL | kiit-mita, rawsi18, amad-5 | 10,962 | mAP50=0.780 ✅ run 29 → finetune 0.872 run 74 |
-| GENERAL | all 8 | 144,466 | mAP50=0.784 ✅ run 30 → finetune pending |
+| VEHICLE | kiit-mita, nzigulic, piterfm, rawsi18, amad-5 | 56,440 | mAP50=0.871 ✅ run 25 → finetune 0.904 run 76 → scraped 0.902 run 78 |
+| PERSONNEL | kiit-mita, rawsi18, amad-5 | 10,962 | mAP50=0.780 ✅ run 29 → finetune 0.873 run 75 |
+| GENERAL | all 8 | 144,466 | mAP50=0.784 ✅ run 30 → scraped finetune 0.851 run 79 |
 
 Weights land at: `runs/baseline/<MODEL_TYPE>/baseline_<MODEL>_<run_id>/weights/best.pt`
 
