@@ -155,7 +155,7 @@ async def get_scraper_stats(
     dataset_counts = {r.status.value if r.status else "unknown": r.count for r in dataset_rows}
 
     # Scraped train image counts per model from GCS merged dirs
-    _IMAGE_THRESHOLDS = {"AIRCRAFT": 6500, "VEHICLE": 5500, "PERSONNEL": 1000, "GENERAL": 15000}
+    _IMAGE_THRESHOLDS = {"AIRCRAFT": 1000, "VEHICLE": 1000, "PERSONNEL": 500, "GENERAL": 2500}
     _GCS_BUCKET = "ukraine-footage-media"
     merged_images_per_model = {}
     try:

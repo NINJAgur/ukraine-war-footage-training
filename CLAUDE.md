@@ -87,9 +87,13 @@ Pipeline per scrape batch (Beat schedule on inference-engine VM: GDINO @03:05, a
    - Mark `Dataset(PACKAGED)`
 
 **Phase 3 — Trigger check** (chord callback, fires once after ALL `package_dataset` tasks complete):
-4. Count PACKAGED datasets per model type (per-model filter: only datasets where that model was detected; GENERAL counts all)
-5. Any model with ≥5 → `TrainingRun(QUEUED)` → dispatch ONE `prepare_finetune_batch` with all qualifying run IDs
-6. Mark consumed PACKAGED datasets as TRAINED (so they don't count toward next cycle's threshold)
+4. Count scraped train images in `merged/<MODEL>/train/images/` per model (GCS in remote mode, local otherwise)
+5. Any model meeting image threshold → `TrainingRun(QUEUED)` → dispatch ONE `prepare_finetune_batch` with all qualifying run IDs
+   - AIRCRAFT ≥ 1,000 images
+   - VEHICLE ≥ 1,000 images
+   - PERSONNEL ≥ 500 images
+   - GENERAL ≥ 2,500 images
+6. After training: delete merged dir (already consumed by train_finetune); mark PACKAGED datasets as TRAINED
 
 **Phase 4 — Finetune dispatch** (`prepare_finetune_batch`, Q=pipeline):
 7. Remote: upload `merged/<MODEL>/` → `gs://bucket/merged/<MODEL>/` for each qualifying model → delete local merged dir

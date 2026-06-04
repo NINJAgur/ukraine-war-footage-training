@@ -82,10 +82,10 @@ class Settings(BaseSettings):
 
     # ── Fine-tune trigger thresholds (scraped train images per model) ─
     YOLO_FINETUNE_MIN_IMAGES: dict = {
-        "AIRCRAFT":  6500,
-        "VEHICLE":   5500,
-        "PERSONNEL": 1000,
-        "GENERAL":   15000,
+        "AIRCRAFT":  1000,
+        "VEHICLE":   1000,
+        "PERSONNEL": 500,
+        "GENERAL":   2500,
     }
 
     def model_post_init(self, __context):
