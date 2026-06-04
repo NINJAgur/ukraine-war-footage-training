@@ -65,7 +65,11 @@ async def get_annotated_clips(db: AsyncSession = Depends(get_db)) -> list[dict]:
         if clip.mp4_path.startswith("http"):
             video_url = clip.mp4_path
             # For remote files, rely on DB duration rather than OpenCV scanning
-            duration_str = f"00:00:{clip.duration_seconds:02d}" if clip.duration_seconds else "00:00:00"
+            if clip.duration_seconds:
+                _s = clip.duration_seconds
+                duration_str = f"{_s//3600:02d}:{(_s%3600)//60:02d}:{_s%60:02d}"
+            else:
+                duration_str = "00:00:00"
         else:
             mp4 = _resolve_mp4_path(clip.mp4_path)
             if not mp4.exists():
