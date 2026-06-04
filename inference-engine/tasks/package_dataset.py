@@ -27,6 +27,7 @@ from db.models import (
     ModelType, TrainingRun, TrainingStage, TrainingStatus,
 )
 from db.session import get_session
+from sqlalchemy import text as sql_text
 from tasks.weights import _latest_weights
 
 logger = logging.getLogger(__name__)
@@ -215,7 +216,7 @@ def _create_finetune_run(model_type: ModelType) -> Optional[tuple]:
         # Sync sequence to actual max id to prevent UniqueViolation if rows were
         # inserted with explicit ids during testing (sequence can lag behind).
         session.execute(
-            "SELECT setval('training_runs_id_seq', COALESCE(MAX(id), 1)) FROM training_runs"
+            sql_text("SELECT setval('training_runs_id_seq', COALESCE(MAX(id), 1)) FROM training_runs")
         )
 
         run = TrainingRun(
