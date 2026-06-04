@@ -95,7 +95,7 @@
 
           <!-- Col 2: Inference -->
           <div class="pipe-stat-card">
-            <div class="panel-section-title mono">INFERENCE PIPELINE <span class="pipe-threshold-note">≥5 to trigger training</span></div>
+            <div class="panel-section-title mono">INFERENCE PIPELINE <span class="pipe-threshold-note">image threshold to trigger training</span></div>
             <div class="pipe-summary-row">
               <div class="pipe-summary-item">
                 <span class="pipe-summary-num mono">{{ scraperStats.dataset_pipeline?.TRAINED ?? 0 }}</span>
@@ -109,12 +109,12 @@
             <div class="pipe-stat-divider"></div>
             <div class="pipe-model-rows">
               <div v-for="(count, model) in scraperStats.packaged_per_model" :key="model"
-                   class="pipe-model-row" :class="count>=5?'model-met':''">
+                   class="pipe-model-row" :class="count>0?'model-met':''">
                 <span class="pipe-model-label mono" :data-model="model.toLowerCase()">{{ model }}</span>
                 <div class="pipe-model-bar">
-                  <div class="pipe-model-fill" :style="{width: Math.min(count/5*100,100)+'%'}"></div>
+                  <div class="pipe-model-fill" :style="{width: count>0?'100%':'0%'}"></div>
                 </div>
-                <span class="pipe-model-frac mono">{{ count }}/5</span>
+                <span class="pipe-model-frac mono">{{ count }} ds</span>
               </div>
             </div>
           </div>

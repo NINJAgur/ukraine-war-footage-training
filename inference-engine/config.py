@@ -80,8 +80,13 @@ class Settings(BaseSettings):
         "PERSONNEL": ( 48, 154,  24),  # BGR ← oklch(0.60 0.18 145) rgb(24,154,48)
     }
 
-    # ── Fine-tune trigger threshold ───────────────────────────────────
-    YOLO_FINETUNE_MAX_CYCLES: int = 4   # baseline(10) + 4×finetune(10) = 50 total epochs
+    # ── Fine-tune trigger thresholds (scraped train images per model) ─
+    YOLO_FINETUNE_MIN_IMAGES: dict = {
+        "AIRCRAFT":  6500,
+        "VEHICLE":   5500,
+        "PERSONNEL": 1000,
+        "GENERAL":   15000,
+    }
 
     def model_post_init(self, __context):
         # Resolve GDINO config via installed package — the default relative path

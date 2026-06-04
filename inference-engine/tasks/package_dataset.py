@@ -27,13 +27,13 @@ from db.models import (
     ModelType, TrainingRun, TrainingStage, TrainingStatus,
 )
 from db.session import get_session
+from sqlalchemy import text as sql_text
 from tasks.weights import _latest_weights
 
 logger = logging.getLogger(__name__)
 
 VAL_SPLIT = 0.2
 SPLIT_SEED = 42
-FINETUNE_MIN_DATASETS = 5
 
 
 def create_train_val_split(dataset_dir: Path) -> tuple:
@@ -153,23 +153,35 @@ def _upload_merged_to_gcs(merged_dir: Path, model: str, bucket: str) -> None:
     logger.info(f"[prepare_finetune_batch] Uploaded {merged_dir.name} → gs://{bucket}/{prefix}/")
 
 
+def _count_merged_images(model_type: ModelType) -> int:
+    """Count scraped train images in merged/<MODEL>/train/images/ (GCS or local)."""
+    if settings.STORAGE_MODE == "remote" and settings.REMOTE_STORAGE_BUCKET:
+        from google.cloud import storage as gcs
+        prefix = f"merged/{model_type.value}/train/images/"
+        client = gcs.Client()
+        return sum(
+            1 for b in client.list_blobs(settings.REMOTE_STORAGE_BUCKET, prefix=prefix)
+            if not b.name.endswith("/") and b.name.lower().endswith((".jpg", ".png"))
+        )
+    else:
+        img_dir = settings.DATASETS_DIR / "merged" / model_type.value / "train" / "images"
+        if not img_dir.exists():
+            return 0
+        return sum(1 for f in img_dir.iterdir() if f.suffix.lower() in (".jpg", ".png"))
+
+
 def _create_finetune_run(model_type: ModelType) -> Optional[tuple]:
     """Create a QUEUED TrainingRun for model_type if eligible. Returns (run_id, dataset_ids) or None."""
-    with get_session() as session:
-        done_cycles = (
-            session.query(TrainingRun)
-            .filter(TrainingRun.stage == TrainingStage.FINETUNE)
-            .filter(TrainingRun.model_type == model_type)
-            .filter(TrainingRun.status == TrainingStatus.DONE)
-            .count()
+    min_images = settings.YOLO_FINETUNE_MIN_IMAGES.get(model_type.value, 5000)
+    image_count = _count_merged_images(model_type)
+    if image_count < min_images:
+        logger.info(
+            f"[finetune] {model_type.value}: -> SKIP: only {image_count}/{min_images} "
+            f"scraped train images — threshold not met"
         )
-        if done_cycles >= settings.YOLO_FINETUNE_MAX_CYCLES:
-            logger.info(
-                f"[finetune] {model_type.value}: -> SKIP: max cycles reached "
-                f"({done_cycles}/{settings.YOLO_FINETUNE_MAX_CYCLES})"
-            )
-            return None
+        return None
 
+    with get_session() as session:
         active = (
             session.query(TrainingRun)
             .filter(TrainingRun.stage == TrainingStage.FINETUNE)
@@ -198,13 +210,6 @@ def _create_finetune_run(model_type: ModelType) -> Optional[tuple]:
                 if model_type.value in (d.detected_model_types or [])
             ]
 
-        if len(relevant) < FINETUNE_MIN_DATASETS:
-            logger.info(
-                f"[finetune] {model_type.value}: -> SKIP: only {len(relevant)}/{FINETUNE_MIN_DATASETS} "
-                f"PACKAGED datasets — threshold not met"
-            )
-            return None
-
         dataset_ids = [d.id for d in relevant]
         try:
             baseline_weights = str(_latest_weights(model_type.value))
@@ -214,9 +219,9 @@ def _create_finetune_run(model_type: ModelType) -> Optional[tuple]:
 
         # Sync sequence to actual max id to prevent UniqueViolation if rows were
         # inserted with explicit ids during testing (sequence can lag behind).
-        session.execute(
+        session.execute(sql_text(
             "SELECT setval('training_runs_id_seq', COALESCE(MAX(id), 1)) FROM training_runs"
-        )
+        ))
 
         run = TrainingRun(
             stage=TrainingStage.FINETUNE,

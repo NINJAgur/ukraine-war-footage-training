@@ -154,7 +154,7 @@ async def get_scraper_stats(
     )).all()
     dataset_counts = {r.status.value if r.status else "unknown": r.count for r in dataset_rows}
 
-    # PACKAGED datasets per model type (threshold=5 to trigger training)
+    # PACKAGED datasets per model type (training triggers on image count threshold, not dataset count)
     from sqlalchemy import text as sa_text
     packaged_per_model = {}
     for model in ("AIRCRAFT", "VEHICLE", "PERSONNEL", "GENERAL"):
