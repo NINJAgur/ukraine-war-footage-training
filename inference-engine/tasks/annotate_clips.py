@@ -125,6 +125,8 @@ def _run_specialist(
             f"[{model_name}] {total} candidates  weights={weights.name}"
         )
 
+        raws_to_delete: list[tuple] = []  # (raw_path, original_file_path) — deleted after commit
+
         for clip in candidates:
             title = clip.title or f"clip_{clip.id}"
             logger.info(
@@ -149,7 +151,7 @@ def _run_specialist(
             passed, rate = validate_clip(model, raw_path, conf_thresh=CONF_THRESH, min_rate=MIN_RATE)
             if not passed:
                 logger.info(f"[{model_name}]   -> REJECT: validate rate={rate:.0%} < {MIN_RATE:.0%}")
-                _cleanup_raw(raw_path, clip.file_path)
+                raws_to_delete.append((raw_path, clip.file_path))
                 clip.file_path = None
                 clip.status = ClipStatus.PENDING
                 rejected += 1
@@ -169,7 +171,7 @@ def _run_specialist(
                 logger.info(f"[{model_name}]   -> REJECT: zero detections in full inference pass")
                 if temp_out.exists():
                     temp_out.unlink()
-                _cleanup_raw(raw_path, clip.file_path)
+                raws_to_delete.append((raw_path, clip.file_path))
                 clip.file_path = None
                 clip.status = ClipStatus.PENDING
                 rejected += 1
@@ -180,8 +182,7 @@ def _run_specialist(
             clip.detection_counts = _detection_counts(model_name, det_counts)
             clip.status = ClipStatus.ANNOTATED
             clip.updated_at = datetime.now(timezone.utc)
-            if raw_path.exists():
-                raw_path.unlink()
+            raws_to_delete.append((raw_path, clip.file_path))
             clip.file_path = None
             accepted += 1
             logger.info(
@@ -189,7 +190,10 @@ def _run_specialist(
                 f"file={Path(clip.mp4_path).name}"
             )
 
+        # Commit DB first — raw files only deleted after status is persisted
         session.commit()
+        for rp, orig_fp in raws_to_delete:
+            _cleanup_raw(rp, orig_fp)
 
     return {"accepted": accepted, "rejected": rejected, "errors": errors, "total": total}
 
@@ -229,6 +233,8 @@ def _run_general() -> dict:
             f"[GENERAL] {total} candidates (leftovers from specialists)  weights={weights.name}"
         )
 
+        raws_to_delete: list[tuple] = []
+
         for clip in candidates:
             raw_path = _resolve_clip_path(clip.file_path)
             title = clip.title or f"clip_{clip.id}"
@@ -247,7 +253,7 @@ def _run_general() -> dict:
             passed, rate = validate_clip(model, raw_path, conf_thresh=CONF_THRESH, min_rate=MIN_RATE)
             if not passed:
                 logger.info(f"[GENERAL]   -> REJECT: validate rate={rate:.0%} < {MIN_RATE:.0%}")
-                _cleanup_raw(raw_path, clip.file_path)
+                raws_to_delete.append((raw_path, clip.file_path))
                 clip.file_path = None
                 clip.status = ClipStatus.PENDING
                 rejected += 1
@@ -267,7 +273,7 @@ def _run_general() -> dict:
                 logger.info("[GENERAL]   -> REJECT: zero detections in full inference pass")
                 if temp_out.exists():
                     temp_out.unlink()
-                _cleanup_raw(raw_path, clip.file_path)
+                raws_to_delete.append((raw_path, clip.file_path))
                 clip.file_path = None
                 clip.status = ClipStatus.PENDING
                 rejected += 1
@@ -278,8 +284,7 @@ def _run_general() -> dict:
             clip.detection_counts = _detection_counts("GENERAL", det_counts)
             clip.status = ClipStatus.ANNOTATED
             clip.updated_at = datetime.now(timezone.utc)
-            if raw_path.exists():
-                raw_path.unlink()
+            raws_to_delete.append((raw_path, clip.file_path))
             clip.file_path = None
             accepted += 1
             logger.info(
@@ -288,6 +293,8 @@ def _run_general() -> dict:
             )
 
         session.commit()
+        for rp, orig_fp in raws_to_delete:
+            _cleanup_raw(rp, orig_fp)
 
     return {"accepted": accepted, "rejected": rejected, "errors": errors, "total": total}
 

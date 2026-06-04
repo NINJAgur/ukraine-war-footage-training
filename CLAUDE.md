@@ -34,7 +34,7 @@
 - Annotated output: `media/annotated/<model>/<publish_date>/<hash>_annotated.mp4` — date is `clip.published_at`, falling back to today; temp files written to same dir, renamed on completion
 - Pipeline conf threshold: `CONF_THRESH=0.25` for both `validate_clip` and `infer_video_multi_model`; `iou=0.45` passed to all `model()` calls in `inference.py` to suppress overlapping boxes
 - **Container path resolution (local dev):** scraper-worker (Docker) writes `/app/scraper-engine/media/...` paths to DB; pipeline scripts running natively call `_resolve_path()` to map these to Windows paths via `REPO_ROOT / rel`
-- **GCS media (production):** scraper uploads raw `.mp4` to `gs://ukraine-footage-media/raw/<source>/<date>/<hash>.mp4` → `clip.file_path = gs://...`; T4 `annotate_clips` downloads raw from GCS via `_download_from_gcs()`, annotates, uploads to `gs://ukraine-footage-media/annotated/...` → `clip.mp4_path = https://storage.googleapis.com/...`; raw GCS object deleted after annotation
+- **GCS media (production):** scraper uploads raw `.mp4` to `gs://ukraine-footage-media/raw/<source>/<date>/<hash>.mp4` → `clip.file_path = gs://...`; T4 `annotate_clips` downloads raw from GCS via `_download_from_gcs()`, annotates, uploads to `gs://ukraine-footage-media/annotated/...` → `clip.mp4_path = https://storage.googleapis.com/...`; raw GCS object deleted **after** DB commit (commit-then-delete order prevents orphaned clips on worker crash)
 
 **3 universal classes (aligned with `_filter.py`):**
 - `0=AIRCRAFT` — drones, helicopters, fixed-wing, missiles

@@ -138,6 +138,34 @@ const endpoints = [
   "days": 30
 }`,
   },
+  {
+    method: 'GET',
+    path: '/api/training/epoch-data',
+    desc: 'Per-run training metrics for all completed runs — epoch curves, confusion matrix, PR/confidence curves.',
+    example: `curl https://ukrarchive.duckdns.org/api/training/epoch-data
+
+[
+  {
+    "run_id": 68,
+    "model": "AIRCRAFT",
+    "stage": "FINETUNE",
+    "completed_at": "2026-05-29T10:16:38",
+    "epochs": [
+      { "epoch": 1, "metrics/mAP50(B)": 0.952, "train/box_loss": 1.21, ... },
+      ...
+    ],
+    "confusion_matrix": [[0.92, 0.08], [0.04, 0.96]],
+    "confusion_matrix_nc": 1,
+    "curve_precision_recall_x": [0.0, 0.01, ...],
+    "curve_precision_recall_y": [1.0, 0.99, ...],
+    "curve_precision_confidence_x": [...],
+    "curve_precision_confidence_y": [...],
+    "curve_recall_confidence_x": [...],
+    "curve_recall_confidence_y": [...]
+  },
+  ...
+]`,
+  },
 ]
 </script>
 
