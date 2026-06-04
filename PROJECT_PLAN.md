@@ -52,7 +52,7 @@ An automated, full-stack web application that:
 │              → delete clip hash dir immediately                     │
 │              → Dataset(PACKAGED)                                    │
 │            Phase 3 chord callback (once, after ALL clips done):     │
-│              → count PACKAGED per model; ≥5 → TrainingRun(QUEUED)  │
+│              → count scraped imgs/model; threshold met → TrainingRun(QUEUED)│
 │              → ONE prepare_finetune_batch dispatch (all run IDs)    │
 │              → mark consumed datasets TRAINED                       │
 │            Phase 4 prepare_finetune_batch (Q=pipeline):             │
@@ -610,7 +610,7 @@ yolo-training-template/                  ← monorepo root
 
 - [x] **3.21** `POST /api/admin/train` → create `TrainingRun(QUEUED)` in DB → dispatch Celery task `train_baseline` with `model_type` + `run_id` on gpu queue; task updates status/metrics/weights in DB on finish
 - [x] **3.22a** Pipeline reorganization: `annotate_clips` task (sequential AIRCRAFT→VEHICLE→PERSONNEL, Beat daily 04:00 UTC) replaces old GDINO chain. `_filter.py` moved to `scraper-engine/utils/`. Old GDINO tasks quarantined to `ml-engine/tasks/legacy/`. Kaggle download removed from Celery — CLI-only via `scripts/download_new_datasets.py`. Scrape Beat changed to daily 00:00 UTC.
-- [x] **3.22b** Fine-tune auto-trigger: `_maybe_trigger_finetune()` in `annotate_clips.py` — counts PACKAGED datasets (≥5 threshold), queues `train_finetune` Celery task; `train_finetune` marks datasets as `TRAINED` after completion
+- [x] **3.22b** Fine-tune auto-trigger: `trigger_finetune_check` chord callback in `package_dataset.py` — counts scraped train images per model in GCS merged dirs (AIRCRAFT 1000, VEHICLE 1000, PERSONNEL 500, GENERAL 2500), queues `train_finetune` Celery task; raw file deletion happens after DB commit to prevent orphaned clips
 - [x] **3.23** `TickerBar.vue` items pulled from DB: total clip count, scrape status, model mAP50 scores — `GET /api/stats` endpoint returning live counts
 
 #### Training Progress (WebSocket)
@@ -671,7 +671,7 @@ yolo-training-template/                  ← monorepo root
 - [x] **4.13m** Scraped pipeline end-to-end (2026-05-21): 10 clips auto-labeled → 5 datasets PACKAGED → 6 clips annotated (3 VEHICLE, 2 PERSONNEL, 1 GENERAL); 80 ANNOTATED total in DB ✅
 - [x] **4.13n** Pipeline cleanup fixes (2026-05-21): cv2 corrupt-frame skip in `auto_label.py`; clip dataset dirs deleted immediately after `_merge_datasets()` (not post-training); `merged_dir` cleanup moved to `finally` block; `_cleanup_zero_score_clips()` added to `annotate_clips` end-of-run sweep ✅
 
-#### 4d — Cloud Deployment Architecture ✅/❌
+#### 4d — Cloud Deployment Architecture ✅
 - [x] **4.14** Deployment architecture decided: GCP e2-micro free tier (CPU, $0/mo) + GCP T4 Spot VM (GPU, ~$10/mo via Instance Scheduling 3hr/night)
 - [x] **4.15** Cloud deploy agent files: `agents/cloud-deploy/{research,review,qa}.md` + `.claude/commands/{research,review,qa}-deploy.md`; commands wired in `CLAUDE.md`
 - [x] **4.16** `docker-compose.prod.yml` created — GCP prod config (no ml-worker/ml-beat; named volumes; nginx direct media serving)

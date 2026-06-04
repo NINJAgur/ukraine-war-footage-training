@@ -193,7 +193,7 @@ cat ~/.ssh/authorized_keys | grep github-actions
 | Weights not found on inference-engine | First-boot weight download failed | Check GCS has `runs/` blobs; re-run weight download script manually |
 | No tasks on pipeline queue | Beat not running | Verify `--beat` flag in systemd ExecStart; `celery inspect scheduled` |
 | training-engine celery-training failed | venv missing OR not yet started by inference-engine | Check `systemctl status celery-training`; verify `prepare_finetune_batch` was dispatched |
-| training-engine not started | `GCP_PROJECT_ID` empty OR inference-engine hasn't reached ≥5 PACKAGED datasets threshold | Check inference-engine logs for `[prepare_finetune_batch] Started training VM` |
+| training-engine not started | Image threshold not yet met (AIRCRAFT 1000, VEHICLE 1000, PERSONNEL 500, GENERAL 2500 scraped train images) | Check inference-engine logs for `[finetune] SKIP: only X/Y scraped train images` |
 | Annotated videos not loading | GCS object not public-read | Verify `roles/storage.objectViewer` for `allUsers` on bucket |
 | PyTorch UnpicklingError on weights load | Wrong torch version — 2.6+ breaks ultralytics | Verify `torch==2.5.1+cu121` in venv: `venv/bin/python -c "import torch; print(torch.__version__)"` |
 | 502 Bad Gateway after backend redeploy | nginx lost DNS resolution when backend container was recreated | `sudo docker compose -f docker-compose.prod.yml restart frontend` |

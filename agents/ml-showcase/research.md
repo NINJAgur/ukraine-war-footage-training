@@ -11,22 +11,15 @@ trained continuously on real conflict footage, freely available to researchers a
 ---
 
 ## Current Project State
-*Last updated: 2026-06-02*
+*Last updated: 2026-06-04*
 
-**Phase 5 progress:**
+**Phase 5 progress — ALL COMPLETE ✅:**
 - 5.1 ✅ Footer restructure, page order, nav, hero reframe
 - 5.2 ✅ Pipeline SVG diagram (chevron shapes, animated dashes + dots)
 - 5.3 ✅ Model hub (`/api/models`, `/models`, `/api-docs`, download cards)
-- 5.4 🔄 Analytics section (next up)
+- 5.4 ✅ Analytics section — Chart.js scatter/radar/doughnut/bar charts; per-run drill-down with epoch charts + CM heatmap + PR/confidence curves; admin pipeline stats redesign
 
-**Remaining features:**
-
-### A — Analytics & Charts
-- `detection_counts` JSON column on `clips` table (feeds everything)
-- `/api/stats/charts` endpoint: clips over time, detection breakdown, source split, mAP50 timeline
-- Frontend: Statistics section with Chart.js charts
-
-### B — Detection Frequency Index
+### B — Detection Frequency Index (archived — replaced by 5.4)
 - Weekly aggregate: N aircraft / N vehicle / N personnel detections across N clips
 - Transparent methodology: "detections in footage, not unique assets"
 

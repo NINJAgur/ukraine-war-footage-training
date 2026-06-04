@@ -26,7 +26,7 @@ inference-engine VM (n1-standard-1 + T4 Spot, Instance Schedule 03:00–04:00 UT
   beat @03:05 → auto_label_batch → auto_label_clip × N (GDINO)
                                 → package_dataset (Dataset PACKAGED)
                                     → upload merged/<MODEL>/ to GCS after every append
-                                → [≥5 PACKAGED] trigger_finetune_check
+                                → [image threshold met] trigger_finetune_check
                                     → TrainingRun(QUEUED) per model
                                     → prepare_finetune_batch → dispatch train_finetune × N → Q=training
   beat @03:35 → annotate_clips (YOLO → annotated MP4 → GCS annotated/)
@@ -57,23 +57,23 @@ training-engine VM (n1-standard-4 + T4 Spot, Instance Schedule 04:30 UTC start):
 | Model | mAP50 | Images | Stage | Run | Status |
 |-------|-------|--------|-------|-----|--------|
 | AIRCRAFT | 0.968 | 65,553 | Finetune (Kaggle) | 68 | Scraped cycle done (run 77: 0.964) ✅ |
-| VEHICLE | 0.904 | 56,440 | Finetune (Kaggle) | 76 | Scraped cycle queued (run 78) 🔄 |
-| PERSONNEL | 0.873 | 10,962 | Finetune (Kaggle) | 75 | Awaiting ≥5 scraped datasets |
-| GENERAL | 0.784 | 144,387 | Baseline | 30 | Scraped cycle queued (run 79) 🔄 |
+| VEHICLE | 0.904 | 56,440 | Finetune (Kaggle) | 76 | Scraped cycle done (run 78: 0.902) ✅ |
+| PERSONNEL | 0.873 | 10,962 | Finetune (Kaggle) | 75 | Scraped cycles continuing (image threshold) ✅ |
+| GENERAL | 0.851 | 144,466 | Finetune (scraped) | 79 | All cycles complete ✅ |
 
-## Dataset Inventory (8 Kaggle datasets)
+#### Dataset Inventory (8 datasets)
 
-| Dataset | nc | Images | Per-model role |
-|---------|-----|--------|----------------|
-| `mihprofi/drone-detect` | 2 | 37,900 | AIRCRAFT, GENERAL |
-| `shakedlevnat/military-aircraft-database` | 83 | 19,958 | AIRCRAFT, GENERAL |
-| `nzigulic/military-equipment` | 11 | 16,809 | AIRCRAFT, VEHICLE, GENERAL |
-| `piterfm/oryx-equipment-losses` | 3 | 26,197 | AIRCRAFT, VEHICLE, GENERAL |
-| `sudipchakrabarty/kiit-mita` | 7 | 1,700 | VEHICLE, PERSONNEL, GENERAL |
-| `rookieengg/military-aircraft-detection` | 43 | 11,788 | AIRCRAFT, GENERAL |
-| `rawsi18/military-assets-12-classes` | 12 | 26,315 | AIRCRAFT, VEHICLE, PERSONNEL, GENERAL |
-| `rupankarmajumdar/amad-5` | 5 | 34,960 | VEHICLE, PERSONNEL, GENERAL |
-| **TOTAL** | | **175,627** | |
+| Kaggle handle | nc | Images | Notes |
+|---|---|---|---|
+| `mihprofi/drone-detect` | 2 | 36,013 | Both classes → AIRCRAFT; fresh download 2026-05-14 |
+| `shakedlevnat/military-aircraft-database` | 83 | 17,962 | All 83 → AIRCRAFT; fresh download 2026-05-14 |
+| `nzigulic/military-equipment` | 11 | 13,448 | Anonymous nc=11: 4-7→AIRCRAFT, 0-3/8-10→VEHICLE; reorganized to train/val layout |
+| `piterfm/2022-ukraine-russia-war-equipment-losses-oryx` | 3 | 26,197 | Canonical nc=3 pass-through; GDINO labels |
+| `sudipchakrabarty/kiit-mita` | 7 | 1,530 | 7-class remap → nc=3; fresh download 2026-05-14 |
+| `rookieengg/military-aircraft-detection` | 43 | 11,788 | All 43 → AIRCRAFT; reorganized to train/val layout |
+| `rawsi18/military-assets-dataset-12-classes` | 12 | 24,919 | 12-class remap → nc=3 (4 classes skipped); fresh download 2026-05-14 |
+| `rupankarmajumdar/amad-5` | 5 | 32,529 | 5-class remap → nc=3 (civilians skipped); fresh download 2026-05-14 |
+| **TOTAL** | | **164,386** | Source files never modified — remapping in build script only |
 
 ## Local Running Guide
 

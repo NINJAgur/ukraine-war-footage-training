@@ -54,7 +54,7 @@ GCP n1-standard-1 + T4 Spot — Instance Schedule (start 03:00 / stop 04:00 UTC)
     Tasks:
       auto_label_clip     — GDINO frames → canonical nc=3 labels → Dataset(LABELED)
       package_dataset     — 80/20 split → merged/<MODEL>/ → Dataset(PACKAGED)
-      trigger_finetune_check — chord callback: ≥5 PACKAGED → TrainingRun(QUEUED) + prepare_finetune_batch
+      trigger_finetune_check — chord callback: image threshold met (AIRCRAFT 1000/VEHICLE 1000/PERSONNEL 500/GENERAL 2500) → TrainingRun(QUEUED) + prepare_finetune_batch
       prepare_finetune_batch — upload merged dirs to GCS (remote) → start training VM → dispatch train_finetune
       annotate_clips      — YOLO inference → annotated MP4 → GCS → Clip(ANNOTATED)
     Connects to Redis/Postgres on e2-micro via GCP internal IP (free, no egress)

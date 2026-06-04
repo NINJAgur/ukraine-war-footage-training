@@ -4,9 +4,9 @@
 ---
 
 ## Current Project State
-*Last updated: 2026-05-28*
+*Last updated: 2026-06-04*
 
-**Live DB state:** 80+ ANNOTATED clips. All 4 model types trained.
+**Live DB state:** 72+ ANNOTATED clips. All 4 model types trained (all scraped finetune cycles complete).
 **Live site:** https://ukrarchive.duckdns.org (GCP e2-micro + Docker + HTTPS)
 **Backend:** FastAPI on port 8000 (`python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000`)
 **Frontend:** Vite on port 5173 (`npm run dev` in `web-app/frontend/`)
