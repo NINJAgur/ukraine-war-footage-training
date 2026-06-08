@@ -88,6 +88,7 @@ def fetch_recent_placemark_ids(since_date: datetime) -> list[dict]:
     factions = resp.json()
 
     cutoff = since_date.replace(tzinfo=None) if since_date.tzinfo else since_date
+    cutoff = cutoff.replace(hour=0, minute=0, second=0, microsecond=0)
 
     all_pms: list[dict] = []
     for faction in factions:
