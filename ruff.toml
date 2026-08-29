@@ -1,4 +1,8 @@
 [lint]
+# Pin the rule set explicitly. CI runs an unpinned `pip install ruff`, and a
+# newer release widened the defaults well past E4/E7/E9/F — 280 findings across
+# untouched files (I001, UP, B, S, DTZ, LOG...) with no source change behind it.
+select = ["E4", "E7", "E9", "F"]
 ignore = [
     "E402",  # module-level import not at top — intentional sys.path pattern throughout monorepo
 ]
