@@ -216,7 +216,7 @@ Run training-engine tests: `cd training-engine && python -m pytest tests/`
 |-------|-------|--------|
 | 0 | Agentic workspace | ✅ Complete |
 | 1 | Scraper engine | ✅ Complete |
-| 2 | ML pipeline — training | ✅ Complete (AIRCRAFT 0.968 run 68, VEHICLE 0.904 run 76, PERSONNEL 0.873 run 75, GENERAL 0.784 run 30; scraped finetuning: AIRCRAFT 0.964 run 77, VEHICLE 0.902 run 78, GENERAL 0.851 run 79) |
+| 2 | ML pipeline — training | ✅ Complete (best weights: AIRCRAFT 0.968 run 68, VEHICLE 0.904 run 76, PERSONNEL 0.873 run 75, GENERAL 0.851 run 79; other scraped finetunes: AIRCRAFT 0.964 run 77, VEHICLE 0.902 run 78) |
 | 3 | Web application | ✅ Complete (Celery E2E, hero video, WebSocket progress bar, integration smoke test — 72 annotated clips) |
 | 4 | Cloud & DevOps | ✅ Complete (GCP e2-micro ✅; T4 Spot VM ✅; GCS pipeline ✅; HTTPS ✅ ukrarchive.duckdns.org Let's Encrypt; CI/CD ✅ GitHub Actions deploy-on-push; mobile-responsive frontend ✅) |
 | 5 | ML Showcase — **models as the product** | ✅ Complete (5.1–5.3 ✅: restructure + pipeline diagram + model hub; 5.4 ✅: analytics section — scatter/radar/doughnut charts, per-run drill-down with epoch charts + CM + curves, admin pipeline stats redesign) |

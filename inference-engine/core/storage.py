@@ -1,53 +1,35 @@
 """
 inference-engine/core/storage.py
 
-Finalizes an annotated clip: renames temp file, deletes raw source, and
-either keeps the file local or uploads it to GCS (when STORAGE_MODE=remote).
+Finalizes an annotated clip: renames temp file and either keeps it local or
+uploads it to GCS (when STORAGE_MODE=remote).
 
 All annotation paths (annotate_clips.py Celery task + manual pipeline scripts)
 call finalize_clip() — single source of truth.
 """
 import logging
-import os
 import shutil
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 
-def _delete_gcs_object(gs_url: str, bucket_name: str) -> None:
-    try:
-        from google.cloud import storage as gcs
-        without_scheme = gs_url[len("gs://"):]
-        _, _, blob_name = without_scheme.partition("/")
-        gcs.Client().bucket(bucket_name).blob(blob_name).delete()
-        logger.info(f"Deleted GCS raw: {gs_url}")
-    except Exception as exc:
-        logger.warning(f"Failed to delete GCS object {gs_url}: {exc}")
-
-
-def finalize_clip(clip, temp_path: Path, model_name: str) -> str:
+def finalize_clip(clip, temp_path: Path, model_name: str, base_name: str = None) -> str:
     """
-    Rename temp annotated file to its permanent name, delete the raw source,
-    and optionally upload to GCS.
+    Rename temp annotated file to its permanent name and optionally upload to GCS.
+
+    base_name overrides the name derived from temp_path. In remote mode the raw
+    source is a random temp download, so without it the output inherits a name
+    that cannot be traced back to its clip.
+
+    Deleting the raw source is the CALLER's job, after it has committed — doing it
+    here deletes the source before the DB knows the clip was annotated.
 
     Returns the final mp4_path (local path or GCS URL) to store on the Clip.
     """
-    clean_name = temp_path.stem.removeprefix("temp_") + "_annotated.mp4"
-    perm_path = temp_path.parent / clean_name
+    stem = base_name or temp_path.stem.removeprefix("temp_")
+    perm_path = temp_path.parent / f"{stem}_annotated.mp4"
     shutil.move(str(temp_path), str(perm_path))
-
-    if clip.file_path:
-        if clip.file_path.startswith("gs://"):
-            from config import settings as _s
-            if _s.STORAGE_MODE == "remote":
-                _delete_gcs_object(clip.file_path, _s.REMOTE_STORAGE_BUCKET)
-        elif os.path.exists(clip.file_path):
-            try:
-                os.remove(clip.file_path)
-            except PermissionError:
-                logger.warning(f"Could not delete raw file (file lock): {clip.file_path}")
-    clip.file_path = None
 
     from config import settings
     if settings.STORAGE_MODE == "remote":

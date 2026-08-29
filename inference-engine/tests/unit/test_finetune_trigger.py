@@ -1,12 +1,17 @@
 """
 Unit tests for _maybe_trigger_finetune in package_dataset.
-Mocks get_session — no DB or GPU needed.
+Mocks get_session and the merged-image count — no DB, GCS or GPU needed.
 """
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tasks.package_dataset import FINETUNE_MIN_DATASETS, _maybe_trigger_finetune
+from config import settings
+from db.models import ModelType
+from tasks.package_dataset import _maybe_trigger_finetune
+
+AIRCRAFT_MIN = settings.YOLO_FINETUNE_MIN_IMAGES["AIRCRAFT"]
+LOWEST_MIN = min(settings.YOLO_FINETUNE_MIN_IMAGES.values())
 
 
 def _make_session_ctx(active_run=None, packaged_count=0):
@@ -24,8 +29,7 @@ def _make_session_ctx(active_run=None, packaged_count=0):
         return q
 
     mock_session.query.side_effect = query_side_effect
-    mock_session.add = MagicMock()
-    mock_session.flush = MagicMock()
+    mock_session.get.return_value = None
 
     mock_ctx = MagicMock()
     mock_ctx.__enter__ = MagicMock(return_value=mock_session)
@@ -33,54 +37,68 @@ def _make_session_ctx(active_run=None, packaged_count=0):
     return mock_ctx
 
 
-@pytest.mark.unit
-def test_does_not_dispatch_when_fewer_than_min_datasets():
-    ctx = _make_session_ctx(active_run=None, packaged_count=FINETUNE_MIN_DATASETS - 1)
-
-    with patch("tasks.package_dataset.get_session", return_value=ctx), \
-         patch("tasks.package_dataset._latest_weights", return_value=MagicMock()), \
-         patch("tasks.package_dataset.celery_app") as mock_app:
-        _maybe_trigger_finetune()
-
-    mock_app.send_task.assert_not_called()
-
-
-@pytest.mark.unit
-def test_does_not_dispatch_when_active_finetune_exists():
-    active = MagicMock()
-    active.id = 7
-    ctx = _make_session_ctx(active_run=active, packaged_count=FINETUNE_MIN_DATASETS + 2)
-
-    with patch("tasks.package_dataset.get_session", return_value=ctx), \
-         patch("tasks.package_dataset._latest_weights", return_value=MagicMock()), \
-         patch("tasks.package_dataset.celery_app") as mock_app:
-        _maybe_trigger_finetune()
-
-    mock_app.send_task.assert_not_called()
-
-
-@pytest.mark.unit
-def test_dispatches_prepare_finetune_batch_when_enough_datasets():
-    """_maybe_trigger_finetune dispatches prepare_finetune_batch (not train_finetune)."""
-    ctx = _make_session_ctx(active_run=None, packaged_count=FINETUNE_MIN_DATASETS)
-
+def _run(image_counts, active_run=None, packaged_count=3):
+    """Run _maybe_trigger_finetune with a fixed per-model merged image count."""
+    counts = (
+        image_counts if isinstance(image_counts, dict)
+        else {m.value: image_counts for m in ModelType}
+    )
     mock_run = MagicMock()
     mock_run.id = 99
 
-    with patch("tasks.package_dataset.get_session", return_value=ctx), \
-         patch("tasks.package_dataset._latest_weights", side_effect=FileNotFoundError), \
+    with patch("tasks.package_dataset.get_session",
+               return_value=_make_session_ctx(active_run, packaged_count)), \
+         patch("tasks.package_dataset._count_merged_images",
+               side_effect=lambda mt: counts.get(mt.value, 0)), \
+         patch("tasks.package_dataset._latest_weights", return_value="/w/best.pt"), \
          patch("tasks.package_dataset.TrainingRun", return_value=mock_run), \
          patch("tasks.package_dataset.celery_app") as mock_app:
         _maybe_trigger_finetune()
-
-    # send_task called once with prepare_finetune_batch (run_ids may contain 1-4 entries)
-    mock_app.send_task.assert_called_once()
-    task_name = mock_app.send_task.call_args[0][0]
-    assert task_name == "tasks.package_dataset.prepare_finetune_batch"
-    queued_to = mock_app.send_task.call_args[1]["queue"]
-    assert queued_to == "pipeline"
+    return mock_app
 
 
 @pytest.mark.unit
-def test_finetune_min_datasets_constant_is_5():
-    assert FINETUNE_MIN_DATASETS == 5
+def test_does_not_dispatch_below_image_threshold():
+    """Below the lowest per-model threshold, no model qualifies."""
+    mock_app = _run(image_counts=LOWEST_MIN - 1)
+    mock_app.send_task.assert_not_called()
+
+
+@pytest.mark.unit
+def test_does_not_dispatch_when_no_images_at_all():
+    mock_app = _run(image_counts=0)
+    mock_app.send_task.assert_not_called()
+
+
+@pytest.mark.unit
+def test_does_not_dispatch_when_active_run_exists():
+    active = MagicMock()
+    active.id = 7
+    mock_app = _run(image_counts=100_000, active_run=active)
+    mock_app.send_task.assert_not_called()
+
+
+@pytest.mark.unit
+def test_dispatches_prepare_finetune_batch_when_threshold_met():
+    mock_app = _run(image_counts=100_000)
+
+    mock_app.send_task.assert_called_once()
+    assert mock_app.send_task.call_args[0][0] == "tasks.package_dataset.prepare_finetune_batch"
+    assert mock_app.send_task.call_args[1]["queue"] == "pipeline"
+
+
+@pytest.mark.unit
+def test_dispatches_only_models_that_meet_their_own_threshold():
+    """AIRCRAFT qualifies, the rest do not — one batch, one run id."""
+    counts = {m.value: 0 for m in ModelType}
+    counts["AIRCRAFT"] = AIRCRAFT_MIN
+    mock_app = _run(image_counts=counts)
+
+    mock_app.send_task.assert_called_once()
+    assert mock_app.send_task.call_args[1]["kwargs"]["run_ids"] == [99]
+
+
+@pytest.mark.unit
+def test_thresholds_defined_for_every_model():
+    for model_type in ModelType:
+        assert settings.YOLO_FINETUNE_MIN_IMAGES[model_type.value] > 0

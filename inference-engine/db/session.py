@@ -21,8 +21,9 @@ SyncSessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
 
 def init_db() -> None:
-    from db.models import Base
+    from db.models import Base, sync_enum_values
     Base.metadata.create_all(bind=engine)
+    sync_enum_values(engine)
 
 
 @contextmanager

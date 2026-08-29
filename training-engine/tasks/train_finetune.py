@@ -298,6 +298,14 @@ def train_finetune(self, training_run_id: int, scraped_merged_path: str = None) 
                 run.status = TrainingStatus.ERROR
                 run.error_message = str(exc)[:2000]
                 run.completed_at = datetime.utcnow()
+        # Only once no retry remains: the merged set is the retry's input, but if
+        # it outlives the run it keeps re-tripping the image-count trigger forever.
+        if (
+            self.request.retries >= self.max_retries
+            and settings.STORAGE_MODE == "remote"
+            and settings.REMOTE_STORAGE_BUCKET
+        ):
+            _delete_gcs_merged(settings.REMOTE_STORAGE_BUCKET, model_type.value)
         raise
 
     finally:

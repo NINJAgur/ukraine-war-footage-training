@@ -5,7 +5,8 @@ Celery Beat periodic task definitions.
 Schedule overview:
   - Funker530 scraper:     daily at 00:00 UTC
   - GeoConfirmed scraper:  daily at 00:15 UTC
-  ml-engine annotate_clips fires at 04:00 UTC (after downloads finish).
+  inference-engine runs auto_label_batch at 03:05 and annotate_clips at 03:35 UTC
+  (see inference-engine/celery_app.py) — both after downloads finish.
 """
 from celery.schedules import crontab
 

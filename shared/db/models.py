@@ -7,7 +7,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     BigInteger, Column, DateTime, Enum, ForeignKey, Index, Integer,
-    JSON, String, Text, UniqueConstraint,
+    JSON, String, Text, UniqueConstraint, text,
 )
 from sqlalchemy.orm import DeclarativeBase, relationship
 
@@ -26,6 +26,7 @@ class ClipStatus(str, enum.Enum):
     QUEUED = "QUEUED"        # dispatched to training queue
     LABELED = "LABELED"
     ANNOTATED = "ANNOTATED"
+    REJECTED = "REJECTED"  # failed validation or produced zero detections — terminal
     ERROR = "ERROR"
 
 
@@ -175,3 +176,23 @@ class TrainingRun(Base):
 
     def __repr__(self) -> str:
         return f"<TrainingRun id={self.id} stage={self.stage} model_type={self.model_type} status={self.status}>"
+
+
+# ── Schema bootstrap ──────────────────────────────────────────────────
+
+def sync_enum_values(engine) -> None:
+    """
+    Add ClipStatus members missing from the live Postgres type.
+
+    create_all() creates enum types but never alters them, so a member added to
+    the Python enum stays invisible to an existing database until added here.
+    Must run outside a transaction — Postgres forbids ADD VALUE inside one.
+    SQLAlchemy persists enum *names*, which for ClipStatus equal the values.
+    """
+    if engine.dialect.name != "postgresql":
+        return
+    with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+        for member in ClipStatus:
+            conn.execute(text(
+                f"ALTER TYPE clip_status ADD VALUE IF NOT EXISTS '{member.name}'"
+            ))

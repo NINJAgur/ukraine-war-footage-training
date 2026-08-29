@@ -6,6 +6,8 @@ _REPO_ROOT = str(Path(__file__).parent.parent.parent)
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -16,16 +18,19 @@ from api.admin import router as admin_router
 from api.ws import router as ws_router
 from config import settings
 
-app = FastAPI(title="Ukraine Combat Footage API", version="0.1.0")
 
-
-@app.on_event("startup")
-def create_tables() -> None:
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
     from sqlalchemy import create_engine
-    from shared.db.models import Base
+    from shared.db.models import Base, sync_enum_values
     engine = create_engine(settings.DATABASE_SYNC_URL)
     Base.metadata.create_all(bind=engine)
+    sync_enum_values(engine)
     engine.dispose()
+    yield
+
+
+app = FastAPI(title="Ukraine Combat Footage API", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -45,7 +50,10 @@ _ANNOTATED_DIR.mkdir(parents=True, exist_ok=True)
 
 @app.get("/media/annotated/{path:path}")
 async def serve_annotated(path: str):
-    f = _ANNOTATED_DIR / path
-    if not f.exists() or not f.is_file():
+    # Resolve before testing containment — "%2e%2e%2f" survives URL decoding and
+    # would otherwise walk out of the media directory.
+    root = _ANNOTATED_DIR.resolve()
+    f = (root / path).resolve()
+    if not f.is_relative_to(root) or not f.is_file():
         raise HTTPException(status_code=404)
     return FileResponse(f, media_type="video/mp4")

@@ -80,6 +80,11 @@ class Settings(BaseSettings):
         "PERSONNEL": ( 48, 154,  24),  # BGR ← oklch(0.60 0.18 145) rgb(24,154,48)
     }
 
+    # ── Batch sizes per scheduled run ─────────────────────────────────
+    # Must exceed daily scrape intake or the backlog can never drain.
+    AUTO_LABEL_BATCH_SIZE: int = 50
+    ANNOTATE_BATCH_SIZE: int = 50
+
     # ── Fine-tune trigger thresholds (scraped train images per model) ─
     YOLO_FINETUNE_MIN_IMAGES: dict = {
         "AIRCRAFT":  1000,

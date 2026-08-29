@@ -291,9 +291,6 @@ def auto_label_clip(self, clip_id: int) -> dict:
     return dataset_id
 
 
-_BATCH_SIZE = 10
-
-
 @celery_app.task(
     bind=True,
     name="tasks.auto_label.auto_label_batch",
@@ -318,7 +315,7 @@ def auto_label_batch(self) -> dict:
             .filter(Clip.file_path.isnot(None))
             .filter(~sa_exists().where(Dataset.clip_id == Clip.id))
             .order_by(Clip.created_at.asc())
-            .limit(_BATCH_SIZE)
+            .limit(settings.AUTO_LABEL_BATCH_SIZE)
             .all()
         )
         clip_snapshot = [

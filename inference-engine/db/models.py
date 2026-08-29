@@ -10,4 +10,5 @@ from shared.db.models import (  # noqa: F401
     Clip, ClipSource, ClipStatus,
     Dataset, DatasetStatus,
     ModelType, TrainingRun, TrainingStage, TrainingStatus,
+    sync_enum_values,
 )

@@ -89,6 +89,9 @@ def fetch_recent_placemark_ids(since_date: datetime) -> list[dict]:
 
     cutoff = since_date.replace(tzinfo=None) if since_date.tzinfo else since_date
     cutoff = cutoff.replace(hour=0, minute=0, second=0, microsecond=0)
+    # Upstream dates are occasionally typoed years into the future; those become
+    # bogus published_at values and bogus dated output folders.
+    horizon = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=1)
 
     all_pms: list[dict] = []
     for faction in factions:
@@ -102,6 +105,11 @@ def fetch_recent_placemark_ids(since_date: datetime) -> list[dict]:
                             pm_date = pm_date.replace(tzinfo=None)
                     except (ValueError, TypeError):
                         pass
+                if pm_date and pm_date > horizon:
+                    logger.warning(
+                        f"GeoConfirmed: skipping future-dated placemark {pm['id']} ({pm_date.date()})"
+                    )
+                    continue
                 if pm_date and pm_date >= cutoff:
                     all_pms.append({"id": pm["id"], "date": pm_date})
 

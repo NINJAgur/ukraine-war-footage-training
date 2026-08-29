@@ -1,15 +1,22 @@
 name: Deploy to e2-micro
 
+# Auto-deploy DISABLED — the GCP project has no resources and hosting moved to
+# local Docker Desktop. Left intact so a redeploy is a matter of uncommenting.
+# To restore: uncomment the workflow_run block and the job's `if:` guard below,
+# and drop workflow_dispatch if you don't want the manual trigger.
 on:
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
-    branches: [main]
+  workflow_dispatch:
+  # workflow_run:
+  #   workflows: [CI]
+  #   types: [completed]
+  #   branches: [main]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    if: github.event.workflow_run.conclusion == 'success'
+    # Restore alongside the workflow_run trigger — under workflow_dispatch this
+    # expression is null, which would skip the job on every manual run.
+    # if: github.event.workflow_run.conclusion == 'success'
     steps:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1

@@ -1,10 +1,13 @@
 """
 inference-engine/tasks/annotate_clips.py
 
-Celery task: run specialist YOLO models on DB-scored clips.
-Sequential: AIRCRAFT → VEHICLE → PERSONNEL.
-Each specialist processes up to BATCH_SIZE candidates, validates detection rate,
-saves annotated MP4 to ANNOTATED_VIDEO_DIR, deletes raw file, updates DB.
+Celery tasks: run specialist YOLO models on DB-scored clips.
+
+annotate_clips dispatches one task per model (AIRCRAFT → VEHICLE → PERSONNEL →
+GENERAL) rather than running them in a single task, so a slow model cannot
+starve the ones behind it. Each processes up to ANNOTATE_BATCH_SIZE candidates,
+validates detection rate, saves an annotated MP4, and commits before deleting
+the raw source.
 """
 import logging
 from datetime import datetime, timezone
@@ -23,7 +26,14 @@ PROJECT_DIR = INFERENCE_ENGINE_DIR.parent
 
 CONF_THRESH = 0.25
 MIN_RATE = 0.10
-BATCH_SIZE = 10
+
+# (score column, columns it must tie-break against) per specialist
+SPECIALISTS = {
+    "AIRCRAFT":  ("score_aircraft",  ["score_vehicle", "score_personnel"]),
+    "VEHICLE":   ("score_vehicle",   ["score_aircraft", "score_personnel"]),
+    "PERSONNEL": ("score_personnel", ["score_aircraft", "score_vehicle"]),
+}
+MODEL_ORDER = ["AIRCRAFT", "VEHICLE", "PERSONNEL", "GENERAL"]
 
 _CLASS_KEY = {"AIRCRAFT": "aircraft", "VEHICLE": "vehicle", "PERSONNEL": "personnel"}
 
@@ -58,7 +68,8 @@ def _download_from_gcs(gs_url: str) -> Path:
     without_scheme = gs_url[len("gs://"):]
     bucket_name, _, blob_name = without_scheme.partition("/")
     suffix = Path(blob_name).suffix or ".mp4"
-    tmp = Path(tempfile.mktemp(suffix=suffix, dir="/tmp"))
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as fh:
+        tmp = Path(fh.name)
     client = gcs.Client()
     client.bucket(bucket_name).blob(blob_name).download_to_filename(str(tmp))
     logger.info(f"Downloaded from GCS: {gs_url} → {tmp}")
@@ -91,6 +102,15 @@ def _cleanup_raw(raw_path: Path, original_file_path: str) -> None:
         _delete_gcs_object(original_file_path)
 
 
+def _reject(session, clip, raw_path: Path) -> None:
+    """Mark a clip REJECTED, persist it, then drop its raw source."""
+    original = clip.file_path
+    clip.file_path = None
+    clip.status = ClipStatus.REJECTED
+    session.commit()
+    _cleanup_raw(raw_path, original)
+
+
 def _run_specialist(
     model_name: str,
     score_col: str,
@@ -119,13 +139,11 @@ def _run_specialist(
         )
         for col in tie_cols:
             q = q.filter(score_attr >= getattr(Clip, col))
-        candidates = q.limit(BATCH_SIZE).all()
+        candidates = q.limit(settings.ANNOTATE_BATCH_SIZE).all()
         total = len(candidates)
         logger.info(
             f"[{model_name}] {total} candidates  weights={weights.name}"
         )
-
-        raws_to_delete: list[tuple] = []  # (raw_path, original_file_path) — deleted after commit
 
         for clip in candidates:
             title = clip.title or f"clip_{clip.id}"
@@ -139,21 +157,21 @@ def _run_specialist(
             except Exception as exc:
                 logger.warning(f"[{model_name}]   -> ERROR: failed to resolve raw file: {exc}")
                 clip.status = ClipStatus.ERROR
+                session.commit()
                 errors += 1
                 continue
 
             if not raw_path.exists():
                 logger.warning(f"[{model_name}]   -> ERROR: file missing: {raw_path}")
                 clip.status = ClipStatus.ERROR
+                session.commit()
                 errors += 1
                 continue
 
             passed, rate = validate_clip(model, raw_path, conf_thresh=CONF_THRESH, min_rate=MIN_RATE)
             if not passed:
                 logger.info(f"[{model_name}]   -> REJECT: validate rate={rate:.0%} < {MIN_RATE:.0%}")
-                raws_to_delete.append((raw_path, clip.file_path))
-                clip.file_path = None
-                clip.status = ClipStatus.PENDING
+                _reject(session, clip, raw_path)
                 rejected += 1
                 continue
 
@@ -171,29 +189,26 @@ def _run_specialist(
                 logger.info(f"[{model_name}]   -> REJECT: zero detections in full inference pass")
                 if temp_out.exists():
                     temp_out.unlink()
-                raws_to_delete.append((raw_path, clip.file_path))
-                clip.file_path = None
-                clip.status = ClipStatus.PENDING
+                _reject(session, clip, raw_path)
                 rejected += 1
                 continue
 
-            clip.mp4_path = finalize_clip(clip, temp_out, model_name)
+            clip.mp4_path = finalize_clip(clip, temp_out, model_name, base_name=clip.url_hash[:8])
             clip.det_class = model_name
             clip.detection_counts = _detection_counts(model_name, det_counts)
             clip.status = ClipStatus.ANNOTATED
             clip.updated_at = datetime.now(timezone.utc)
-            raws_to_delete.append((raw_path, clip.file_path))
+            # Commit before deleting the raw — a crash between the two must not
+            # leave the DB pointing at a source that no longer exists.
+            original = clip.file_path
             clip.file_path = None
+            session.commit()
+            _cleanup_raw(raw_path, original)
             accepted += 1
             logger.info(
                 f"[{model_name}]   -> ANNOTATED: dets={clip_dets}  "
                 f"file={Path(clip.mp4_path).name}"
             )
-
-        # Commit DB first — raw files only deleted after status is persisted
-        session.commit()
-        for rp, orig_fp in raws_to_delete:
-            _cleanup_raw(rp, orig_fp)
 
     return {"accepted": accepted, "rejected": rejected, "errors": errors, "total": total}
 
@@ -225,15 +240,13 @@ def _run_general() -> dict:
                 Clip.score_personnel > 0,
                 Clip.score_uas > 0,
             ))
-            .limit(BATCH_SIZE)
+            .limit(settings.ANNOTATE_BATCH_SIZE)
             .all()
         )
         total = len(candidates)
         logger.info(
             f"[GENERAL] {total} candidates (leftovers from specialists)  weights={weights.name}"
         )
-
-        raws_to_delete: list[tuple] = []
 
         for clip in candidates:
             raw_path = _resolve_clip_path(clip.file_path)
@@ -247,15 +260,14 @@ def _run_general() -> dict:
             if not raw_path.exists():
                 logger.warning(f"[GENERAL]   -> ERROR: file missing: {raw_path}")
                 clip.status = ClipStatus.ERROR
+                session.commit()
                 errors += 1
                 continue
 
             passed, rate = validate_clip(model, raw_path, conf_thresh=CONF_THRESH, min_rate=MIN_RATE)
             if not passed:
                 logger.info(f"[GENERAL]   -> REJECT: validate rate={rate:.0%} < {MIN_RATE:.0%}")
-                raws_to_delete.append((raw_path, clip.file_path))
-                clip.file_path = None
-                clip.status = ClipStatus.PENDING
+                _reject(session, clip, raw_path)
                 rejected += 1
                 continue
 
@@ -273,28 +285,24 @@ def _run_general() -> dict:
                 logger.info("[GENERAL]   -> REJECT: zero detections in full inference pass")
                 if temp_out.exists():
                     temp_out.unlink()
-                raws_to_delete.append((raw_path, clip.file_path))
-                clip.file_path = None
-                clip.status = ClipStatus.PENDING
+                _reject(session, clip, raw_path)
                 rejected += 1
                 continue
 
-            clip.mp4_path = finalize_clip(clip, temp_out, "GENERAL")
+            clip.mp4_path = finalize_clip(clip, temp_out, "GENERAL", base_name=clip.url_hash[:8])
             clip.det_class = "GENERAL"
             clip.detection_counts = _detection_counts("GENERAL", det_counts)
             clip.status = ClipStatus.ANNOTATED
             clip.updated_at = datetime.now(timezone.utc)
-            raws_to_delete.append((raw_path, clip.file_path))
+            original = clip.file_path
             clip.file_path = None
+            session.commit()
+            _cleanup_raw(raw_path, original)
             accepted += 1
             logger.info(
                 f"[GENERAL]   -> ANNOTATED: dets={clip_dets}  "
                 f"file={Path(clip.mp4_path).name}"
             )
-
-        session.commit()
-        for rp, orig_fp in raws_to_delete:
-            _cleanup_raw(rp, orig_fp)
 
     return {"accepted": accepted, "rejected": rejected, "errors": errors, "total": total}
 
@@ -312,7 +320,7 @@ def _shutdown_if_no_training() -> None:
 
 
 def _cleanup_zero_score_clips() -> None:
-    """Delete raw video files for DOWNLOADED clips that have all-zero scores."""
+    """Drop raw video files for DOWNLOADED clips that have all-zero scores."""
     deleted = 0
     with get_session() as session:
         clips = (
@@ -328,15 +336,53 @@ def _cleanup_zero_score_clips() -> None:
             .all()
         )
         for clip in clips:
-            raw_path = _resolve_clip_path(clip.file_path)
-            if raw_path.exists():
-                raw_path.unlink()
+            # Never resolve the path here — for a gs:// clip that downloads the
+            # object just to unlink the copy, leaving the original orphaned.
+            original = clip.file_path
+            if original.startswith("gs://"):
+                _delete_gcs_object(original)
+            else:
+                local = _resolve_clip_path(original)
+                if local.exists():
+                    local.unlink()
             clip.file_path = None
-            clip.status = ClipStatus.PENDING
+            clip.status = ClipStatus.REJECTED
             deleted += 1
         session.commit()
     if deleted:
         logger.info(f"[cleanup] Deleted {deleted} zero-score DOWNLOADED clip files")
+
+
+@celery_app.task(
+    bind=True,
+    name="tasks.annotate_clips.annotate_model",
+    queue="pipeline",
+    max_retries=0,
+)
+def annotate_model(self, model_name: str) -> dict:
+    """Annotate one model's candidates. One task per model, so a slow or failing
+    model cannot consume the time budget of the ones queued behind it."""
+    logger.info(f"[{self.request.id}] annotate_model {model_name} started")
+    if model_name == "GENERAL":
+        result = _run_general()
+    else:
+        score_col, tie_cols = SPECIALISTS[model_name]
+        result = _run_specialist(model_name, score_col, tie_cols)
+    logger.info(f"[{self.request.id}] annotate_model {model_name} done: {result}")
+    return result
+
+
+@celery_app.task(
+    bind=True,
+    name="tasks.annotate_clips.finish_annotation",
+    queue="pipeline",
+    max_retries=0,
+)
+def finish_annotation(self) -> dict:
+    """Runs once after every model has had its turn."""
+    _cleanup_zero_score_clips()
+    _shutdown_if_no_training()
+    return {"status": "done"}
 
 
 @celery_app.task(
@@ -346,25 +392,12 @@ def _cleanup_zero_score_clips() -> None:
     max_retries=0,
 )
 def annotate_clips(self) -> dict:
-    """
-    Sequential annotation pipeline: AIRCRAFT → VEHICLE → PERSONNEL → GENERAL.
-    Each specialist loads its own weights and processes up to BATCH_SIZE candidates.
-    Raw files deleted after annotation or rejection.
-    """
-    logger.info(f"[{self.request.id}] annotate_clips started")
+    """Dispatch one annotate_model task per model, then finish_annotation."""
+    from celery import chain as _chain
 
-    specialists = [
-        ("AIRCRAFT",  "score_aircraft",  ["score_vehicle", "score_personnel"]),
-        ("VEHICLE",   "score_vehicle",   ["score_aircraft", "score_personnel"]),
-        ("PERSONNEL", "score_personnel", ["score_aircraft", "score_vehicle"]),
-    ]
-
-    results = {name: _run_specialist(name, col, ties) for name, col, ties in specialists}
-    results["GENERAL"] = _run_general()
-
-    logger.info(f"[{self.request.id}] annotate_clips done: {results}")
-
-    _cleanup_zero_score_clips()
-    _shutdown_if_no_training()
-
-    return results
+    logger.info(f"[{self.request.id}] annotate_clips dispatching {MODEL_ORDER}")
+    _chain(
+        *[annotate_model.si(name) for name in MODEL_ORDER],
+        finish_annotation.si(),
+    ).apply_async(queue="pipeline")
+    return {"dispatched": MODEL_ORDER}

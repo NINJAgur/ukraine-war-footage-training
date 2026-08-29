@@ -149,6 +149,9 @@ Thumbs.db
 media/
 training-engine/runs/
 ml-engine/media/
+# Local mirror of the GCS bucket
+ukraine-footage-media/
+ukraine-footage-media/merged
 *.mp4
 *.pt
 # YOLO data.yaml files are generated — don't commit

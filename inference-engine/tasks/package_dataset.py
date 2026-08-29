@@ -98,15 +98,15 @@ def _filter_label_file(src: Path, dst: Path, remap: dict) -> int:
     return len(kept_lines)
 
 
-def _append_to_merged(dataset_dir: Path, dataset_id: int, model_type: ModelType) -> int:
+def _append_to_merged(dataset_dir: Path, dataset_id: int, model_type: ModelType) -> list:
     """
     Filter and append one clip's YOLO data into the persistent merged/<MODEL>/ dir.
-    Both train and val splits are appended. Returns number of images written.
+    Both train and val splits are appended. Returns the files written this call.
     """
     remap = _class_remap(model_type)
     merged_dir = settings.DATASETS_DIR / "merged" / model_type.value
 
-    appended = 0
+    written: list = []
     for split in ("train", "val"):
         (merged_dir / split / "images").mkdir(parents=True, exist_ok=True)
         (merged_dir / split / "labels").mkdir(parents=True, exist_ok=True)
@@ -117,14 +117,17 @@ def _append_to_merged(dataset_dir: Path, dataset_id: int, model_type: ModelType)
             if kept == 0:
                 dst_lbl.unlink(missing_ok=True)
                 continue
+            written.append(dst_lbl)
             src_img = dataset_dir / split / "images" / (src_lbl.stem + ".jpg")
             if src_img.exists():
-                shutil.copy2(src_img, merged_dir / split / "images" / f"{dataset_id}_{src_img.name}")
-                appended += 1
+                dst_img = merged_dir / split / "images" / f"{dataset_id}_{src_img.name}"
+                shutil.copy2(src_img, dst_img)
+                written.append(dst_img)
 
     # Always rewrite data.yaml to keep path current
     class_names = settings.MODEL_CLASSES[model_type.value]
-    with open(merged_dir / "data.yaml", "w") as f:
+    yaml_path = merged_dir / "data.yaml"
+    with open(yaml_path, "w") as f:
         yaml.dump(
             {
                 "path": str(merged_dir),
@@ -136,21 +139,28 @@ def _append_to_merged(dataset_dir: Path, dataset_id: int, model_type: ModelType)
             f,
             default_flow_style=False,
         )
+    written.append(yaml_path)
 
-    return appended
+    return written
 
 
-def _upload_merged_to_gcs(merged_dir: Path, model: str, bucket: str) -> None:
-    """Upload all files in merged_dir to gs://bucket/merged/<model>/."""
+def _upload_merged_to_gcs(merged_dir: Path, model: str, bucket: str, files: list = None) -> None:
+    """
+    Upload merged_dir to gs://bucket/merged/<model>/.
+
+    files=None uploads the whole tree (once per training run). Passing an explicit
+    list uploads only those — the per-clip path, where re-sending the accumulated
+    tree costs O(clips x tree size) and eventually exceeds the VM's time budget.
+    """
     from google.cloud import storage as gcs
     prefix = f"merged/{model}"
     client = gcs.Client()
     bucket_obj = client.bucket(bucket)
-    for f in merged_dir.rglob("*"):
-        if f.is_file():
-            blob_name = f"{prefix}/{f.relative_to(merged_dir).as_posix()}"
-            bucket_obj.blob(blob_name).upload_from_filename(str(f))
-    logger.info(f"[prepare_finetune_batch] Uploaded {merged_dir.name} → gs://{bucket}/{prefix}/")
+    targets = files if files is not None else [f for f in merged_dir.rglob("*") if f.is_file()]
+    for f in targets:
+        blob_name = f"{prefix}/{f.relative_to(merged_dir).as_posix()}"
+        bucket_obj.blob(blob_name).upload_from_filename(str(f))
+    logger.info(f"[gcs] Uploaded {len(targets)} file(s) → gs://{bucket}/{prefix}/")
 
 
 def _count_merged_images(model_type: ModelType) -> int:
@@ -377,16 +387,19 @@ def package_dataset(self, dataset_id: Optional[int]) -> dict:
         # Skip specialist models if that class wasn't detected in this clip
         if model_type != ModelType.GENERAL and model_type.value not in detected_types:
             continue
-        n = _append_to_merged(dataset_dir, dataset_id, model_type)
+        written = _append_to_merged(dataset_dir, dataset_id, model_type)
+        n = sum(1 for f in written if f.suffix.lower() == ".jpg")
         total_appended += n
         logger.info(
             f"[{self.request.id}] Appended dataset {dataset_id} → "
             f"merged/{model_type.value}  images={n}"
         )
-        # Back up merged dir to GCS immediately so it survives VM recreation
+        # Back up this clip's new files to GCS so they survive VM recreation
         if settings.STORAGE_MODE == "remote" and settings.REMOTE_STORAGE_BUCKET:
             merged_dir = settings.DATASETS_DIR / "merged" / model_type.value
-            _upload_merged_to_gcs(merged_dir, model_type.value, settings.REMOTE_STORAGE_BUCKET)
+            _upload_merged_to_gcs(
+                merged_dir, model_type.value, settings.REMOTE_STORAGE_BUCKET, files=written
+            )
             logger.info(f"[{self.request.id}] Backed up merged/{model_type.value} → GCS")
 
     # Delete clip hash dir immediately — no longer needed
