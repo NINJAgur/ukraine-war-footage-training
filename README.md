@@ -11,8 +11,8 @@ Automated full-stack application that scrapes, auto-labels, and publicly display
 archival combat footage from the war in Ukraine, with a secure admin panel for
 YOLOv8 model retraining.
 
-**Live:** https://ukrarchive.duckdns.org
-
+ ̶*̶*̶L̶i̶v̶e̶:̶*̶*̶ ̶h̶t̶t̶p̶s̶:̶/̶/̶u̶k̶r̶a̶r̶c̶h̶i̶v̶e̶.̶d̶u̶c̶k̶d̶n̶s̶.̶o̶r̶g̶
+ 
 ## Architecture
 
 ```
